@@ -13,12 +13,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const { signInWithGoogle, signUpWithEmail, signInWithEmail } = useAuth();
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg("");
     try {
       if (isLogin) {
         await signInWithEmail(email, password);
@@ -26,9 +28,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         await signUpWithEmail(email, password, name);
       }
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Auth error:", error);
-      alert("Authentication failed. Please check your credentials.");
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        setErrorMsg("Invalid email or password.");
+      } else if (error.code === 'auth/email-already-in-use') {
+        setErrorMsg("An account with this email already exists.");
+      } else {
+        setErrorMsg(error.message || "Authentication failed. Please check your credentials.");
+      }
     }
   };
 
@@ -54,6 +62,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {errorMsg && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center">
+                {errorMsg}
+              </div>
+            )}
             {!isLogin && (
               <div className="relative">
                 <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
