@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "An e-commerce product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "description": { "type": "string" },
+        "images": { "type": "array" },
+        "collectionId": { "type": "string" },
+        "stock": { "type": "number" }
+      },
+      "required": ["id", "name", "price"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An order placed by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "promoCodeId": { "type": "string" }
+      },
+      "required": ["id", "userId", "total", "status", "date"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the platform",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "A promo code for discounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "percentage": { "type": "number" },
+        "collectionId": { "type": "string" }
+      },
+      "required": ["id", "code", "percentage"]
+    },
+    "Collection": {
+      "title": "Collection",
+      "description": "A collection of products",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "promoCodeId": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Social": {
+      "title": "Social",
+      "description": "A social media link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "platform": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "required": ["id", "platform", "url"]
+    },
+    "Newsletter": {
+      "title": "Newsletter",
+      "description": "A newsletter subscription",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "subscribedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": { "schema": "Product", "description": "Products collection" },
+    "/orders/{orderId}": { "schema": "Order", "description": "Orders collection" },
+    "/users/{userId}": { "schema": "User", "description": "Users collection" },
+    "/promoCodes/{promoCodeId}": { "schema": "PromoCode", "description": "Promo codes collection" },
+    "/collections/{collectionId}": { "schema": "Collection", "description": "Collections collection" },
+    "/socials/{socialId}": { "schema": "Social", "description": "Socials collection" },
+    "/newsletters/{newsletterId}": { "schema": "Newsletter", "description": "Newsletter subscribers" }
+  }
+}
