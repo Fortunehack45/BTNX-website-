@@ -83,9 +83,15 @@ export default function App() {
       }
     });
 
-    updateDoc(doc(db, "products", product.id), {
-      cartCount: increment(1)
-    });
+    if (currentUser) {
+      try {
+        updateDoc(doc(db, "products", product.id), {
+          cartCount: increment(1)
+        });
+      } catch (err) {
+        console.error("Failed to update cart count", err);
+      }
+    }
 
     handleAddToast(`Added "${product.name}" (${chosenSize} / ${chosenColor}) to your bag!`, "success");
   };
@@ -128,10 +134,16 @@ export default function App() {
       )
     );
 
-    if (itemToRemove) {
-      updateDoc(doc(db, "products", itemToRemove.product.id), {
-        cartCount: increment(-1)
-      });
+    if (itemToRemove && currentUser) {
+      try {
+        updateDoc(doc(db, "products", itemToRemove.product.id), {
+          cartCount: increment(-1)
+        });
+      } catch (err) {
+        console.error("Failed to update cart count", err);
+      }
+      handleAddToast(`Removed "${itemToRemove.product.name}" from your bag`, "info");
+    } else if (itemToRemove) {
       handleAddToast(`Removed "${itemToRemove.product.name}" from your bag`, "info");
     }
   };
