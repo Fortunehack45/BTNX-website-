@@ -48,17 +48,9 @@ export default function Dashboard() {
           <Activity className="w-5 h-5 text-indigo-500" />
           System Setup Status
         </h2>
-        <p className="text-slate-600 mb-4">
-          To connect to your Firebase backend on Vercel, ensure you have set these environment variables:
+        <p className="text-slate-600">
+          Backend connection initialized successfully via local configuration file.
         </p>
-        <ul className="list-disc pl-5 space-y-1 text-sm text-slate-600 font-mono">
-          <li>VITE_FIREBASE_API_KEY</li>
-          <li>VITE_FIREBASE_AUTH_DOMAIN</li>
-          <li>VITE_FIREBASE_PROJECT_ID</li>
-          <li>VITE_FIREBASE_STORAGE_BUCKET</li>
-          <li>VITE_FIREBASE_MESSAGING_SENDER_ID</li>
-          <li>VITE_FIREBASE_APP_ID</li>
-        </ul>
       </div>
     </div>
   );

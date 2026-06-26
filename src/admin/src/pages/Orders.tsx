@@ -10,7 +10,7 @@ export default function Orders() {
     // Only sort if we're sure an index exists or we can sort locally. In this case, we sort by timestamp.
     const q = query(collection(db, 'orders'));
     const unsub = onSnapshot(q, (snap) => {
-      const fetchedOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const fetchedOrders = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
       fetchedOrders.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
