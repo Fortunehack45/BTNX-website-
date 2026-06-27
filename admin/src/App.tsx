@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Users as UsersIcon } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users as UsersIcon, ArrowLeft } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import Orders from './pages/Orders';
@@ -16,38 +16,74 @@ function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 flex font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 hidden md:block">
-        <div className="h-16 flex items-center px-6 border-b border-slate-200">
-          <span className="text-xl font-bold tracking-tight text-slate-900">Admin Panel</span>
+      <aside className="w-64 bg-slate-950 text-slate-200 flex flex-col hidden md:flex border-r border-slate-900 select-none">
+        <div className="h-20 flex items-center justify-between px-6 border-b border-slate-900">
+          <div className="flex flex-col">
+            <span className="text-2xl font-display tracking-widest text-white uppercase font-bold">Klamby</span>
+            <span className="text-[9px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold -mt-1">Admin Panel</span>
+          </div>
+          <a href="/" className="text-slate-400 hover:text-white transition-colors" title="Back to Store">
+            <ArrowLeft className="w-4 h-4" />
+          </a>
         </div>
-        <nav className="p-4 space-y-1">
+        
+        <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 location.pathname === item.path
-                  ? 'bg-indigo-50 text-indigo-600 font-medium'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'bg-white text-slate-950 font-medium shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-white'
               }`}
             >
               {item.icon}
-              {item.name}
+              <span className="text-sm font-medium tracking-wide uppercase font-display text-[13px]">{item.name}</span>
             </Link>
           ))}
         </nav>
+
+        <div className="p-4 border-t border-slate-900 text-center">
+          <p className="text-[10px] text-slate-500 font-mono tracking-wider">SYSTEM SECURE</p>
+        </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 min-w-0 flex flex-col">
         {/* Mobile Header */}
-        <header className="h-16 md:hidden bg-white border-b border-slate-200 flex items-center px-4">
-          <span className="text-lg font-bold tracking-tight text-slate-900">Admin Panel</span>
+        <header className="h-16 md:hidden bg-slate-950 text-white flex items-center justify-between px-4 border-b border-slate-900">
+          <div className="flex flex-col">
+            <span className="text-xl font-display tracking-widest text-white uppercase font-bold">Klamby</span>
+            <span className="text-[8px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold -mt-1">Admin Panel</span>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <nav className="flex items-center gap-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`p-2 rounded-lg transition-colors ${
+                    location.pathname === item.path
+                      ? 'bg-white text-slate-950'
+                      : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                  }`}
+                  title={item.name}
+                >
+                  {item.icon}
+                </Link>
+              ))}
+            </nav>
+            <a href="/" className="text-slate-400 hover:text-white transition-colors" title="Back to Store">
+              <ArrowLeft className="w-4 h-4" />
+            </a>
+          </div>
         </header>
         
-        <div className="flex-1 overflow-auto p-4 sm:p-8">
+        <div className="flex-1 overflow-auto p-4 sm:p-8 bg-slate-50">
           {children}
         </div>
       </main>

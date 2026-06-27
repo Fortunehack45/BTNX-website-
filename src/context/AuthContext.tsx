@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: result.user.uid,
         email: result.user.email,
         name: result.user.displayName || "New User",
-        role: "customer",
+        role: result.user.email?.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
         createdAt: new Date().toISOString(),
       });
     }
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: result.user.uid,
         email,
         name,
-        role: "customer",
+        role: email.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
         createdAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -73,23 +73,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    let actualEmail = email;
-    if (email.toLowerCase() === 'btnx') {
+    let actualEmail = email.trim();
+    if (actualEmail.toLowerCase() === 'btnx' || actualEmail.toLowerCase() === 'btnx@klamby.com') {
       actualEmail = 'btnx@klamby.com';
     }
     
     try {
       await signInWithEmailAndPassword(auth, actualEmail, password);
     } catch (error: any) {
-      if (actualEmail === 'btnx@klamby.com' && error.code === 'auth/user-not-found') {
-        await createUserWithEmailAndPassword(auth, actualEmail, password);
-        await setDoc(doc(db, "users", auth.currentUser!.uid), {
-          id: auth.currentUser!.uid,
-          email: actualEmail,
-          name: "Btnx Admin",
-          role: "admin",
-          createdAt: new Date().toISOString(),
-        });
+      if (actualEmail === 'btnx@klamby.com' && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
+        try {
+          const result = await createUserWithEmailAndPassword(auth, actualEmail, password);
+          await setDoc(doc(db, "users", result.user.uid), {
+            id: result.user.uid,
+            email: actualEmail,
+            name: "Btnx Admin",
+            role: "admin",
+            createdAt: new Date().toISOString(),
+          });
+        } catch (createError: any) {
+          if (createError.code === 'auth/email-already-in-use') {
+            throw error;
+          } else {
+            throw createError;
+          }
+        }
       } else {
         throw error;
       }
