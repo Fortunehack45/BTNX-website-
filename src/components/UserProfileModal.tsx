@@ -29,6 +29,9 @@ import {
   Lock
 } from "lucide-react";
 import { Product, Order, OrderItem } from "../types";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../lib/firebase";
+import { doc, updateDoc } from "firebase/firestore";
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -147,21 +150,35 @@ export default function UserProfileModal({
   onOpenCart,
   initialTab = "profile",
 }: UserProfileModalProps) {
+  const { userData, currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<"profile" | "orders">(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Processing" | "In Transit" | "Delivered">("All");
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   // Editable Profile States
-  const [profileName, setProfileName] = useState("Fortune Domination");
-  const [profilePhone, setProfilePhone] = useState("+1 (555) 382-9174");
-  const [profileBirthday, setProfileBirthday] = useState("1995-10-14");
+  const [profileName, setProfileName] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileBirthday, setProfileBirthday] = useState("");
   
   // Shipping Address States
-  const [shippingStreet, setShippingStreet] = useState("1482 Broadway, Apt 4B");
-  const [shippingCity, setShippingCity] = useState("New York");
-  const [shippingZip, setShippingZip] = useState("10036");
-  const [shippingCountry, setShippingCountry] = useState("United States");
+  const [shippingStreet, setShippingStreet] = useState("");
+  const [shippingCity, setShippingCity] = useState("");
+  const [shippingZip, setShippingZip] = useState("");
+  const [shippingCountry, setShippingCountry] = useState("");
+
+  // Sync state with userData
+  useEffect(() => {
+    if (userData) {
+      setProfileName(userData.name || "");
+      setProfilePhone(userData.phone || "");
+      setProfileBirthday(userData.birthday || "");
+      setShippingStreet(userData.shippingStreet || "");
+      setShippingCity(userData.shippingCity || "");
+      setShippingZip(userData.shippingZip || "");
+      setShippingCountry(userData.shippingCountry || "");
+    }
+  }, [userData]);
 
   // Sync tab option if changed from the header triggers
   useEffect(() => {
@@ -187,10 +204,33 @@ export default function UserProfileModal({
     onOpenCart();
   };
 
-  // Simulated Save profile handler
-  const handleSaveProfile = (e: React.FormEvent) => {
+  // Real Save profile handler with Firestore persistence
+  const [isSaving, setIsSaving] = useState(false);
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAddToast("Account settings and shipping address updated successfully!", "success");
+    if (!currentUser) {
+      onAddToast("You must be logged in to update your profile settings.", "error");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        name: profileName,
+        phone: profilePhone,
+        birthday: profileBirthday,
+        shippingStreet: shippingStreet,
+        shippingCity: shippingCity,
+        shippingZip: shippingZip,
+        shippingCountry: shippingCountry,
+      });
+      onAddToast("Account settings and shipping address updated in real-time!", "success");
+    } catch (err: any) {
+      console.error("Failed to update user profile in Firestore:", err);
+      onAddToast(`Database Error: ${err.message || "Failed to update profile."}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Simulated receipt download
@@ -297,6 +337,10 @@ export default function UserProfileModal({
   const inTransitCount = orders.filter((o) => o.status === "In Transit").length;
   const deliveredCount = orders.filter((o) => o.status === "Delivered").length;
 
+  const initials = profileName
+    ? profileName.split(" ").filter(Boolean).map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : (currentUser?.email ? currentUser.email.slice(0, 2).toUpperCase() : "US");
+
   if (!isOpen) return null;
 
   return (
@@ -324,17 +368,17 @@ export default function UserProfileModal({
 
           {/* Title */}
           <div className="hidden sm:flex flex-col items-center">
-            <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase leading-none">Klamby Portal</span>
+            <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase leading-none">BTNX Portal</span>
             <span className="text-sm font-black text-slate-900 mt-1 uppercase tracking-wider">Customer Dashboard</span>
           </div>
 
           {/* User badge */}
           <div className="flex items-center gap-2.5">
             <span className="hidden md:inline-block text-xs font-bold text-slate-500">
-              Logged in as <strong className="text-slate-800">fortunedomination@gmail.com</strong>
+              Logged in as <strong className="text-slate-800 font-mono">{currentUser?.email || "Guest User"}</strong>
             </span>
-            <div className="w-8 h-8 rounded-full bg-slate-900 text-white text-xs font-black flex items-center justify-center">
-              FD
+            <div className="w-8 h-8 rounded-full bg-slate-900 text-white text-xs font-black flex items-center justify-center uppercase font-mono">
+              {initials}
             </div>
           </div>
 
@@ -351,8 +395,8 @@ export default function UserProfileModal({
             {/* Minimal Profile Card */}
             <div className="flex items-center lg:flex-col gap-4 lg:text-center bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
               <div className="relative">
-                <div className="w-16 h-16 lg:w-20 lg:h-20 bg-slate-950 text-white rounded-full flex items-center justify-center text-xl lg:text-2xl font-black shadow-inner">
-                  FD
+                <div className="w-16 h-16 lg:w-20 lg:h-20 bg-slate-950 text-white rounded-full flex items-center justify-center text-xl lg:text-2xl font-black shadow-inner uppercase font-mono">
+                  {initials}
                 </div>
                 <span className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" title="Active Account" />
               </div>
@@ -400,7 +444,7 @@ export default function UserProfileModal({
           {/* Secure verification notice */}
           <div className="hidden lg:flex items-center justify-center gap-1.5 p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50 text-[10px] text-emerald-700 font-bold uppercase tracking-wider mt-8">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            Verified Klamby Account
+            Verified BTNX Account
           </div>
         </aside>
 
@@ -451,8 +495,8 @@ export default function UserProfileModal({
                           <input
                             type="email"
                             disabled
-                            value="fortunedomination@gmail.com"
-                            className="w-full pl-4 pr-10 py-3 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-500 cursor-not-allowed select-none"
+                            value={currentUser?.email || ""}
+                            className="w-full pl-4 pr-10 py-3 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-500 cursor-not-allowed select-none font-mono"
                           />
                           <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         </div>
@@ -540,7 +584,7 @@ export default function UserProfileModal({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Award className="w-5 h-5 text-amber-400" />
-                        <span className="text-xs font-black uppercase tracking-widest">Klamby Rewards Portal</span>
+                        <span className="text-xs font-black uppercase tracking-widest">BTNX Rewards Portal</span>
                       </div>
                       <span className="text-xs text-amber-400 font-extrabold uppercase">1,250 / 1,500 XP</span>
                     </div>
@@ -617,10 +661,20 @@ export default function UserProfileModal({
                   {/* Save button */}
                   <button
                     type="submit"
-                    className="flex items-center justify-center gap-2 px-6 py-4 bg-slate-950 text-white hover:bg-slate-850 text-xs font-black uppercase tracking-widest rounded-2xl transition-all active:scale-98 shadow-md"
+                    disabled={isSaving}
+                    className="flex items-center justify-center gap-2 px-6 py-4 bg-slate-950 text-white hover:bg-slate-850 disabled:bg-slate-400 disabled:cursor-not-allowed text-xs font-black uppercase tracking-widest rounded-2xl transition-all active:scale-98 shadow-md"
                   >
-                    <Save className="w-4 h-4" />
-                    Save Account Settings
+                    {isSaving ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Saving Updates...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Save Account Settings
+                      </>
+                    )}
                   </button>
 
                 </form>

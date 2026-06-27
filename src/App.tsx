@@ -15,21 +15,49 @@ import Notification, { Toast } from "./components/Notification";
 import { Product, CartItem, Order } from "./types";
 import { useAuth } from "./context/AuthContext";
 import { db } from "./lib/firebase";
-import { doc, increment, updateDoc } from "firebase/firestore";
+import { doc, increment, updateDoc, collection, query, where, onSnapshot, setDoc } from "firebase/firestore";
 
 export default function App() {
   const { currentUser, loading } = useAuth();
   // Load initial cart state from localStorage
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const savedCart = localStorage.getItem("klamby_cart");
+    const savedCart = localStorage.getItem("btnx_cart") || localStorage.getItem("klamby_cart");
     return savedCart ? JSON.parse(savedCart) : [];
   });
 
-  // Load initial orders state from localStorage
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem("klamby_orders");
-    return saved ? JSON.parse(saved) : DEFAULT_MOCK_ORDERS;
-  });
+  // Load initial orders state
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // Stream orders from Firestore or load from localStorage
+  useEffect(() => {
+    if (!currentUser) {
+      const saved = localStorage.getItem("btnx_orders") || localStorage.getItem("klamby_orders");
+      setOrders(saved ? JSON.parse(saved) : []);
+      return;
+    }
+
+    // Stream orders from Firestore in real-time
+    const q = query(collection(db, "orders"), where("userId", "==", currentUser.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedOrders = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Order[];
+      
+      // Sort orders by timestamp / date (newest first)
+      fetchedOrders.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.date ? new Date(a.date).getTime() : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.date ? new Date(b.date).getTime() : 0);
+        return timeB - timeA;
+      });
+
+      setOrders(fetchedOrders);
+    }, (error) => {
+      console.error("Error streaming customer orders:", error);
+    });
+
+    return unsubscribe;
+  }, [currentUser]);
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -42,16 +70,33 @@ export default function App() {
 
   // Synchronize cart state with localStorage
   useEffect(() => {
-    localStorage.setItem("klamby_cart", JSON.stringify(cart));
+    localStorage.setItem("btnx_cart", JSON.stringify(cart));
   }, [cart]);
 
-  // Synchronize orders state with localStorage
+  // Synchronize orders state with localStorage only when guest
   useEffect(() => {
-    localStorage.setItem("klamby_orders", JSON.stringify(orders));
-  }, [orders]);
+    if (!currentUser) {
+      localStorage.setItem("btnx_orders", JSON.stringify(orders));
+    }
+  }, [orders, currentUser]);
 
-  const handlePlaceOrder = (newOrder: Order) => {
-    setOrders((prev) => [newOrder, ...prev]);
+  const handlePlaceOrder = async (newOrder: Order) => {
+    if (currentUser) {
+      try {
+        const orderData = {
+          ...newOrder,
+          userId: currentUser.uid,
+          userEmail: currentUser.email || "",
+          createdAt: new Date(),
+        };
+        await setDoc(doc(db, "orders", newOrder.id), orderData);
+      } catch (err) {
+        console.error("Failed to save order to Firestore:", err);
+        handleAddToast("Failed to save order to cloud database.", "error");
+      }
+    } else {
+      setOrders((prev) => [newOrder, ...prev]);
+    }
   };
 
   // Handle addition of items to shopping cart

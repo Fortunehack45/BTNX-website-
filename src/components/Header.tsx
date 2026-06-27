@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, ShoppingBag, User, Menu, X, Heart, Settings, LogOut, Package, ArrowRight } from "lucide-react";
+import { Search, ShoppingBag, User, Menu, X, Heart, Settings, LogOut, Package, ArrowRight, Shield } from "lucide-react";
 import { NavItem, CartItem, Product } from "../types";
 import { NAVIGATION_ITEMS, NEW_YEAR_PRODUCTS } from "../data";
 import { motion, AnimatePresence } from "motion/react";
@@ -32,7 +32,7 @@ export default function Header({
   onOpenAuth,
   onOpenProduct,
 }: HeaderProps) {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, userData } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -161,10 +161,10 @@ export default function Header({
               <a 
                 href="#" 
                 onClick={(e) => handleNavClick("Home", e)}
-                className="font-display text-3xl tracking-widest text-slate-900 select-none hover:opacity-80 transition-opacity"
+                className="font-logo-bruno text-3xl font-black tracking-widest text-slate-950 select-none hover:opacity-80 transition-opacity"
                 id="header-logo"
               >
-                KLAMBY
+                BTNX
               </a>
             </div>
 
@@ -335,6 +335,15 @@ export default function Header({
                             <p className="text-sm font-semibold text-slate-800 truncate">{currentUser.email}</p>
                           </div>
                           <div className="p-1">
+                            {userData?.role === "admin" && (
+                              <a
+                                href="/admin/"
+                                onClick={() => setIsProfileDropdownOpen(false)}
+                                className="flex w-full items-center gap-2.5 px-3 py-2 text-[11px] text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-colors font-extrabold uppercase tracking-widest border border-transparent hover:border-emerald-100 mb-1 select-none"
+                              >
+                                <Shield className="w-4 h-4 text-emerald-600 shrink-0" /> Admin Panel
+                              </a>
+                            )}
                             <button
                               onClick={() => {
                                 onOpenProfile("orders");
@@ -458,30 +467,58 @@ export default function Header({
 
                 {/* User email info */}
                 <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Current Account</p>
-                      <p className="text-xs font-bold text-slate-700">fortunedomination@gmail.com</p>
+                  {currentUser ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Current Account</p>
+                          <p className="text-xs font-bold text-slate-700 font-mono">{currentUser.email}</p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setIsMobileMenuOpen(false);
+                            onOpenProfile("profile");
+                          }}
+                          className="text-xs text-slate-900 underline font-extrabold uppercase tracking-wider"
+                        >
+                          Manage
+                        </button>
+                      </div>
+                      
+                      {userData?.role === "admin" && (
+                        <a
+                          href="/admin/"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
+                        >
+                          <Shield className="w-4 h-4 text-emerald-300" /> Admin Dashboard
+                        </a>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          onOpenProfile("orders");
+                        }}
+                        className="w-full py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
+                      >
+                        <Package className="w-4 h-4" /> My Past Purchases
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Not Logged In</p>
+                      <button
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          onOpenAuth();
+                        }}
+                        className="w-full py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
+                      >
+                        Sign In / Create Account
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        onOpenProfile("profile");
-                      }}
-                      className="text-xs text-slate-900 underline font-extrabold uppercase tracking-wider"
-                    >
-                      Manage
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      onOpenProfile("orders");
-                    }}
-                    className="w-full py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
-                  >
-                    <Package className="w-4 h-4" /> My Past Purchases
-                  </button>
+                  )}
                 </div>
               </div>
             </motion.div>

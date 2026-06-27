@@ -155,7 +155,9 @@ export default function Users() {
                     <td className="px-6 py-4 text-xs font-mono text-slate-500">
                       {user.createdAt?.toDate 
                         ? user.createdAt.toDate().toLocaleDateString('en-US', { dateStyle: 'medium' }) 
-                        : 'Pre-existing Record'}
+                        : user.createdAt 
+                          ? new Date(user.createdAt).toLocaleDateString('en-US', { dateStyle: 'medium' })
+                          : 'Pre-existing Record'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">

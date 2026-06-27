@@ -29,14 +29,14 @@ export default function NewYearCollection({
     e.stopPropagation();
     if (isVoucherClaimed) {
       // Copy code
-      navigator.clipboard.writeText("KLAMBY50");
-      onAddToast("Voucher code 'KLAMBY50' copied to clipboard!", "success");
+      navigator.clipboard.writeText("BTNX50");
+      onAddToast("Voucher code 'BTNX50' copied to clipboard!", "success");
       return;
     }
     
     setIsVoucherClaimed(true);
-    setVoucherCode("KLAMBY50");
-    onAddToast("50% OFF VOUCHER CLAIMED! Use code KLAMBY50", "success");
+    setVoucherCode("BTNX50");
+    onAddToast("50% OFF VOUCHER CLAIMED! Use code BTNX50", "success");
   };
 
   const isSearchActive = !!searchQuery.trim();
@@ -273,7 +273,7 @@ export default function NewYearCollection({
                     {isVoucherClaimed ? (
                       <>
                         <Check className="w-4 h-4 text-white" />
-                        <span>CODE: KLAMBY50 (COPY)</span>
+                        <span>CODE: BTNX50 (COPY)</span>
                       </>
                     ) : (
                       <>

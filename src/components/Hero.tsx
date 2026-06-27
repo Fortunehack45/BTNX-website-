@@ -23,7 +23,7 @@ export default function Hero() {
         <div className="absolute inset-0 select-none">
           <img
             src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1800"
-            alt="Klamby Concept Boutique Store"
+            alt="BTNX Concept Boutique Store"
             className="w-full h-full object-cover object-center"
             referrerPolicy="no-referrer"
             id="hero-bg-img"

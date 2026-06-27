@@ -124,8 +124,8 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
 ];
 
 export const MARQUEE_ITEMS = [
-  "New Year Collection",
+  "BTNX Elite Collections",
   "Discount Up to 25%",
-  "Best Fashion in 2022",
+  "Best Streetwear in 2026",
   "End Year Sale"
 ];

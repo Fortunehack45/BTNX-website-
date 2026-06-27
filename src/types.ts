@@ -4,6 +4,12 @@ export interface User {
   name: string;
   role: "admin" | "customer";
   createdAt: string;
+  phone?: string;
+  birthday?: string;
+  shippingStreet?: string;
+  shippingCity?: string;
+  shippingZip?: string;
+  shippingCountry?: string;
 }
 
 export interface Product {
@@ -45,6 +51,7 @@ export interface Order {
   status: "pending" | "confirmed" | "shipped" | "delivered" | "cancelled" | "Pending" | "Confirmed" | "Shipped" | "Delivered" | "Cancelled" | "Processing" | "In Transit";
   date: string;
   promoCodeId?: string;
+  createdAt?: any;
 }
 
 export interface PromoCode {

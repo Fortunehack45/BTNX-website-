@@ -17,9 +17,9 @@ export default function Footer() {
           <div className="flex-shrink-0">
             <a 
               href="#" 
-              className="font-display text-3xl tracking-widest text-slate-900 select-none hover:opacity-80 transition-opacity"
+              className="font-logo-bruno text-3xl font-black tracking-widest text-slate-900 select-none hover:opacity-80 transition-opacity"
             >
-              KLAMBY
+              BTNX
             </a>
           </div>
 

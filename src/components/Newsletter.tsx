@@ -22,7 +22,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
     setTimeout(() => {
       setIsSubmitting(false);
       setIsSubscribed(true);
-      onAddToast(`Welcome to the Klamby newsletter: ${email}!`, "success");
+      onAddToast(`Welcome to the BTNX newsletter: ${email}!`, "success");
     }, 1200);
   };
 
@@ -69,7 +69,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
                   className="font-sans text-sm sm:text-base text-slate-300 font-light tracking-wide max-w-xl mb-8 leading-relaxed"
                   id="newsletter-desc"
                 >
-                  Get The Latest Collection From Klamby, And Collect Lots Of Discount Vouchers
+                  Get The Latest Collection From BTNX, And Collect Lots Of Discount Vouchers
                 </p>
 
                 {/* Email Form */}
@@ -114,7 +114,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
                   <span className="font-bold">Subscribed!</span>
                 </h3>
                 <p className="font-sans text-sm text-slate-200 font-light leading-relaxed mb-6">
-                  You are now on the official Klamby VVIP list. Check your inbox for your first voucher details.
+                  You are now on the official BTNX VVIP list. Check your inbox for your first voucher details.
                 </p>
                 <button
                   onClick={() => {

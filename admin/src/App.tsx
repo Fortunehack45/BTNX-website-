@@ -21,8 +21,8 @@ function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-64 bg-slate-950 text-slate-200 flex flex-col hidden md:flex border-r border-slate-900 select-none">
         <div className="h-20 flex items-center justify-between px-6 border-b border-slate-900">
           <div className="flex flex-col">
-            <span className="text-2xl font-display tracking-widest text-white uppercase font-bold">Klamby</span>
-            <span className="text-[9px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold -mt-1">Admin Panel</span>
+            <span className="text-2xl font-logo-bruno tracking-wider text-white uppercase font-bold">BTNX</span>
+            <span className="text-[9px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold">Admin Panel</span>
           </div>
           <a href="/" className="text-slate-400 hover:text-white transition-colors" title="Back to Store">
             <ArrowLeft className="w-4 h-4" />
@@ -56,8 +56,8 @@ function Layout({ children }: { children: React.ReactNode }) {
         {/* Mobile Header */}
         <header className="h-16 md:hidden bg-slate-950 text-white flex items-center justify-between px-4 border-b border-slate-900">
           <div className="flex flex-col">
-            <span className="text-xl font-display tracking-widest text-white uppercase font-bold">Klamby</span>
-            <span className="text-[8px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold -mt-1">Admin Panel</span>
+            <span className="text-xl font-logo-bruno tracking-wider text-white uppercase font-bold">BTNX</span>
+            <span className="text-[8px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold">Admin Panel</span>
           </div>
           
           <div className="flex items-center gap-4">

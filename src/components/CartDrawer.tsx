@@ -40,9 +40,9 @@ export default function CartDrawer({
 
   const handleApplyVoucher = (code: string) => {
     const cleanCode = code.trim().toUpperCase();
-    if (cleanCode === "KLAMBY50") {
+    if (cleanCode === "KLAMBY50" || cleanCode === "BTNX50") {
       setAppliedDiscount(0.5);
-      onAddToast("Voucher code 'KLAMBY50' applied! 50% discount active.", "success");
+      onAddToast(`Voucher code '${cleanCode}' applied! 50% discount active.`, "success");
     } else {
       onAddToast("Invalid voucher code.", "error");
     }
@@ -90,7 +90,7 @@ export default function CartDrawer({
         setProcessingMsg(messages[currentIdx]);
       } else {
         clearInterval(interval);
-        const randomId = `KB-${Math.floor(100000 + Math.random() * 900000)}`;
+        const randomId = `BX-${Math.floor(100000 + Math.random() * 900000)}`;
         
         // Save the new order to state & localStorage
         const newOrder: Order = {
@@ -100,6 +100,7 @@ export default function CartDrawer({
             month: "long",
             year: "numeric",
           }),
+          createdAt: new Date().toISOString(),
           total: finalTotal,
           status: "Processing",
           items: cart.map(item => ({
@@ -200,7 +201,7 @@ export default function CartDrawer({
 
                     <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm w-full max-w-xs mb-8">
                       <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                        Thank you for your purchase. We are preparing your bespoke Klamby collection items! A confirmation has been dispatched to <span className="font-bold text-slate-700">fortunedomination@gmail.com</span>.
+                        Thank you for your purchase. We are preparing your bespoke BTNX collection items! A confirmation has been dispatched to <span className="font-bold text-slate-700 font-mono">{currentUser?.email || "your registered email"}</span>.
                       </p>
                     </div>
 
@@ -263,7 +264,7 @@ export default function CartDrawer({
                         
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">KLAMBY VVIP</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">BTNX VVIP</span>
                             <p className="text-[11px] font-semibold text-slate-200 mt-0.5">Bespoke Atelier</p>
                           </div>
                           <div className="w-10 h-7 bg-white/10 rounded-md backdrop-blur-xs flex items-center justify-center">
@@ -489,7 +490,7 @@ export default function CartDrawer({
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            placeholder="PROMO CODE (e.g., KLAMBY50)"
+                            placeholder="PROMO CODE (e.g., BTNX50)"
                             value={voucherInput}
                             onChange={(e) => setVoucherInput(e.target.value)}
                             className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold tracking-wider uppercase placeholder-slate-400 outline-none focus:border-slate-400 transition-all"

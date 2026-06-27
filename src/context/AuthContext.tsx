@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User as FirebaseUser, onAuthStateChanged, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider, db } from "../lib/firebase";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { User } from "../types";
 
 interface AuthContextType {
@@ -22,24 +22,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubDoc: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      if (unsubDoc) {
+        unsubDoc();
+        unsubDoc = null;
+      }
+
       if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data() as User;
-          if (user.email === 'fortunedomination@gmail.com' && data.role !== 'admin') {
-            await updateDoc(doc(db, "users", user.uid), { role: 'admin' });
-            data.role = 'admin';
+        unsubDoc = onSnapshot(doc(db, "users", user.uid), async (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data() as User;
+            if (user.email === 'fortunedomination@gmail.com' && data.role !== 'admin') {
+              await updateDoc(doc(db, "users", user.uid), { role: 'admin' });
+              data.role = 'admin';
+            }
+            setUserData(data);
+          } else {
+            // User logged in, but doc doesn't exist in Firestore yet (e.g. sign up is in progress).
+            // Populate basic fields to avoid showing blank or demo data.
+            setUserData({
+              id: user.uid,
+              email: user.email || "",
+              name: user.displayName || "New User",
+              role: user.email?.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
+              createdAt: new Date().toISOString()
+            });
           }
-          setUserData(data);
-        }
+          setLoading(false);
+        });
       } else {
         setUserData(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribe();
+      if (unsubDoc) unsubDoc();
+    };
   }, []);
 
   const signInWithGoogle = async () => {
@@ -74,14 +97,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     let actualEmail = email.trim();
-    if (actualEmail.toLowerCase() === 'btnx' || actualEmail.toLowerCase() === 'btnx@klamby.com') {
-      actualEmail = 'btnx@klamby.com';
+    if (actualEmail.toLowerCase() === 'btnx' || actualEmail.toLowerCase() === 'btnx@klamby.com' || actualEmail.toLowerCase() === 'btnx@btnx.com') {
+      actualEmail = 'btnx@btnx.com';
     }
     
     try {
       await signInWithEmailAndPassword(auth, actualEmail, password);
     } catch (error: any) {
-      if (actualEmail === 'btnx@klamby.com' && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
+      if (actualEmail === 'btnx@btnx.com' && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
         try {
           const result = await createUserWithEmailAndPassword(auth, actualEmail, password);
           await setDoc(doc(db, "users", result.user.uid), {
