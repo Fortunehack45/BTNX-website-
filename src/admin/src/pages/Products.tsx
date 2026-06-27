@@ -299,218 +299,373 @@ export default function Products() {
 
       {/* Modal Dialog */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm transition-all">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md transition-all">
+          <div className="bg-white border border-slate-150 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
-            <header className="flex items-center justify-between border-b border-slate-150 px-6 py-4 bg-slate-50">
+            <header className="flex items-center justify-between border-b border-slate-100 px-8 py-5 bg-slate-50/50">
               <div>
-                <h2 className="text-xl font-display font-bold tracking-widest text-slate-950 uppercase">
-                  {editingProduct ? 'Edit Product Details' : 'Add New Product'}
+                <span className="text-[9px] font-bold font-mono text-indigo-600 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md">Atelier Catalog System</span>
+                <h2 className="text-2xl font-display font-bold tracking-wider text-slate-950 uppercase mt-1">
+                  {editingProduct ? 'Modify Boutique Piece' : 'Introduce New Creation'}
                 </h2>
-                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-                  {editingProduct ? `ID: ${editingProduct.id}` : 'Create catalog item'}
+                <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mt-0.5">
+                  {editingProduct ? `Bespoke Identifier: ${editingProduct.id}` : 'Populate store list & configure metadata'}
                 </p>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)} 
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-950 hover:bg-slate-100 transition-colors"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-950 hover:bg-slate-100 transition-all active:scale-95"
               >
                 <X className="w-5 h-5" />
               </button>
             </header>
 
             {/* Modal Content */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-8">
               {error && (
-                <div className="bg-rose-50 text-rose-800 p-3.5 rounded-xl border border-rose-100 flex items-start gap-2.5 text-xs font-mono">
-                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div className="bg-rose-50 text-rose-800 p-4 rounded-2xl border border-rose-100 flex items-start gap-3 text-xs font-mono mb-6">
+                  <AlertCircle className="w-4.5 h-4.5 text-rose-600 flex-shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Product Name */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Name</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g. Minimalist Wool Trench"
-                    className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
+              {/* Grid Wrapper */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                {/* Left Column: Form Controls */}
+                <div className="lg:col-span-7 space-y-6">
+                  
+                  {/* General Block */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-950 border-b border-slate-100 pb-2">1. Essential details</h3>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Product Name */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Title</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name}
+                          onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="e.g. Vintage Leather Trench"
+                          className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                        />
+                      </div>
+
+                      {/* Category */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Collection Segment</label>
+                        <select
+                          value={formData.category}
+                          onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                          className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:border-slate-950 transition-colors"
+                        >
+                          {CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Badge */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Launch Badge</label>
+                        <input
+                          type="text"
+                          value={formData.badge}
+                          onChange={e => setFormData(prev => ({ ...prev, badge: e.target.value }))}
+                          placeholder="e.g. NEW, 15% OFF, LIMITED"
+                          className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                        />
+                      </div>
+
+                      {/* Stock */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Stock Availability</label>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          value={formData.stock}
+                          onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                          placeholder="100"
+                          className="w-full text-xs font-mono px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pricing Block */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-950 border-b border-slate-100 pb-2">2. Pricing Structure</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Price */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Listing Price ($ USD)</label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">$</span>
+                          <input
+                            type="number"
+                            required
+                            step="0.01"
+                            min="0"
+                            value={formData.price}
+                            onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                            placeholder="0.00"
+                            className="w-full text-xs font-mono font-bold pl-8 pr-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Original Price */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Original / Compare Price ($ USD)</label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">$</span>
+                          <input
+                            type="number"
+                            step="0.01;any"
+                            min="0"
+                            value={formData.originalPrice}
+                            onChange={e => setFormData(prev => ({ ...prev, originalPrice: e.target.value }))}
+                            placeholder="No discount if empty"
+                            className="w-full text-xs font-mono font-bold pl-8 pr-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Styling & Image Block */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-950 border-b border-slate-100 pb-2">3. Visual Asset</h3>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Image Asset URL</label>
+                      <input
+                        type="url"
+                        required
+                        value={formData.image}
+                        onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full text-xs font-mono px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                      />
+                      
+                      {/* Presets Grid */}
+                      <div className="pt-1.5 space-y-2">
+                        <div className="flex items-center gap-1">
+                          <ImageIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-[9px] font-bold font-mono text-slate-400 uppercase tracking-wider">Premium Presets</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {IMAGE_PLACEHOLDERS.map((preset, idx) => (
+                            <button
+                              type="button"
+                              key={idx}
+                              onClick={() => setFormData(prev => ({ ...prev, image: preset.url }))}
+                              className={`text-[9px] font-mono px-2.5 py-1 rounded-lg border transition-all active:scale-95 ${
+                                formData.image === preset.url
+                                  ? 'bg-slate-950 border-slate-950 text-white font-bold shadow-sm'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400 hover:bg-slate-100'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sizes & Colors Selection */}
+                  <div className="space-y-4 pt-1">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-950 border-b border-slate-100 pb-2">4. Sizes & Palette</h3>
+                    
+                    {/* Sizes Selection */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">Available Sizes</label>
+                      <div className="flex flex-wrap gap-2">
+                        {SIZES_OPTIONS.map(sz => {
+                          const active = formData.sizes.includes(sz);
+                          return (
+                            <button
+                              type="button"
+                              key={sz}
+                              onClick={() => handleCheckboxChange('sizes', sz)}
+                              className={`text-xs font-mono font-bold w-10 h-10 border rounded-xl transition-all active:scale-90 ${
+                                active 
+                                  ? 'bg-slate-950 border-slate-950 text-white shadow-md scale-95' 
+                                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-white'
+                              }`}
+                            >
+                              {sz}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Colors Selection */}
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">Color Segment Palette</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {COLORS_OPTIONS.map(col => {
+                          const active = formData.colors.includes(col);
+                          return (
+                            <button
+                              type="button"
+                              key={col}
+                              onClick={() => handleCheckboxChange('colors', col)}
+                              className={`text-xs font-mono font-semibold px-3 py-1.5 border rounded-xl transition-all active:scale-95 ${
+                                active 
+                                  ? 'bg-indigo-600 border-indigo-600 text-white font-bold shadow-sm' 
+                                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-white'
+                              }`}
+                            >
+                              {col}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-1.5 pt-1">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-950 border-b border-slate-100 pb-2">5. Creative Pitch</h3>
+                    <textarea
+                      value={formData.description}
+                      onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="e.g. A masterful, double-breasted outerwear staple crafted in warm premium virgin wool. Features wide lapels, structured tailoring shoulders, and detailed horn buttons."
+                      rows={4}
+                      className="w-full text-xs px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 focus:ring-1 focus:ring-slate-950 transition-colors bg-slate-50/50 focus:bg-white"
+                    />
+                  </div>
+
                 </div>
 
-                {/* Category */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Category</label>
-                  <select
-                    value={formData.category}
-                    onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-950 transition-colors"
-                  >
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* Right Column: Live Storefront Card Preview */}
+                <div className="lg:col-span-5 flex flex-col justify-start">
+                  <div className="sticky top-6 bg-slate-50 border border-slate-150 rounded-2xl p-6 select-none space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-wider">Live Storefront Card Preview</h4>
+                      <span className="flex h-2 w-2 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                    </div>
 
-                {/* Price */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Price ($ USD)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full text-xs font-mono font-bold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
+                    {/* Premium Product Card Preview */}
+                    <div className="bg-white rounded-[24px] border border-slate-100 overflow-hidden shadow-md group relative max-w-sm mx-auto">
+                      
+                      {/* Badge Tag */}
+                      {(formData.badge || (formData.originalPrice && Number(formData.originalPrice) > Number(formData.price))) && (
+                        <span className="absolute top-4 left-4 z-10 bg-slate-950 text-white text-[9px] font-bold font-mono uppercase tracking-widest px-3 py-1 rounded-full shadow-sm">
+                          {formData.badge || 'SALE'}
+                        </span>
+                      )}
 
-                {/* Original Price */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Original Price (Discount Compare)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.originalPrice}
-                    onChange={e => setFormData(prev => ({ ...prev, originalPrice: e.target.value }))}
-                    placeholder="Optional (No sale if empty)"
-                    className="w-full text-xs font-mono font-bold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
+                      {/* Card Image */}
+                      <div className="aspect-[4/5] w-full bg-[#f6f6f6] flex items-center justify-center overflow-hidden relative">
+                        {formData.image ? (
+                          <img 
+                            src={formData.image} 
+                            alt="Boutique Piece" 
+                            className="w-full h-full object-cover object-center transition-transform duration-300"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1544022613-e87ca75a784a?q=80&w=600";
+                            }}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-slate-300 p-8 text-center space-y-2">
+                            <ImageIcon className="w-12 h-12 stroke-[1.5]" />
+                            <span className="text-[10px] font-mono uppercase tracking-wider">Asset URL Missing</span>
+                          </div>
+                        )}
+                      </div>
 
-                {/* Image URL */}
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Image URL</label>
-                  <input
-                    type="url"
-                    value={formData.image}
-                    onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full text-xs font-mono px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                  {/* Preset Placeholders */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    <span className="text-[9px] font-mono text-slate-400 uppercase mr-1">PRESETS:</span>
-                    {IMAGE_PLACEHOLDERS.map((preset, idx) => (
-                      <button
-                        type="button"
-                        key={idx}
-                        onClick={() => setFormData(prev => ({ ...prev, image: preset.url }))}
-                        className={`text-[9px] font-mono px-2 py-0.5 rounded border ${
-                          formData.image === preset.url
-                            ? 'bg-slate-950 border-slate-950 text-white font-bold'
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'
-                        } transition-colors`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+                      {/* Card Details */}
+                      <div className="p-5 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[9px] font-bold font-mono tracking-widest text-slate-400 uppercase">
+                              {formData.category ? `BTNX — ${formData.category}` : "BTNX ATELIER"}
+                            </span>
+                            <h3 className="text-sm font-semibold text-slate-900 tracking-tight mt-0.5 line-clamp-1">
+                              {formData.name || "Untitled Creation"}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* Pricing */}
+                        <div className="flex items-baseline gap-2.5 pt-1">
+                          <span className="text-sm font-bold text-slate-900 font-mono">
+                            ${formData.price ? Number(formData.price).toFixed(2) : "0.00"}
+                          </span>
+                          {formData.originalPrice && Number(formData.originalPrice) > Number(formData.price) && (
+                            <span className="text-xs text-slate-400 font-mono line-through decoration-slate-300">
+                              ${Number(formData.originalPrice).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Sizes list preview inside card */}
+                        {formData.sizes && formData.sizes.length > 0 && (
+                          <div className="pt-2 flex items-center gap-1">
+                            <span className="text-[8px] font-bold font-mono text-slate-400 uppercase">Sizes:</span>
+                            <div className="flex gap-1 flex-wrap">
+                              {formData.sizes.map(sz => (
+                                <span key={sz} className="text-[8px] font-bold font-mono bg-slate-50 text-slate-600 px-1 rounded border border-slate-100">
+                                  {sz}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Colors list preview inside card */}
+                        {formData.colors && formData.colors.length > 0 && (
+                          <div className="pt-1 flex items-center gap-1">
+                            <span className="text-[8px] font-bold font-mono text-slate-400 uppercase">Colors:</span>
+                            <div className="flex gap-1 flex-wrap">
+                              {formData.colors.map(col => (
+                                <span key={col} className="text-[8px] font-bold font-mono bg-indigo-50/50 text-indigo-700 px-1 rounded border border-indigo-100">
+                                  {col}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Stock warning */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[9px] font-mono text-slate-400 uppercase">
+                          <span>Store Segment</span>
+                          <span className={`${Number(formData.stock) <= 5 ? "text-rose-600 font-bold" : "text-emerald-600 font-bold"}`}>
+                            {formData.stock ? `${formData.stock} Items Stocked` : "0 Out of Stock"}
+                          </span>
+                        </div>
+
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Badge */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Badge</label>
-                  <input
-                    type="text"
-                    value={formData.badge}
-                    onChange={e => setFormData(prev => ({ ...prev, badge: e.target.value }))}
-                    placeholder="e.g. NEW, SALE, LIMITED"
-                    className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-
-                {/* Stock */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Stock Quantity</label>
-                  <input
-                    type="number"
-                    value={formData.stock}
-                    onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))}
-                    placeholder="100"
-                    className="w-full text-xs font-mono px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Sizes Selection */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Available Sizes</label>
-                <div className="flex flex-wrap gap-2.5">
-                  {SIZES_OPTIONS.map(sz => {
-                    const active = formData.sizes.includes(sz);
-                    return (
-                      <button
-                        type="button"
-                        key={sz}
-                        onClick={() => handleCheckboxChange('sizes', sz)}
-                        className={`text-xs font-mono font-bold w-10 h-10 border rounded-lg transition-all ${
-                          active 
-                            ? 'bg-slate-950 border-slate-950 text-white shadow-sm scale-95' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'
-                        }`}
-                      >
-                        {sz}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Colors Selection */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Available Colors</label>
-                <div className="flex flex-wrap gap-2">
-                  {COLORS_OPTIONS.map(col => {
-                    const active = formData.colors.includes(col);
-                    return (
-                      <button
-                        type="button"
-                        key={col}
-                        onClick={() => handleCheckboxChange('colors', col)}
-                        className={`text-xs font-mono font-semibold px-3 py-1.5 border rounded-lg transition-all ${
-                          active 
-                            ? 'bg-slate-950 border-slate-950 text-white font-bold' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'
-                        }`}
-                      >
-                        {col}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Tell clients about this item's material, silhouette, fit, and origin..."
-                  rows={3}
-                  className="w-full text-xs px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                />
               </div>
 
               {/* Form Buttons */}
-              <footer className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+              <footer className="flex items-center justify-end gap-3 border-t border-slate-150 pt-6 mt-8">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase text-slate-600 hover:text-slate-950 hover:bg-slate-50"
+                  className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase text-slate-600 hover:text-slate-950 hover:bg-slate-50 active:scale-95 transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex items-center gap-1.5 bg-slate-950 text-white px-5 py-2.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider hover:bg-slate-900 shadow"
+                  className="flex items-center gap-2 bg-slate-950 text-white px-6 py-3 rounded-xl text-xs font-mono font-bold uppercase tracking-wider hover:bg-slate-900 shadow active:scale-95 transition-all"
                 >
                   <Save className="w-4 h-4" />
-                  {editingProduct ? 'Save Changes' : 'Create Product'}
+                  {editingProduct ? 'Save Changes' : 'Publish Product'}
                 </button>
               </footer>
             </form>

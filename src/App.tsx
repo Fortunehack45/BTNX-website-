@@ -241,35 +241,47 @@ export default function App() {
 
       {/* Main Content Layout */}
       <main className="flex-grow">
-        
-        {/* Giant Hero Banner Section */}
-        <Hero />
+        {activeProduct ? (
+          <ProductModal
+            product={activeProduct}
+            onClose={() => {
+              setActiveProduct(null);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onAddToBag={handleAddToBag}
+            onSelectProduct={setActiveProduct}
+          />
+        ) : (
+          <>
+            {/* Giant Hero Banner Section */}
+            <Hero />
 
-        {/* 3-Column New Arrivals Collection Section */}
-        <NewArrivals
-          onCategoryFilter={setCategoryFilter}
-          onAddToast={handleAddToast}
-        />
+            {/* 3-Column New Arrivals Collection Section */}
+            <NewArrivals
+              onCategoryFilter={setCategoryFilter}
+              onAddToast={handleAddToast}
+            />
 
-        {/* Double Wide Big Seasonal Sales Section */}
-        <BigSale
-          onCategoryFilter={setCategoryFilter}
-          onAddToast={handleAddToast}
-        />
+            {/* Double Wide Big Seasonal Sales Section */}
+            <BigSale
+              onCategoryFilter={setCategoryFilter}
+              onAddToast={handleAddToast}
+            />
 
-        {/* Masonry-Style Interactive Collections Area */}
-        <NewYearCollection
-          categoryFilter={categoryFilter}
-          onResetFilter={() => setCategoryFilter("")}
-          onOpenProduct={setActiveProduct}
-          onAddToBag={handleAddToBag}
-          onAddToast={handleAddToast}
-          searchQuery={searchQuery}
-        />
+            {/* Masonry-Style Interactive Collections Area */}
+            <NewYearCollection
+              categoryFilter={categoryFilter}
+              onResetFilter={() => setCategoryFilter("")}
+              onOpenProduct={setActiveProduct}
+              onAddToBag={handleAddToBag}
+              onAddToast={handleAddToast}
+              searchQuery={searchQuery}
+            />
 
-        {/* Cityscape Streetwear Newsletter Form */}
-        <Newsletter onAddToast={handleAddToast} />
-
+            {/* Cityscape Streetwear Newsletter Form */}
+            <Newsletter onAddToast={handleAddToast} />
+          </>
+        )}
       </main>
 
       {/* Editorial Footer */}
@@ -288,16 +300,6 @@ export default function App() {
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthOpen(true)}
       />
-
-      {/* Detailed Product Quick View Dialog Overlay */}
-      {activeProduct && (
-        <ProductModal
-          product={activeProduct}
-          onClose={() => setActiveProduct(null)}
-          onAddToBag={handleAddToBag}
-          onSelectProduct={setActiveProduct}
-        />
-      )}
 
       {isAuthOpen && (
         <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />

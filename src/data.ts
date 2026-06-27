@@ -2,10 +2,10 @@ import { Product, NavItem } from "./types";
 
 export const NAVIGATION_ITEMS: NavItem[] = [
   { label: "Home", href: "#", active: true },
-  { label: "Men", href: "#men" },
-  { label: "Women", href: "#women" },
-  { label: "Kids", href: "#kids" },
-  { label: "Customize", href: "#customize" },
+  { label: "New", href: "#new-arrivals" },
+  { label: "Sale", href: "#end-year-sale" },
+  { label: "Collection", href: "#collection" },
+  { label: "Shop", href: "#collection" },
 ];
 
 export const NEW_ARRIVALS = [

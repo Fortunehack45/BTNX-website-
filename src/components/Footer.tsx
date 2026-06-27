@@ -17,7 +17,7 @@ export default function Footer() {
           <div className="flex-shrink-0">
             <a 
               href="#" 
-              className="font-logo-bruno text-3xl font-black tracking-widest text-slate-900 select-none hover:opacity-80 transition-opacity"
+              className="font-logo-anton text-4xl tracking-wider text-slate-900 select-none hover:opacity-80 transition-opacity"
             >
               BTNX
             </a>

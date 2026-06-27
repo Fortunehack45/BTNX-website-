@@ -17,7 +17,7 @@ interface HeaderProps {
   onCategoryFilter: (category: string) => void;
   onOpenProfile: (tab?: "profile" | "orders") => void;
   onOpenAuth: () => void;
-  onOpenProduct?: (product: Product) => void;
+  onOpenProduct?: (product: Product | null) => void;
 }
 
 export default function Header({
@@ -80,23 +80,39 @@ export default function Header({
   const handleNavClick = (label: string, e: React.MouseEvent) => {
     setIsMobileMenuOpen(false);
     
+    if (onOpenProduct) {
+      onOpenProduct(null);
+    }
+    
     if (label === "Home") {
       e.preventDefault();
       onCategoryFilter("");
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } else if (label === "Men" || label === "Women" || label === "Kids") {
+    } else if (label === "New") {
       e.preventDefault();
-      onCategoryFilter(label);
+      const element = document.getElementById("new-arrivals");
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+    } else if (label === "Sale") {
+      e.preventDefault();
+      const element = document.getElementById("end-year-sale");
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+    } else if (label === "Collection") {
+      e.preventDefault();
       const element = document.getElementById("collection");
       if (element) {
         element.scrollIntoView({ behavior: "smooth" });
       }
-    } else if (label === "Customize") {
+    } else if (label === "Shop") {
       e.preventDefault();
-      const element = document.getElementById("newsletter");
+      const element = document.getElementById("collection");
       if (element) {
         element.scrollIntoView({ behavior: "smooth" });
       }
+      onAddToast("Shop directory is in preview. Browse collections below!", "info");
     }
   };
 
@@ -161,7 +177,7 @@ export default function Header({
               <a 
                 href="#" 
                 onClick={(e) => handleNavClick("Home", e)}
-                className="font-logo-bruno text-3xl font-black tracking-widest text-slate-950 select-none hover:opacity-80 transition-opacity"
+                className="font-logo-anton text-4xl tracking-wider text-slate-950 select-none hover:opacity-80 transition-opacity"
                 id="header-logo"
               >
                 BTNX

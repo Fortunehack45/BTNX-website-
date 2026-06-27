@@ -208,13 +208,13 @@ export default function ProductModal({
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
         transition={{ duration: 0.3 }}
-        className="fixed inset-0 z-50 bg-white overflow-y-auto"
+        className="w-full bg-white relative"
         ref={scrollContainerRef}
         id="product-details-page-viewport"
       >
