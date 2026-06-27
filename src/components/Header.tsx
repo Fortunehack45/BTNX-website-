@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, ShoppingBag, User, Menu, X, Heart, Settings, LogOut, Package, ArrowRight, Shield } from "lucide-react";
+import { Search, ShoppingBag, User, Menu, X, Heart, Settings, LogOut, Package, ArrowRight, Shield, Bell, Percent, Truck, Sparkles, Check, Lock } from "lucide-react";
 import { NavItem, CartItem, Product } from "../types";
 import { NAVIGATION_ITEMS, NEW_YEAR_PRODUCTS } from "../data";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, orderBy } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
 
 interface HeaderProps {
@@ -39,6 +39,134 @@ export default function Header({
   const [announcements, setAnnouncements] = useState<string[]>([]);
   const [currentAnnouncementIdx, setCurrentAnnouncementIdx] = useState(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+    try {
+      const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"));
+      const unsub = onSnapshot(q, (snap) => {
+        const allNotifs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const filtered = allNotifs.filter((n: any) => n.userId === currentUser.uid || n.userId === "broadcast");
+        setNotifications(filtered);
+      }, (err) => {
+        console.error("Failed to fetch notifications:", err);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.error("Notification listener error:", err);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const unreadCount = notifications.filter((n: any) => {
+    if (!currentUser) return false;
+    if (n.userId === 'broadcast') {
+      return !n.readBy || !n.readBy.includes(currentUser.uid);
+    }
+    return !n.isRead;
+  }).length;
+
+  const handleMarkAsRead = async (notif: any) => {
+    if (!currentUser) return;
+    try {
+      if (notif.userId === 'broadcast') {
+        const currentReadBy = notif.readBy || [];
+        if (!currentReadBy.includes(currentUser.uid)) {
+          await updateDoc(doc(db, "notifications", notif.id), {
+            readBy: [...currentReadBy, currentUser.uid]
+          });
+        }
+      } else {
+        await updateDoc(doc(db, "notifications", notif.id), {
+          isRead: true
+        });
+      }
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!currentUser) return;
+    try {
+      const unreadNotifs = notifications.filter((n: any) => {
+        if (n.userId === 'broadcast') {
+          return !n.readBy || !n.readBy.includes(currentUser.uid);
+        }
+        return !n.isRead;
+      });
+
+      for (const notif of unreadNotifs) {
+        await handleMarkAsRead(notif);
+      }
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
+    }
+  };
+
+  const formatRelativeTime = (dateString: string) => {
+    try {
+      const now = new Date();
+      const date = new Date(dateString);
+      const diffMs = now.getTime() - date.getTime();
+      if (isNaN(diffMs)) return "Recent";
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffSecs < 60) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays === 1) return "Yesterday";
+      return `${diffDays}d ago`;
+    } catch (e) {
+      return "Recent";
+    }
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'order_status':
+        return <Truck className="w-4 h-4 text-blue-600" />;
+      case 'promo':
+        return <Percent className="w-4 h-4 text-amber-600" />;
+      case 'new_arrival':
+        return <Sparkles className="w-4 h-4 text-emerald-600" />;
+      default:
+        return <Bell className="w-4 h-4 text-slate-600" />;
+    }
+  };
+
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case 'order_status':
+        return 'bg-blue-50 border-blue-100';
+      case 'promo':
+        return 'bg-amber-50 border-amber-100';
+      case 'new_arrival':
+        return 'bg-emerald-50 border-emerald-100';
+      default:
+        return 'bg-slate-50 border-slate-100';
+    }
+  };
 
   useEffect(() => {
     const fetchAnnouncements = async () => {
@@ -112,7 +240,6 @@ export default function Header({
       if (element) {
         element.scrollIntoView({ behavior: "smooth" });
       }
-      onAddToast("Shop directory is in preview. Browse collections below!", "info");
     }
   };
 
@@ -123,7 +250,6 @@ export default function Header({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      onAddToast(`Searching for "${searchQuery}"`, "info");
       const element = document.getElementById("collection");
       if (element) {
         element.scrollIntoView({ behavior: "smooth" });
@@ -259,8 +385,6 @@ export default function Header({
                             onClick={() => {
                               if (onOpenProduct) {
                                 onOpenProduct(p);
-                              } else {
-                                onAddToast(`Opening ${p.name}`, "info");
                               }
                               setIsSearchFocused(false);
                             }}
@@ -292,6 +416,119 @@ export default function Header({
                       <div className="mt-2 border-t border-slate-50 pt-2 px-4 flex items-center justify-between text-[10px] text-slate-400 font-bold select-none">
                         <span>PRESS ENTER TO VIEW ALL</span>
                         <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Notification Bell */}
+              <div className="relative" ref={notificationsRef}>
+                <button
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="relative p-2 rounded-full hover:bg-slate-50 text-slate-700 hover:text-slate-900 transition-all duration-200"
+                  aria-label="Notifications"
+                >
+                  <Bell className="w-[21px] h-[21px] stroke-[1.75]" />
+                  <AnimatePresence>
+                    {unreadCount > 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute top-0 right-0 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-white animate-pulse"
+                      >
+                        {unreadCount}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+
+                <AnimatePresence>
+                  {isNotificationsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border border-slate-100 rounded-2xl shadow-xl overflow-hidden z-50 py-1"
+                    >
+                      <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+                        <span className="text-sm font-bold text-slate-900 tracking-wider uppercase font-mono">Notifications</span>
+                        {currentUser && unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-[10px] font-bold text-slate-500 hover:text-slate-900 tracking-widest uppercase font-mono transition-colors border-0 bg-transparent cursor-pointer"
+                          >
+                            Mark All As Read
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-80 overflow-y-auto">
+                        {!currentUser ? (
+                          <div className="p-8 text-center flex flex-col items-center justify-center">
+                            <Lock className="w-10 h-10 text-slate-300 mb-3 stroke-[1.5]" />
+                            <p className="text-xs font-semibold text-slate-800 tracking-wide uppercase mb-1">MEMBERS ATELIER ONLY</p>
+                            <p className="text-[11px] text-slate-400 font-medium leading-relaxed mb-4">
+                              Sign in to receive tracking updates for your orders and exclusive boutique offers.
+                            </p>
+                            <button
+                              onClick={() => {
+                                setIsNotificationsOpen(false);
+                                onOpenAuth();
+                              }}
+                              className="px-5 py-2 bg-slate-950 text-white text-[10px] font-bold tracking-widest uppercase rounded-full hover:bg-slate-800 transition-colors cursor-pointer border-0"
+                            >
+                              Sign In
+                            </button>
+                          </div>
+                        ) : notifications.length === 0 ? (
+                          <div className="p-8 text-center flex flex-col items-center justify-center">
+                            <Bell className="w-10 h-10 text-slate-200 mb-3 stroke-[1.5]" />
+                            <p className="text-xs font-semibold text-slate-800 tracking-wide uppercase mb-1">ALL CAUGHT UP</p>
+                            <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                              You will receive alerts about orders, promotional sales, and brand new launches here.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-slate-50">
+                            {notifications.map((notif) => {
+                              const isUnread = notif.userId === 'broadcast'
+                                ? !notif.readBy || !notif.readBy.includes(currentUser.uid)
+                                : !notif.isRead;
+                              return (
+                                <div
+                                  key={notif.id}
+                                  onClick={() => handleMarkAsRead(notif)}
+                                  className={`p-4 flex gap-3 cursor-pointer transition-all hover:bg-slate-50/50 ${
+                                    isUnread ? 'bg-slate-50/30' : ''
+                                  }`}
+                                >
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border shrink-0 ${getNotificationColor(notif.type)}`}>
+                                    {getNotificationIcon(notif.type)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-1 mb-0.5">
+                                      <h4 className={`text-[12px] font-bold tracking-tight text-slate-900 truncate ${isUnread ? 'font-extrabold' : ''}`}>
+                                        {notif.title}
+                                      </h4>
+                                      <span className="text-[9px] font-bold font-mono text-slate-400 whitespace-nowrap">
+                                        {formatRelativeTime(notif.createdAt)}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 leading-relaxed break-words font-medium">
+                                      {notif.message}
+                                    </p>
+                                  </div>
+                                  {isUnread && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-950 shrink-0 mt-2" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   )}
@@ -371,7 +608,6 @@ export default function Header({
                             </button>
                             <button
                               onClick={() => {
-                                onAddToast("Favorites list is synchronized offline", "info");
                                 setIsProfileDropdownOpen(false);
                               }}
                               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors"
@@ -412,7 +648,120 @@ export default function Header({
             </div>
 
             {/* Mobile menu and cart controls */}
-            <div className="flex md:hidden items-center space-x-4">
+            <div className="flex md:hidden items-center space-x-3">
+              {/* Mobile Notification Bell */}
+              <div className="relative" ref={notificationsRef}>
+                <button
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="relative p-2 rounded-full hover:bg-slate-50 text-slate-700"
+                  aria-label="Notifications"
+                >
+                  <Bell className="w-[22px] h-[22px] stroke-[1.75]" />
+                  <AnimatePresence>
+                    {unreadCount > 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute top-0 right-0 bg-red-500 text-white text-[9px] font-bold w-3.5 h-3.5 flex items-center justify-center rounded-full animate-pulse"
+                      >
+                        {unreadCount}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+
+                <AnimatePresence>
+                  {isNotificationsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute right-0 mt-3 w-[290px] bg-white border border-slate-100 rounded-2xl shadow-xl overflow-hidden z-50 py-1"
+                    >
+                      <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 tracking-wider uppercase font-mono">Notifications</span>
+                        {currentUser && unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-[9px] font-bold text-slate-500 hover:text-slate-900 tracking-widest uppercase font-mono transition-colors border-0 bg-transparent cursor-pointer"
+                          >
+                            Mark All
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto">
+                        {!currentUser ? (
+                          <div className="p-6 text-center flex flex-col items-center justify-center">
+                            <Lock className="w-8 h-8 text-slate-300 mb-2 stroke-[1.5]" />
+                            <p className="text-[10px] font-bold text-slate-800 tracking-wide uppercase mb-1">MEMBERS ONLY</p>
+                            <p className="text-[10px] text-slate-400 font-medium leading-relaxed mb-3">
+                              Sign in to view your notifications.
+                            </p>
+                            <button
+                              onClick={() => {
+                                setIsNotificationsOpen(false);
+                                onOpenAuth();
+                              }}
+                              className="px-4 py-1.5 bg-slate-950 text-white text-[9px] font-bold tracking-widest uppercase rounded-full hover:bg-slate-800 transition-colors border-0 cursor-pointer"
+                            >
+                              Sign In
+                            </button>
+                          </div>
+                        ) : notifications.length === 0 ? (
+                          <div className="p-6 text-center flex flex-col items-center justify-center">
+                            <Bell className="w-8 h-8 text-slate-200 mb-2 stroke-[1.5]" />
+                            <p className="text-[10px] font-bold text-slate-800 tracking-wide uppercase mb-1">ALL CAUGHT UP</p>
+                            <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                              You have no new alerts.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-slate-50">
+                            {notifications.map((notif) => {
+                              const isUnread = notif.userId === 'broadcast'
+                                ? !notif.readBy || !notif.readBy.includes(currentUser.uid)
+                                : !notif.isRead;
+                              return (
+                                <div
+                                  key={notif.id}
+                                  onClick={() => handleMarkAsRead(notif)}
+                                  className={`p-3.5 flex gap-2.5 cursor-pointer transition-all hover:bg-slate-50/50 ${
+                                    isUnread ? 'bg-slate-50/30' : ''
+                                  }`}
+                                >
+                                  <div className={`w-7 h-7 rounded-full flex items-center justify-center border shrink-0 ${getNotificationColor(notif.type)}`}>
+                                    {getNotificationIcon(notif.type)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-1 mb-0.5">
+                                      <h4 className={`text-[11px] font-bold tracking-tight text-slate-900 truncate ${isUnread ? 'font-extrabold' : ''}`}>
+                                        {notif.title}
+                                      </h4>
+                                      <span className="text-[8px] font-bold font-mono text-slate-400">
+                                        {formatRelativeTime(notif.createdAt)}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 leading-normal break-words font-medium">
+                                      {notif.message}
+                                    </p>
+                                  </div>
+                                  {isUnread && (
+                                    <span className="w-1 h-1 rounded-full bg-slate-950 shrink-0 mt-1.5" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <button
                 onClick={onOpenCart}
                 className="relative p-2 rounded-full hover:bg-slate-50 text-slate-700"

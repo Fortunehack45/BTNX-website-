@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User as FirebaseUser, onAuthStateChanged, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider, db } from "../lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc } from "firebase/firestore";
 import { User } from "../types";
 
 interface AuthContextType {
@@ -76,6 +76,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: result.user.email?.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
         createdAt: new Date().toISOString(),
       });
+
+      // Add welcome notification
+      try {
+        await addDoc(collection(db, "notifications"), {
+          userId: result.user.uid,
+          title: "Welcome to BTNX Atelier!",
+          message: "Thank you for joining the BTNX Atelier. Enjoy premium bespoke designs, seasonal releases, and early access to curated collections. Use promo code BTNX50 in your cart for 50% off!",
+          type: "promo",
+          isRead: false,
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Failed to add welcome notification:", err);
+      }
     }
   };
 
@@ -89,6 +103,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: email.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
         createdAt: new Date().toISOString(),
       });
+
+      // Add welcome notification
+      try {
+        await addDoc(collection(db, "notifications"), {
+          userId: result.user.uid,
+          title: "Welcome to BTNX Atelier!",
+          message: `Dear ${name}, thank you for joining the BTNX collective. Discover exquisite seasonal garments, tailor-made styles, and dynamic coupon offers directly in your customer vault. Use promo code BTNX50 in your cart for 50% off!`,
+          type: "promo",
+          isRead: false,
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Failed to add welcome notification:", err);
+      }
     } catch (error) {
       console.error("Sign up error:", error);
       throw error;
@@ -114,6 +142,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: "admin",
             createdAt: new Date().toISOString(),
           });
+
+          // Add welcome notification
+          try {
+            await addDoc(collection(db, "notifications"), {
+              userId: result.user.uid,
+              title: "Welcome to BTNX Administration Panel",
+              message: "Welcome, Administrator. You have successfully initialized the secure BTNX atelier management portal. Here you can configure collections, products, manage incoming client orders, and broadcast store notifications.",
+              type: "system",
+              isRead: false,
+              createdAt: new Date().toISOString()
+            });
+          } catch (err) {
+            console.error("Failed to add admin welcome notification:", err);
+          }
         } catch (createError: any) {
           if (createError.code === 'auth/email-already-in-use') {
             throw error;

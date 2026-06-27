@@ -15,7 +15,7 @@ import Notification, { Toast } from "./components/Notification";
 import { Product, CartItem, Order } from "./types";
 import { useAuth } from "./context/AuthContext";
 import { db } from "./lib/firebase";
-import { doc, increment, updateDoc, collection, query, where, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, increment, updateDoc, collection, query, where, onSnapshot, setDoc, addDoc } from "firebase/firestore";
 
 export default function App() {
   const { currentUser, loading } = useAuth();
@@ -90,6 +90,20 @@ export default function App() {
           createdAt: new Date(),
         };
         await setDoc(doc(db, "orders", newOrder.id), orderData);
+
+        // Save order confirmation notification to Firestore
+        try {
+          await addDoc(collection(db, "notifications"), {
+            userId: currentUser.uid,
+            title: "Order Confirmed",
+            message: `Your order #${newOrder.id} of $${newOrder.total.toFixed(2)} was successfully received and is now processing in our atelier.`,
+            type: "order_status",
+            isRead: false,
+            createdAt: new Date().toISOString()
+          });
+        } catch (notifErr) {
+          console.error("Failed to save order notification:", notifErr);
+        }
       } catch (err) {
         console.error("Failed to save order to Firestore:", err);
         handleAddToast("Failed to save order to cloud database.", "error");

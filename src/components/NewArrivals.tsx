@@ -8,8 +8,6 @@ interface NewArrivalsProps {
 
 export default function NewArrivals({ onCategoryFilter, onAddToast }: NewArrivalsProps) {
   const handleArrivalClick = (title: string, href: string) => {
-    onAddToast(`Exploring ${title} Arrivals`, "success");
-    
     if (title.includes("UNDER")) {
       onCategoryFilter("under-100");
     } else if (title === "MAN") {

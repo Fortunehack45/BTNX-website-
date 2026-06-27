@@ -8,8 +8,6 @@ interface BigSaleProps {
 
 export default function BigSale({ onCategoryFilter, onAddToast }: BigSaleProps) {
   const handleSaleClick = (title: string) => {
-    onAddToast(`Navigating to ${title} catalog`, "success");
-    
     if (title === "THE MODERN CLASSIC") {
       onCategoryFilter("Women");
     } else {
