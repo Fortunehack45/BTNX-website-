@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { AnimatePresence } from "motion/react";
+import { Routes, Route } from "react-router-dom";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import NewArrivals from "./components/NewArrivals";
@@ -8,6 +9,7 @@ import NewYearCollection from "./components/NewYearCollection";
 import Newsletter from "./components/Newsletter";
 import Footer from "./components/Footer";
 import ProductModal from "./components/ProductModal";
+import Shop from "./pages/Shop";
 import CartDrawer from "./components/CartDrawer";
 import UserProfileModal, { DEFAULT_MOCK_ORDERS } from "./components/UserProfileModal";
 import AuthModal from "./components/AuthModal";
@@ -253,49 +255,56 @@ export default function App() {
         onOpenProduct={setActiveProduct}
       />
 
-      {/* Main Content Layout */}
+            {/* Main Content Layout */}
       <main className="flex-grow">
-        {activeProduct ? (
-          <ProductModal
-            product={activeProduct}
-            onClose={() => {
-              setActiveProduct(null);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            onAddToBag={handleAddToBag}
-            onSelectProduct={setActiveProduct}
-          />
-        ) : (
-          <>
-            {/* Giant Hero Banner Section */}
-            <Hero />
-
-            {/* 3-Column New Arrivals Collection Section */}
-            <NewArrivals
-              onCategoryFilter={setCategoryFilter}
-              onAddToast={handleAddToast}
-            />
-
-            {/* Double Wide Big Seasonal Sales Section */}
-            <BigSale
-              onCategoryFilter={setCategoryFilter}
-              onAddToast={handleAddToast}
-            />
-
-            {/* Masonry-Style Interactive Collections Area */}
-            <NewYearCollection
-              categoryFilter={categoryFilter}
-              onResetFilter={() => setCategoryFilter("")}
+        <Routes>
+          <Route path="/" element={
+            activeProduct ? (
+              <ProductModal
+                product={activeProduct}
+                onClose={() => {
+                  setActiveProduct(null);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onAddToBag={handleAddToBag}
+                onSelectProduct={setActiveProduct}
+              />
+            ) : (
+              <>
+                {/* Giant Hero Banner Section */}
+                <Hero />
+                {/* 3-Column New Arrivals Collection Section */}
+                <NewArrivals
+                  onCategoryFilter={setCategoryFilter}
+                  onAddToast={handleAddToast}
+                />
+                {/* Double Wide Big Seasonal Sales Section */}
+                <BigSale
+                  onCategoryFilter={setCategoryFilter}
+                  onAddToast={handleAddToast}
+                />
+                {/* Masonry-Style Interactive Collections Area */}
+                <NewYearCollection
+                  categoryFilter={categoryFilter}
+                  onResetFilter={() => setCategoryFilter("")}
+                  onOpenProduct={setActiveProduct}
+                  onAddToBag={handleAddToBag}
+                  onAddToast={handleAddToast}
+                  searchQuery={searchQuery}
+                />
+                {/* Cityscape Streetwear Newsletter Form */}
+                <Newsletter onAddToast={handleAddToast} />
+              </>
+            )
+          } />
+          <Route path="/shop" element={
+            <Shop 
               onOpenProduct={setActiveProduct}
               onAddToBag={handleAddToBag}
               onAddToast={handleAddToast}
-              searchQuery={searchQuery}
             />
-
-            {/* Cityscape Streetwear Newsletter Form */}
-            <Newsletter onAddToast={handleAddToast} />
-          </>
-        )}
+          } />
+        </Routes>
       </main>
 
       {/* Editorial Footer */}

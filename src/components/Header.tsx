@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, ShoppingBag, User, Menu, X, Heart, Settings, LogOut, Package, ArrowRight, Shield, Bell, Percent, Truck, Sparkles, Check, Lock } from "lucide-react";
+import { Link } from "react-router-dom";
 import { NavItem, CartItem, Product } from "../types";
 import { NAVIGATION_ITEMS, NEW_YEAR_PRODUCTS } from "../data";
 import { motion, AnimatePresence } from "motion/react";
@@ -53,22 +54,11 @@ export default function Header({
     try {
       const q = query(
         collection(db, "notifications"),
-        where("userId", "in", [currentUser.uid, "broadcast"])
+        where("userId", "in", [currentUser.uid, "broadcast"]),
+        orderBy("createdAt", "desc")
       );
       const unsub = onSnapshot(q, (snap) => {
         const allNotifs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-        // Sort in memory to avoid needing a composite index
-        allNotifs.sort((a, b) => {
-          let aTime = 0;
-          let bTime = 0;
-          if (a.createdAt?.toMillis) aTime = a.createdAt.toMillis();
-          else if (typeof a.createdAt === 'string') aTime = new Date(a.createdAt).getTime();
-
-          if (b.createdAt?.toMillis) bTime = b.createdAt.toMillis();
-          else if (typeof b.createdAt === 'string') bTime = new Date(b.createdAt).getTime();
-
-          return bTime - aTime;
-        });
         setNotifications(allNotifs);
       }, (err) => {
         console.error("Failed to fetch notifications:", err);
@@ -328,6 +318,29 @@ export default function Header({
             <nav className="hidden md:flex space-x-12 items-center justify-center flex-1 ml-12">
               {NAVIGATION_ITEMS.map((item) => {
                 const isActive = activeItem === item.label;
+                if (item.label === "Shop") {
+                  return (
+                    <Link
+                      key={item.label}
+                      to="/shop"
+                      className={`relative text-[13px] font-bold tracking-[0.1em] uppercase transition-colors duration-300 py-2 ${
+                        isActive 
+                          ? "text-slate-900" 
+                          : "text-slate-400 hover:text-slate-900"
+                      }`}
+                      id={`nav-item-${item.label.toLowerCase()}`}
+                    >
+                      {item.label}
+                      {isActive && (
+                        <motion.div 
+                          layoutId="navIndicator"
+                          className="absolute bottom-0 left-0 right-0 h-[3px] bg-slate-950 rounded-full shadow-sm"
+                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        />
+                      )}
+                    </Link>
+                  );
+                }
                 return (
                   <a
                     key={item.label}
@@ -827,6 +840,24 @@ export default function Header({
                 <div className="flex flex-col space-y-2">
                   {NAVIGATION_ITEMS.map((item) => {
                     const isActive = activeItem === item.label;
+                    
+                    if (item.label === "Shop") {
+                      return (
+                        <Link
+                          key={item.label}
+                          to="/shop"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`px-4 py-3 text-sm font-bold tracking-wide uppercase rounded-xl transition-all ${
+                            isActive
+                              ? "bg-slate-900 text-white"
+                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      );
+                    }
+                    
                     return (
                       <a
                         key={item.label}
