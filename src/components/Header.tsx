@@ -51,11 +51,25 @@ export default function Header({
       return;
     }
     try {
-      const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"));
+      const q = query(
+        collection(db, "notifications"),
+        where("userId", "in", [currentUser.uid, "broadcast"])
+      );
       const unsub = onSnapshot(q, (snap) => {
-        const allNotifs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const filtered = allNotifs.filter((n: any) => n.userId === currentUser.uid || n.userId === "broadcast");
-        setNotifications(filtered);
+        const allNotifs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+        // Sort in memory to avoid needing a composite index
+        allNotifs.sort((a, b) => {
+          let aTime = 0;
+          let bTime = 0;
+          if (a.createdAt?.toMillis) aTime = a.createdAt.toMillis();
+          else if (typeof a.createdAt === 'string') aTime = new Date(a.createdAt).getTime();
+
+          if (b.createdAt?.toMillis) bTime = b.createdAt.toMillis();
+          else if (typeof b.createdAt === 'string') bTime = new Date(b.createdAt).getTime();
+
+          return bTime - aTime;
+        });
+        setNotifications(allNotifs);
       }, (err) => {
         console.error("Failed to fetch notifications:", err);
       });
@@ -294,7 +308,7 @@ export default function Header({
       </div>
 
       {/* 2. Primary Navigation Bar */}
-      <header className="w-full bg-white/95 backdrop-blur-md border-b border-slate-100 transition-all duration-300">
+      <header className="w-full bg-white/80 backdrop-blur-2xl border-b border-slate-100/50 transition-all duration-300 shadow-[0_4px_30px_rgba(0,0,0,0.02)]">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8">
           <div className="flex items-center justify-between h-20">
             
@@ -303,7 +317,7 @@ export default function Header({
               <a 
                 href="#" 
                 onClick={(e) => handleNavClick("Home", e)}
-                className="font-logo-anton text-4xl tracking-wider text-slate-950 select-none hover:opacity-80 transition-opacity"
+                className="font-logo-anton text-[2.5rem] tracking-wider text-slate-950 select-none hover:opacity-80 transition-opacity drop-shadow-sm"
                 id="header-logo"
               >
                 BTNX
@@ -311,7 +325,7 @@ export default function Header({
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex space-x-10 items-center justify-center flex-1">
+            <nav className="hidden md:flex space-x-12 items-center justify-center flex-1 ml-12">
               {NAVIGATION_ITEMS.map((item) => {
                 const isActive = activeItem === item.label;
                 return (
@@ -319,10 +333,10 @@ export default function Header({
                     key={item.label}
                     href={item.href}
                     onClick={(e) => handleNavClick(item.label, e)}
-                    className={`relative text-[14px] font-semibold tracking-wide uppercase transition-colors duration-200 py-2 ${
+                    className={`relative text-[13px] font-bold tracking-[0.1em] uppercase transition-colors duration-300 py-2 ${
                       isActive 
                         ? "text-slate-900" 
-                        : "text-slate-500 hover:text-slate-900"
+                        : "text-slate-400 hover:text-slate-900"
                     }`}
                     id={`nav-item-${item.label.toLowerCase()}`}
                   >
@@ -330,7 +344,7 @@ export default function Header({
                     {isActive && (
                       <motion.div 
                         layoutId="navIndicator"
-                        className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 rounded-full"
+                        className="absolute bottom-0 left-0 right-0 h-[3px] bg-slate-950 rounded-full shadow-sm"
                         transition={{ type: "spring", stiffness: 380, damping: 30 }}
                       />
                     )}

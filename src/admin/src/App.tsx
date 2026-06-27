@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Users as UsersIcon, ArrowLeft, Lock, Mail, ShieldAlert, LogOut, Loader2, Bell } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users as UsersIcon, ArrowLeft, Lock, Mail, ShieldAlert, LogOut, Loader2, Bell, Tag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
@@ -9,20 +9,24 @@ import Products from './pages/Products';
 import Orders from './pages/Orders';
 import Users from './pages/Users';
 import Notifications from './pages/Notifications';
+import Promos from './pages/Promos';
+import Newsletters from './pages/Newsletters';
 
 function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: () => void }) {
   const location = useLocation();
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { name: 'Products', path: '/products', icon: <Package className="w-5 h-5" /> },
-    { name: 'Orders', path: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
-    { name: 'Users', path: '/users', icon: <UsersIcon className="w-5 h-5" /> },
-    { name: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" /> },
+    { name: 'Dashboard', path: '/', icon: <LayoutDashboard className="w-5 h-5" />, mobileIcon: <LayoutDashboard className="w-6 h-6" /> },
+    { name: 'Products', path: '/products', icon: <Package className="w-5 h-5" />, mobileIcon: <Package className="w-6 h-6" /> },
+    { name: 'Orders', path: '/orders', icon: <ShoppingCart className="w-5 h-5" />, mobileIcon: <ShoppingCart className="w-6 h-6" /> },
+    { name: 'Users', path: '/users', icon: <UsersIcon className="w-5 h-5" />, mobileIcon: <UsersIcon className="w-6 h-6" /> },
+    { name: 'Alerts', path: '/notifications', icon: <Bell className="w-5 h-5" />, mobileIcon: <Bell className="w-6 h-6" /> },
+    { name: 'Promos', path: '/promos', icon: <Tag className="w-5 h-5" />, mobileIcon: <Tag className="w-6 h-6" /> },
+    { name: 'News', path: '/newsletters', icon: <Mail className="w-5 h-5" />, mobileIcon: <Mail className="w-6 h-6" /> },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans">
+    <div className="min-h-screen bg-slate-50 flex font-sans pb-20 md:pb-0">
       {/* Sidebar */}
       <aside className="w-64 bg-slate-950 text-slate-200 flex flex-col hidden md:flex border-r border-slate-900 select-none">
         <div className="h-20 flex items-center justify-between px-6 border-b border-slate-900">
@@ -35,7 +39,7 @@ function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: (
           </a>
         </div>
         
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
           {navItems.map((item) => (
             <Link
               key={item.path}
@@ -65,31 +69,15 @@ function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: (
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 flex flex-col">
+      <main className="flex-1 min-w-0 flex flex-col relative">
         {/* Mobile Header */}
-        <header className="h-16 md:hidden bg-slate-950 text-white flex items-center justify-between px-4 border-b border-slate-900">
+        <header className="h-16 md:hidden bg-slate-950 text-white flex items-center justify-between px-4 border-b border-slate-900 sticky top-0 z-20">
           <div className="flex flex-col">
             <span className="text-2xl font-logo-anton tracking-wider text-white uppercase">BTNX</span>
             <span className="text-[8px] tracking-[0.2em] font-mono text-slate-400 uppercase font-bold">Admin Panel</span>
           </div>
           
-          <div className="flex items-center gap-4">
-            <nav className="flex items-center gap-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`p-2 rounded-lg transition-colors ${
-                    location.pathname === item.path
-                      ? 'bg-white text-slate-950'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-                  }`}
-                  title={item.name}
-                >
-                  {item.icon}
-                </Link>
-              ))}
-            </nav>
+          <div className="flex items-center gap-3">
             <button 
               onClick={onLogout}
               className="p-2 text-red-400 hover:bg-red-950/30 rounded-lg transition-colors"
@@ -97,8 +85,8 @@ function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: (
             >
               <LogOut className="w-4.5 h-4.5" />
             </button>
-            <a href="/" className="text-slate-400 hover:text-white transition-colors" title="Back to Store">
-              <ArrowLeft className="w-4 h-4" />
+            <a href="/" className="text-slate-400 hover:text-white transition-colors p-2" title="Back to Store">
+              <ArrowLeft className="w-5 h-5" />
             </a>
           </div>
         </header>
@@ -107,6 +95,34 @@ function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: (
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Liquid Glass Nav Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-6 pt-2 pointer-events-none">
+        <div className="mx-auto max-w-sm pointer-events-auto bg-white/70 backdrop-blur-2xl border border-white/50 shadow-[0_8px_32px_rgba(0,0,0,0.1)] rounded-[2rem] p-2 flex items-center justify-between overflow-x-auto custom-scrollbar gap-1 relative">
+          {/* Subtle gradient shine overlay */}
+          <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-tr from-white/10 to-white/40 pointer-events-none" />
+          
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`relative flex flex-col items-center justify-center min-w-[50px] p-2 rounded-2xl transition-all duration-300 ${
+                  isActive
+                    ? 'text-slate-950 bg-white/80 shadow-sm scale-110'
+                    : 'text-slate-400 hover:text-slate-900 hover:bg-white/40'
+                }`}
+              >
+                {item.mobileIcon}
+                <span className={`text-[10px] font-display font-bold uppercase mt-1 tracking-wider ${isActive ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'} transition-all duration-300`}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
@@ -338,6 +354,8 @@ export default function App() {
           <Route path="/orders" element={<Orders />} />
           <Route path="/users" element={<Users />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/promos" element={<Promos />} />
+          <Route path="/newsletters" element={<Newsletters />} />
         </Routes>
       </Layout>
     </BrowserRouter>

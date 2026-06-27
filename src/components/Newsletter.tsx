@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Mail, Check } from "lucide-react";
+import { db } from "../lib/firebase";
+import { collection, addDoc } from "firebase/firestore";
 
 interface NewsletterProps {
   onAddToast: (message: string, type: "success" | "error" | "info") => void;
@@ -11,7 +13,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !email.includes("@")) {
       onAddToast("Please provide a valid email address.", "error");
@@ -19,11 +21,19 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      await addDoc(collection(db, "newsletters"), {
+        email: email.trim().toLowerCase(),
+        createdAt: new Date().toISOString(),
+      });
       setIsSubmitting(false);
       setIsSubscribed(true);
       onAddToast(`Welcome to the BTNX newsletter: ${email}!`, "success");
-    }, 1200);
+    } catch (err) {
+      console.error("Newsletter error", err);
+      onAddToast("Something went wrong. Please try again later.", "error");
+      setIsSubmitting(false);
+    }
   };
 
   return (
