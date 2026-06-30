@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CartItem, Order, OrderItem } from "../types";
 import { X, ShoppingBag, Trash2, Plus, Minus, Check, ArrowRight, CreditCard } from "lucide-react";
+import { db } from "../lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -38,13 +40,49 @@ export default function CartDrawer({
   const [cardCvv, setCardCvv] = useState("");
   const [processingMsg, setProcessingMsg] = useState("");
 
-  const handleApplyVoucher = (code: string) => {
+  const handleApplyVoucher = async (code: string) => {
     const cleanCode = code.trim().toUpperCase();
+    if (!cleanCode) return;
+
     if (cleanCode === "KLAMBY50" || cleanCode === "BTNX50") {
       setAppliedDiscount(0.5);
       onAddToast(`Voucher code '${cleanCode}' applied! 50% discount active.`, "success");
-    } else {
-      onAddToast("Invalid voucher code.", "error");
+      setVoucherInput("");
+      return;
+    }
+
+    try {
+      const q = query(collection(db, "promoCodes"), where("code", "==", cleanCode));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        onAddToast("Invalid voucher code.", "error");
+        setVoucherInput("");
+        return;
+      }
+      
+      const promoData = querySnapshot.docs[0].data();
+      const expiresAt = new Date(promoData.expiresAt);
+      const now = new Date();
+      
+      if (expiresAt < now) {
+        onAddToast("This promo code has expired.", "error");
+        setVoucherInput("");
+        return;
+      }
+      
+      if (promoData.isActive === false) {
+        onAddToast("This promo code is currently inactive.", "error");
+        setVoucherInput("");
+        return;
+      }
+      
+      const discountPct = promoData.discountPercentage || 0;
+      setAppliedDiscount(discountPct / 100);
+      onAddToast(`Voucher code '${cleanCode}' applied! ${discountPct}% discount active.`, "success");
+    } catch (err) {
+      console.error("Error applying promo code:", err);
+      onAddToast("Error checking voucher code.", "error");
     }
     setVoucherInput("");
   };

@@ -298,11 +298,24 @@ export default function App() {
             )
           } />
           <Route path="/shop" element={
-            <Shop 
-              onOpenProduct={setActiveProduct}
-              onAddToBag={handleAddToBag}
-              onAddToast={handleAddToast}
-            />
+            activeProduct ? (
+              <ProductModal
+                product={activeProduct}
+                onClose={() => {
+                  setActiveProduct(null);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onAddToBag={handleAddToBag}
+                onSelectProduct={setActiveProduct}
+              />
+            ) : (
+              <Shop 
+                onOpenProduct={setActiveProduct}
+                onAddToBag={handleAddToBag}
+                onAddToast={handleAddToast}
+                onOpenCart={() => setIsCartOpen(true)}
+              />
+            )
           } />
         </Routes>
       </main>
