@@ -1,9 +1,19 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CartItem, Order, OrderItem } from "../types";
-import { X, ShoppingBag, Trash2, Plus, Minus, Check, ArrowRight, CreditCard } from "lucide-react";
+import { X, ShoppingBag, Trash2, Plus, Minus, Check, ArrowRight, CreditCard, Sparkles } from "lucide-react";
 import { db } from "../lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { formatNaira } from "../utils/currency";
+
+interface Promo {
+  id: string;
+  code: string;
+  discountPercentage: number;
+  expiresAt: string;
+  createdAt: string;
+  isActive?: boolean;
+}
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -44,6 +54,7 @@ export default function CartDrawer({
     const cleanCode = code.trim().toUpperCase();
     if (!cleanCode) return;
 
+    // Hardcoded safety checks
     if (cleanCode === "KLAMBY50" || cleanCode === "BTNX50") {
       setAppliedDiscount(0.5);
       onAddToast(`Voucher code '${cleanCode}' applied! 50% discount active.`, "success");
@@ -51,6 +62,37 @@ export default function CartDrawer({
       return;
     }
 
+    // 1. Check local storage cache first for instant response (perfect for offline!)
+    try {
+      const cached = localStorage.getItem('klamby_promo_codes');
+      if (cached) {
+        const promos: Promo[] = JSON.parse(cached);
+        const match = promos.find(p => p.code.toUpperCase() === cleanCode);
+        if (match) {
+          const expiresAt = new Date(match.expiresAt);
+          const now = new Date();
+          if (expiresAt < now) {
+            onAddToast("This promo code has expired.", "error");
+            setVoucherInput("");
+            return;
+          }
+          if (match.isActive === false) {
+            onAddToast("This promo code is currently inactive.", "error");
+            setVoucherInput("");
+            return;
+          }
+          const discountPct = match.discountPercentage || 0;
+          setAppliedDiscount(discountPct / 100);
+          onAddToast(`Voucher code '${cleanCode}' applied! ${discountPct}% discount active.`, "success");
+          setVoucherInput("");
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to check local promos cache", e);
+    }
+
+    // 2. Fallback to querying Firestore
     try {
       const q = query(collection(db, "promoCodes"), where("code", "==", cleanCode));
       const querySnapshot = await getDocs(q);
@@ -82,7 +124,7 @@ export default function CartDrawer({
       onAddToast(`Voucher code '${cleanCode}' applied! ${discountPct}% discount active.`, "success");
     } catch (err) {
       console.error("Error applying promo code:", err);
-      onAddToast("Error checking voucher code.", "error");
+      onAddToast("Error checking voucher code. Please try again.", "error");
     }
     setVoucherInput("");
   };
@@ -292,7 +334,7 @@ export default function CartDrawer({
                       PAYMENT DETAILS
                     </h4>
                     <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-6">
-                      Bespoke Order Amount: <span className="text-slate-900 font-extrabold">${finalTotal.toFixed(2)}</span>
+                      Bespoke Order Amount: <span className="text-slate-900 font-extrabold">{formatNaira(finalTotal)}</span>
                     </p>
 
                     <form onSubmit={handleProcessPayment} className="space-y-4">
@@ -389,7 +431,7 @@ export default function CartDrawer({
                         className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs tracking-widest rounded-xl uppercase shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 mt-6"
                       >
                         <Check className="w-4 h-4" />
-                        <span>PLACE SECURE ORDER — ${finalTotal.toFixed(2)}</span>
+                        <span>PLACE SECURE ORDER — {formatNaira(finalTotal)}</span>
                       </button>
                     </form>
                   </motion.div>
@@ -406,7 +448,7 @@ export default function CartDrawer({
                             <span>Signature Gift Wrapping</span>
                           </div>
                           <span className="text-[10px] font-extrabold text-slate-600 font-mono">
-                            {subtotal >= 150 ? "UNLOCKED" : `$${(150 - subtotal).toFixed(2)} AWAY`}
+                            {subtotal >= 150 ? "UNLOCKED" : `${formatNaira(150 - subtotal)} AWAY`}
                           </span>
                         </div>
                         
@@ -420,12 +462,13 @@ export default function CartDrawer({
 
                         <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
                           {subtotal >= 150 ? (
-                            <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                              ✨ Congrats! Your order qualifies for luxury Custom Silk Ribbon & VVIP Packaging.
+                            <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500 animate-pulse" />
+                              <span>Congrats! Your order qualifies for luxury Custom Silk Ribbon & VVIP Packaging.</span>
                             </span>
                           ) : (
                             <span>
-                              Spend <span className="font-bold text-slate-800">${(150 - subtotal).toFixed(2)}</span> more to unlock our bespoke velvet display packaging.
+                              Spend <span className="font-bold text-slate-800">{formatNaira(150 - subtotal)}</span> more to unlock our bespoke velvet display packaging.
                             </span>
                           )}
                         </p>
@@ -460,7 +503,7 @@ export default function CartDrawer({
                                   {item.product.name}
                                 </h4>
                                 <span className="font-display text-base font-bold text-slate-900 ml-2">
-                                  ${item.product.price * item.quantity}
+                                  {formatNaira(item.product.price * item.quantity)}
                                 </span>
                               </div>
                               
@@ -545,13 +588,13 @@ export default function CartDrawer({
                         <div className="space-y-2.5 text-sm font-semibold text-slate-500">
                           <div className="flex justify-between items-center">
                             <span>Subtotal</span>
-                            <span className="text-slate-800">${subtotal.toFixed(2)}</span>
+                            <span className="text-slate-800">{formatNaira(subtotal)}</span>
                           </div>
                           
                           {appliedDiscount > 0 && (
                             <div className="flex justify-between items-center text-emerald-600">
                               <span>Voucher (50% Off)</span>
-                              <span>-${discountAmount.toFixed(2)}</span>
+                              <span>-{formatNaira(discountAmount)}</span>
                             </div>
                           )}
 
@@ -562,7 +605,7 @@ export default function CartDrawer({
 
                           <div className="border-t border-slate-200/60 my-2 pt-2.5 flex justify-between items-center text-slate-900">
                             <span className="text-base font-extrabold">Total Amount</span>
-                            <span className="font-display text-2xl font-bold">${finalTotal.toFixed(2)}</span>
+                            <span className="font-display text-2xl font-bold">{formatNaira(finalTotal)}</span>
                           </div>
                         </div>
 

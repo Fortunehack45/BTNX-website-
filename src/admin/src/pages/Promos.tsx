@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, doc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { Tag, Plus, Trash2, Calendar, Loader2 } from 'lucide-react';
+import { collection, onSnapshot, doc, addDoc, deleteDoc, query, orderBy, setDoc } from 'firebase/firestore';
+import { Tag, Plus, Trash2, Calendar, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface Promo {
   id: string;
@@ -9,11 +9,32 @@ interface Promo {
   discountPercentage: number;
   expiresAt: string;
   createdAt: string;
+  isActive?: boolean;
 }
+
+const DEFAULT_PROMOS: Promo[] = [
+  {
+    id: 'default-1',
+    code: 'KLAMBY50',
+    discountPercentage: 50,
+    expiresAt: '2027-12-31T23:59:59.000Z',
+    createdAt: new Date().toISOString(),
+    isActive: true
+  },
+  {
+    id: 'default-2',
+    code: 'BTNX50',
+    discountPercentage: 50,
+    expiresAt: '2027-12-31T23:59:59.000Z',
+    createdAt: new Date().toISOString(),
+    isActive: true
+  }
+];
 
 export default function Promos() {
   const [promos, setPromos] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offlineMode, setOfflineMode] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [code, setCode] = useState('');
@@ -21,69 +42,195 @@ export default function Promos() {
   const [expiresAt, setExpiresAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Helper to load fallback promos from localStorage
+  const loadLocalPromos = () => {
+    try {
+      const cached = localStorage.getItem('klamby_promo_codes');
+      if (cached) {
+        return JSON.parse(cached) as Promo[];
+      }
+    } catch (e) {
+      console.error("Failed to parse cached promos", e);
+    }
+    return DEFAULT_PROMOS;
+  };
+
   useEffect(() => {
+    // Timeout backup so the UI never hangs if firestore is offline or blocking
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn("Firestore connection timed out. Loading from cache/local state.");
+        const local = loadLocalPromos();
+        setPromos(local);
+        setOfflineMode(true);
+        setLoading(false);
+      }
+    }, 2000);
+
     const q = query(collection(db, 'promoCodes'), orderBy('createdAt', 'desc'));
+    
     const unsub = onSnapshot(q, (snap) => {
+      clearTimeout(timeoutId);
       const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Promo[];
-      setPromos(list);
+      
+      // If Firestore returned items, we cache them and use them
+      if (list.length > 0) {
+        setPromos(list);
+        localStorage.setItem('klamby_promo_codes', JSON.stringify(list));
+      } else {
+        // If Firestore is empty, load local/cache values
+        const local = loadLocalPromos();
+        setPromos(local);
+      }
+      setOfflineMode(false);
+      setLoading(false);
+    }, (error) => {
+      clearTimeout(timeoutId);
+      console.error("Firestore onSnapshot error, falling back to offline mode:", error);
+      const local = loadLocalPromos();
+      setPromos(local);
+      setOfflineMode(true);
       setLoading(false);
     });
-    return () => unsub();
+
+    return () => {
+      clearTimeout(timeoutId);
+      unsub();
+    };
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code || !discount || !expiresAt) return;
-    setSubmitting(true);
-    try {
-      await addDoc(collection(db, 'promoCodes'), {
-        code: code.toUpperCase().trim(),
-        discountPercentage: Number(discount),
-        expiresAt: new Date(expiresAt).toISOString(),
-        createdAt: new Date().toISOString(),
-        isActive: true,
-      });
-      setIsModalOpen(false);
-      setCode('');
-      setDiscount('');
-      setExpiresAt('');
-    } catch (err) {
-      console.error(err);
+    
+    const discountNum = Number(discount);
+    if (isNaN(discountNum) || discountNum < 1 || discountNum > 100) {
+      alert("Discount must be between 1% and 100%");
+      return;
     }
+
+    setSubmitting(true);
+    const newPromoId = 'promo_' + Date.now();
+    const newPromo: Promo = {
+      id: newPromoId,
+      code: code.toUpperCase().trim().replace(/\s+/g, ''),
+      discountPercentage: discountNum,
+      expiresAt: new Date(expiresAt + 'T23:59:59').toISOString(),
+      createdAt: new Date().toISOString(),
+      isActive: true,
+    };
+
+    // 1. Save to local storage cache immediately
+    const updatedLocal = [newPromo, ...promos.filter(p => p.code !== newPromo.code)];
+    setPromos(updatedLocal);
+    localStorage.setItem('klamby_promo_codes', JSON.stringify(updatedLocal));
+
+    // 2. Try to save to Firestore
+    try {
+      await setDoc(doc(db, 'promoCodes', newPromoId), {
+        code: newPromo.code,
+        discountPercentage: newPromo.discountPercentage,
+        expiresAt: newPromo.expiresAt,
+        createdAt: newPromo.createdAt,
+        isActive: true
+      });
+      console.log("Promo successfully added to Firestore");
+    } catch (err) {
+      console.warn("Firestore offline or permissions error. Saved in offline local state:", err);
+      setOfflineMode(true);
+    }
+
     setSubmitting(false);
+    setIsModalOpen(false);
+    setCode('');
+    setDiscount('');
+    setExpiresAt('');
+  };
+
+  const handleToggleActive = async (promo: Promo) => {
+    const updatedStatus = promo.isActive === false ? true : false;
+    
+    // 1. Update local storage and UI immediately
+    const updatedLocal = promos.map(p => p.id === promo.id ? { ...p, isActive: updatedStatus } : p);
+    setPromos(updatedLocal);
+    localStorage.setItem('klamby_promo_codes', JSON.stringify(updatedLocal));
+
+    // 2. Try updating in Firestore
+    try {
+      if (!promo.id.startsWith('default-')) {
+        await setDoc(doc(db, 'promoCodes', promo.id), {
+          code: promo.code,
+          discountPercentage: promo.discountPercentage,
+          expiresAt: promo.expiresAt,
+          createdAt: promo.createdAt,
+          isActive: updatedStatus
+        });
+      }
+      console.log("Promo status successfully toggled in Firestore");
+    } catch (err) {
+      console.warn("Could not update status in Firestore. Saved locally:", err);
+      setOfflineMode(true);
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this promo code?")) return;
+    
+    // 1. Update local storage and UI immediately
+    const updatedLocal = promos.filter(p => p.id !== id);
+    setPromos(updatedLocal);
+    localStorage.setItem('klamby_promo_codes', JSON.stringify(updatedLocal));
+
+    // 2. Try deleting from Firestore
     try {
-      await deleteDoc(doc(db, 'promoCodes', id));
+      if (!id.startsWith('default-')) {
+        await deleteDoc(doc(db, 'promoCodes', id));
+      }
+      console.log("Promo successfully deleted from Firestore");
     } catch (err) {
-      console.error(err);
+      console.warn("Could not delete from Firestore. Removed locally instead:", err);
+      setOfflineMode(true);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-      </div>
-    );
-  }
+  const handleResetDefaults = () => {
+    if (window.confirm("Reset to default promo codes (KLAMBY50, BTNX50)?")) {
+      setPromos(DEFAULT_PROMOS);
+      localStorage.setItem('klamby_promo_codes', JSON.stringify(DEFAULT_PROMOS));
+    }
+  };
 
   return (
-    <div className="max-w-5xl mx-auto pb-24 md:pb-0">
+    <div className="max-w-5xl mx-auto pb-24 md:pb-0 px-4 md:px-0">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight uppercase">Promo Codes</h1>
+          <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight uppercase flex items-center gap-2">
+            Promo Codes
+            {offlineMode && (
+              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-mono normal-case tracking-normal">
+                <AlertCircle className="w-3 h-3" /> Offline Backup Active
+              </span>
+            )}
+          </h1>
           <p className="text-sm text-slate-500 font-mono tracking-wider mt-1">MANAGE DISCOUNT CODES</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-slate-950 text-white px-5 py-2.5 rounded-xl hover:bg-slate-900 transition-colors shadow-sm font-display font-medium uppercase text-xs tracking-wider w-full sm:w-auto justify-center"
-        >
-          <Plus className="w-4 h-4" />
-          Create Promo
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleResetDefaults}
+            className="flex items-center gap-2 border border-slate-200 bg-white text-slate-700 px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-colors font-display font-medium uppercase text-xs tracking-wider"
+            title="Reset to standard codes"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex-1 sm:flex-none flex items-center gap-2 bg-slate-950 text-white px-5 py-2.5 rounded-xl hover:bg-slate-900 transition-colors shadow-sm font-display font-medium uppercase text-xs tracking-wider justify-center"
+          >
+            <Plus className="w-4 h-4" />
+            Create Promo
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -94,13 +241,14 @@ export default function Promos() {
                 <th className="p-4 font-medium">Code</th>
                 <th className="p-4 font-medium">Discount</th>
                 <th className="p-4 font-medium">Expires At</th>
+                <th className="p-4 font-medium">Status</th>
                 <th className="p-4 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {promos.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-slate-500 font-mono text-xs uppercase tracking-widest">
+                  <td colSpan={5} className="p-8 text-center text-slate-500 font-mono text-xs uppercase tracking-widest">
                     No promo codes active
                   </td>
                 </tr>
@@ -108,13 +256,41 @@ export default function Promos() {
                 const isExpired = new Date(promo.expiresAt) < new Date();
                 return (
                   <tr key={promo.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 font-mono font-bold text-slate-900">{promo.code}</td>
-                    <td className="p-4 font-medium text-slate-600">{promo.discountPercentage}%</td>
+                    <td className="p-4 font-mono font-bold text-slate-900">
+                      <span className="bg-slate-100 text-slate-800 px-2 py-1 rounded-md text-xs tracking-wider">
+                        {promo.code}
+                      </span>
+                    </td>
+                    <td className="p-4 font-semibold text-slate-900 text-sm">{promo.discountPercentage}% OFF</td>
                     <td className="p-4">
-                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono uppercase tracking-wider ${isExpired ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono uppercase tracking-wider text-slate-600 bg-slate-50">
                         <Calendar className="w-3.5 h-3.5" />
-                        {new Date(promo.expiresAt).toLocaleDateString()}
+                        {new Date(promo.expiresAt).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
                       </div>
+                    </td>
+                    <td className="p-4">
+                      {isExpired ? (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-red-50 text-red-600 border border-red-100">
+                          Expired
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleActive(promo)}
+                          type="button"
+                          className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all border cursor-pointer hover:scale-105 ${
+                            promo.isActive !== false
+                              ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                          }`}
+                          title="Click to toggle status"
+                        >
+                          {promo.isActive !== false ? "Active" : "Inactive"}
+                        </button>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       <button
@@ -146,7 +322,7 @@ export default function Promos() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. SUMMER24"
+                  placeholder="e.g. SUMMER50"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 font-mono transition-all uppercase"
@@ -160,6 +336,7 @@ export default function Promos() {
                   required
                   min="1"
                   max="100"
+                  placeholder="e.g. 20"
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
@@ -201,3 +378,4 @@ export default function Promos() {
     </div>
   );
 }
+

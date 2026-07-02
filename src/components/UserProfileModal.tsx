@@ -32,6 +32,7 @@ import { Product, Order, OrderItem } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
+import { formatNaira } from "../utils/currency";
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -648,7 +649,6 @@ export default function UserProfileModal({
                       {/* Add payment method */}
                       <button
                         type="button"
-                        onClick={() => onAddToast("Direct secure wallet configurations are synchronized with your device keychain.", "info")}
                         className="border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-2xl flex flex-col items-center justify-center p-6 text-slate-400 hover:text-slate-800 transition-all bg-white hover:bg-slate-50/50 h-36"
                       >
                         <CreditCard className="w-6 h-6 mb-2 stroke-[1.5]" />
@@ -706,7 +706,7 @@ export default function UserProfileModal({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-slate-50 border border-slate-200/60 p-5 rounded-2xl flex flex-col justify-between">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Investment</p>
-                    <p className="text-lg sm:text-xl font-black text-slate-900 mt-2">${totalSpent.toFixed(2)}</p>
+                    <p className="text-lg sm:text-xl font-black text-slate-900 mt-2">{formatNaira(totalSpent)}</p>
                   </div>
                   <div className="bg-slate-50 border border-slate-200/60 p-5 rounded-2xl flex flex-col justify-between">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Shipments</p>
@@ -790,7 +790,7 @@ export default function UserProfileModal({
                                 </div>
                                 <div>
                                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Investment</p>
-                                  <p className="text-xs font-black text-slate-900 mt-0.5">${order.total.toFixed(2)}</p>
+                                  <p className="text-xs font-black text-slate-900 mt-0.5">{formatNaira(order.total)}</p>
                                 </div>
                                 <div>
                                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Courier Status</p>
@@ -872,7 +872,7 @@ export default function UserProfileModal({
                                         </div>
 
                                         <div className="text-right shrink-0 select-none">
-                                          <p className="text-sm font-extrabold text-slate-950">${item.product.price.toFixed(2)}</p>
+                                          <p className="text-sm font-extrabold text-slate-950">{formatNaira(item.product.price)}</p>
                                           <p className="text-xs font-bold text-slate-400 mt-1">Qty: {item.quantity}</p>
                                         </div>
                                       </div>
@@ -883,12 +883,12 @@ export default function UserProfileModal({
                                   <div className="bg-white p-5 rounded-2xl border border-slate-200/60 text-xs space-y-2.5 max-w-md ml-auto">
                                     <div className="flex justify-between text-slate-500 font-medium">
                                       <span>Items Subtotal</span>
-                                      <span>${computedSubtotal.toFixed(2)}</span>
+                                      <span>{formatNaira(computedSubtotal)}</span>
                                     </div>
                                     {computedDiscount > 0 && (
                                       <div className="flex justify-between text-rose-600 font-semibold">
                                         <span>Membership Discount</span>
-                                        <span>-${computedDiscount.toFixed(2)}</span>
+                                        <span>-{formatNaira(computedDiscount)}</span>
                                       </div>
                                     )}
                                     <div className="flex justify-between text-slate-500 font-medium">
@@ -898,7 +898,7 @@ export default function UserProfileModal({
                                     <div className="h-[1px] bg-slate-100 my-1" />
                                     <div className="flex justify-between text-slate-900 font-black text-sm uppercase tracking-wide">
                                       <span>Grand Total</span>
-                                      <span>${order.total.toFixed(2)}</span>
+                                      <span>{formatNaira(order.total)}</span>
                                     </div>
                                   </div>
 

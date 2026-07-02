@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product } from "../types";
 import { NEW_YEAR_PRODUCTS } from "../data";
+import { formatNaira } from "../utils/currency";
 import { Eye, ShoppingBag, Gift, Check, Filter, X } from "lucide-react";
 import LiveCartCounter from "./LiveCartCounter";
 
@@ -110,7 +111,7 @@ export default function NewYearCollection({
               id="active-filter-pill"
             >
               <Filter className="w-3.5 h-3.5" />
-              <span>Viewing: {categoryFilter === "under-100" ? "Under $100" : categoryFilter}</span>
+              <span>Viewing: {categoryFilter === "under-100" ? "Under ₦150,000" : categoryFilter}</span>
               <button 
                 onClick={onResetFilter}
                 className="ml-1.5 p-0.5 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
@@ -198,7 +199,7 @@ export default function NewYearCollection({
                         </p>
                       </div>
                       <span className="font-display text-xl font-bold text-slate-900">
-                        ${product.price}
+                        {formatNaira(product.price)}
                       </span>
                     </div>
                   </motion.div>
@@ -345,7 +346,7 @@ export default function NewYearCollection({
                       </p>
                     </div>
                     <span className="font-display text-2xl font-bold text-slate-900">
-                      ${purpleBrooklyn.price}
+                      {formatNaira(purpleBrooklyn.price)}
                     </span>
                   </div>
                 </div>
@@ -407,7 +408,7 @@ export default function NewYearCollection({
                       </p>
                     </div>
                     <span className="font-display text-2xl font-bold text-slate-900">
-                      ${croppedSpace.price}
+                      {formatNaira(croppedSpace.price)}
                     </span>
                   </div>
                 </div>
@@ -476,7 +477,7 @@ export default function NewYearCollection({
                         </p>
                       </div>
                       <span className="font-display text-xl font-bold text-slate-900">
-                        ${product.price}
+                        {formatNaira(product.price)}
                       </span>
                     </div>
                   </motion.div>

@@ -101,6 +101,23 @@
         "isRead": { "type": "boolean" }
       },
       "required": ["id", "userId", "title", "message", "type", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A product review left by a customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "avatar": { "type": "string" }
+      },
+      "required": ["id", "productId", "userId", "userName", "userEmail", "rating", "comment", "createdAt"]
     }
   },
   "firestore": {
@@ -111,6 +128,7 @@
     "/collections/{collectionId}": { "schema": "Collection", "description": "Collections collection" },
     "/socials/{socialId}": { "schema": "Social", "description": "Socials collection" },
     "/newsletters/{newsletterId}": { "schema": "Newsletter", "description": "Newsletter subscribers" },
-    "/notifications/{notificationId}": { "schema": "Notification", "description": "Notifications collection" }
+    "/notifications/{notificationId}": { "schema": "Notification", "description": "Notifications collection" },
+    "/reviews/{reviewId}": { "schema": "Review", "description": "Product reviews collection" }
   }
 }

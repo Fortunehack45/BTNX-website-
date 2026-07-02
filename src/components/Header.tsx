@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, ShoppingBag, User, Menu, X, Heart, Settings, LogOut, Package, ArrowRight, Shield, Bell, Percent, Truck, Sparkles, Check, Lock } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { NavItem, CartItem, Product } from "../types";
 import { NAVIGATION_ITEMS, NEW_YEAR_PRODUCTS } from "../data";
+import { formatNaira } from "../utils/currency";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
 import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, orderBy } from "firebase/firestore";
@@ -34,6 +35,8 @@ export default function Header({
   onOpenProduct,
 }: HeaderProps) {
   const { currentUser, logout, userData } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -203,9 +206,8 @@ export default function Header({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const activeItem = categoryFilter 
-    ? (categoryFilter === "under-100" ? "Home" : categoryFilter) 
-    : "Home";
+  const isShopPage = location.pathname === "/shop";
+  const activeItem = isShopPage ? "Shop" : "Home";
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -219,31 +221,39 @@ export default function Header({
     if (label === "Home") {
       e.preventDefault();
       onCategoryFilter("");
+      navigate("/");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else if (label === "New") {
       e.preventDefault();
-      const element = document.getElementById("new-arrivals");
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth" });
-      }
+      navigate("/");
+      setTimeout(() => {
+        const element = document.getElementById("new-arrivals");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
     } else if (label === "Sale") {
       e.preventDefault();
-      const element = document.getElementById("end-year-sale");
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth" });
-      }
+      navigate("/");
+      setTimeout(() => {
+        const element = document.getElementById("end-year-sale");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
     } else if (label === "Collection") {
       e.preventDefault();
-      const element = document.getElementById("collection");
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth" });
-      }
+      navigate("/");
+      setTimeout(() => {
+        const element = document.getElementById("collection");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
     } else if (label === "Shop") {
       e.preventDefault();
-      const element = document.getElementById("collection");
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth" });
-      }
+      navigate("/shop");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -434,7 +444,7 @@ export default function Header({
                               </span>
                             </div>
                             <div className="text-right font-display text-xs font-extrabold text-slate-900 pr-1">
-                              ${p.price.toFixed(2)}
+                              {formatNaira(p.price)}
                             </div>
                           </button>
                         ))}

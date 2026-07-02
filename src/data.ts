@@ -11,7 +11,7 @@ export const NAVIGATION_ITEMS: NavItem[] = [
 export const NEW_ARRIVALS = [
   {
     id: "arr-1",
-    title: "UNDER $100.00",
+    title: "UNDER ₦150,000",
     image: "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=800",
     buttonText: "Shop Now",
     buttonStyle: "white",

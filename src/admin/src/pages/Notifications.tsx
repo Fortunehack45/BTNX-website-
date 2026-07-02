@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
-import { Bell, Plus, Trash2, Tag, Truck, Sparkles, Megaphone, Search, X, Loader2, Info } from 'lucide-react';
+import { Bell, Plus, Trash2, Tag, Truck, Sparkles, Megaphone, Search, X, Loader2, Info, MapPin, User } from 'lucide-react';
 
 interface Notification {
   id: string;
@@ -214,8 +214,18 @@ export default function Notifications() {
                       <p className="text-[11px] text-slate-500 font-medium leading-relaxed break-words">{notif.message}</p>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-[11px] font-bold font-mono text-slate-600 uppercase tracking-widest">
-                        {notif.userId === 'broadcast' ? '📍 Broadcast' : '👤 Private User'}
+                      <span className="text-[11px] font-bold font-mono text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
+                        {notif.userId === 'broadcast' ? (
+                          <>
+                            <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                            <span>Broadcast</span>
+                          </>
+                        ) : (
+                          <>
+                            <User className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Private User</span>
+                          </>
+                        )}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

@@ -17,6 +17,7 @@ import Notification, { Toast } from "./components/Notification";
 import { Product, CartItem, Order } from "./types";
 import { useAuth } from "./context/AuthContext";
 import { db } from "./lib/firebase";
+import { formatNaira } from "./utils/currency";
 import { doc, increment, updateDoc, collection, query, where, onSnapshot, setDoc, addDoc } from "firebase/firestore";
 
 export default function App() {
@@ -98,7 +99,7 @@ export default function App() {
           await addDoc(collection(db, "notifications"), {
             userId: currentUser.uid,
             title: "Order Confirmed",
-            message: `Your order #${newOrder.id} of $${newOrder.total.toFixed(2)} was successfully received and is now processing in our atelier.`,
+            message: `Your order #${newOrder.id} of ${formatNaira(newOrder.total)} was successfully received and is now processing in our atelier.`,
             type: "order_status",
             isRead: false,
             createdAt: new Date().toISOString()

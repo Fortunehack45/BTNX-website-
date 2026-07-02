@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Product } from "../types";
+import { Product, Review } from "../types";
 import { 
   ArrowLeft, 
   Clock, 
@@ -11,24 +11,22 @@ import {
   ChevronRight,
   ShoppingBag,
   Shield,
-  RotateCcw
+  RotateCcw,
+  Star,
+  Trash2
 } from "lucide-react";
 import { NEW_YEAR_PRODUCTS } from "../data";
 import LiveCartCounter from "./LiveCartCounter";
+import { formatNaira } from "../utils/currency";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../lib/firebase";
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, orderBy } from "firebase/firestore";
 
 interface ProductModalProps {
   product: Product | null;
   onClose: () => void;
   onAddToBag: (product: Product, size: string, color: string) => void;
   onSelectProduct?: (product: Product) => void;
-}
-
-interface Review {
-  name: string;
-  rating: number;
-  date: string;
-  comment: string;
-  avatar: string;
 }
 
 export default function ProductModal({ 
@@ -47,6 +45,39 @@ export default function ProductModal({
   const [timeLeft, setTimeLeft] = useState(9025); // 2 hours, 30 mins, 25 secs
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const { currentUser, userData } = useAuth();
+  const [firestoreReviews, setFirestoreReviews] = useState<any[]>([]);
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewSuccess, setReviewSuccess] = useState("");
+  const [ratingHover, setRatingHover] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!product) return;
+    const q = query(
+      collection(db, "reviews"),
+      where("productId", "==", product.id)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      // Sort in memory by createdAt desc
+      fetched.sort((a: any, b: any) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+      setFirestoreReviews(fetched);
+    }, (err) => {
+      console.error("Error loading reviews:", err);
+    });
+    return () => unsubscribe();
+  }, [product?.id]);
 
   // Countdown timer for next-day delivery
   useEffect(() => {
@@ -84,30 +115,134 @@ export default function ProductModal({
   // Compute a stable pseudo-random remaining stock based on product ID
   const stockRemaining = (product.id.charCodeAt(product.id.length - 1) % 6) + 3;
 
-  // Curated review list for the interactive slider
-  const reviews: Review[] = [
+  // Curated fallback review list for the interactive slider
+  const baseReviews = [
     {
+      id: "base-1",
       name: "Alex Mathio",
       rating: 5,
       date: "13 Oct 2024",
       comment: "Nextgen's dedication to sustainability and ethical practices resonates strongly with today's consumers, positioning the brand as a responsible choice in the fashion world.",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200"
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200",
+      isStatic: true,
+      userId: "static-1",
+      email: "alex@example.com"
     },
     {
+      id: "base-2",
       name: "Sarah Jenkins",
       rating: 5,
       date: "18 Nov 2024",
       comment: "The material feels incredibly premium and soft on the skin. It fits perfectly true to size, and the delivery was remarkably fast! Absolute staple in my wardrobe.",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200"
+      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200",
+      isStatic: true,
+      userId: "static-2",
+      email: "sarah@example.com"
     },
     {
+      id: "base-3",
       name: "David K.",
       rating: 4,
       date: "04 Dec 2024",
       comment: "Great silhouette and comfortable heavy-weight feel. The collar and cuffs hold up well after multiple washes. Definitely going to buy in other colors.",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200"
+      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200",
+      isStatic: true,
+      userId: "static-3",
+      email: "david@example.com"
     }
   ];
+
+  // Convert firestoreReviews into compatible Review objects
+  const formattedFirestoreReviews = firestoreReviews.map(r => ({
+    id: r.id,
+    name: r.userName,
+    email: r.userEmail,
+    rating: r.rating,
+    date: new Date(r.createdAt).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }),
+    comment: r.comment,
+    avatar: r.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(r.userName)}`,
+    userId: r.userId,
+    isStatic: false
+  }));
+
+  const reviews = [...formattedFirestoreReviews, ...baseReviews];
+
+  const totalReviewsCount = reviews.length;
+  const averageRating = totalReviewsCount > 0 
+    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviewsCount).toFixed(1)
+    : "5.0";
+
+  const starCounts = [0, 0, 0, 0, 0]; // Index 0 is 1 star, 4 is 5 stars
+  reviews.forEach(r => {
+    const starIdx = Math.max(1, Math.min(5, Math.round(r.rating))) - 1;
+    starCounts[starIdx]++;
+  });
+
+  const getStarPercentage = (stars: number) => {
+    if (totalReviewsCount === 0) return 0;
+    return (starCounts[stars - 1] / totalReviewsCount) * 100;
+  };
+
+  // Handlers for reviews
+  const handleDeleteReview = async (reviewId: string) => {
+    try {
+      await deleteDoc(doc(db, "reviews", reviewId));
+      setReviewSuccess("Review deleted successfully.");
+      setActiveReviewIndex(0);
+      setTimeout(() => setReviewSuccess(""), 3000);
+    } catch (err) {
+      console.error("Error deleting review:", err);
+      setReviewError("Failed to delete review.");
+    }
+  };
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) {
+      setReviewError("You must be logged in to leave a review.");
+      return;
+    }
+    if (!newComment.trim()) {
+      setReviewError("Please write a review comment.");
+      return;
+    }
+    if (newRating < 1 || newRating > 5) {
+      setReviewError("Please select a valid rating.");
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    setReviewError("");
+    setReviewSuccess("");
+
+    try {
+      const initialsAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(userData?.name || currentUser.displayName || "Client")}`;
+      await addDoc(collection(db, "reviews"), {
+        productId: product.id,
+        userId: currentUser.uid,
+        userName: userData?.name || currentUser.displayName || "Anonymous Client",
+        userEmail: currentUser.email || userData?.email || "",
+        rating: newRating,
+        comment: newComment.trim(),
+        createdAt: new Date().toISOString(),
+        avatar: currentUser.photoURL || initialsAvatar
+      });
+
+      setNewComment("");
+      setNewRating(5);
+      setReviewSuccess("Thank you! Your review has been added.");
+      setTimeout(() => setReviewSuccess(""), 4000);
+    } catch (err) {
+      console.error("Error adding review:", err);
+      setReviewError("Failed to submit review.");
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   // Image gallery builder for different products to have 3 stunning high-fashion previews
   const getProductGallery = (id: string, mainImage: string): string[] => {
@@ -292,6 +427,8 @@ export default function ProductModal({
                   </button>
                 ))}
               </div>
+
+
             </div>
 
             {/* Product details panel (Right - 5 cols) */}
@@ -312,7 +449,7 @@ export default function ProductModal({
                 {/* Price */}
                 <div className="flex flex-col gap-1 mb-5">
                   <div className="font-sans text-2xl sm:text-3xl font-extrabold text-slate-950 select-none">
-                    ${product.price.toFixed(2)}
+                    {formatNaira(product.price)}
                   </div>
                   {product.cartCount && product.cartCount > 0 && (
                     <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded-full w-fit">
@@ -554,138 +691,252 @@ export default function ProductModal({
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 items-start">
               
               {/* Left summary side (5 columns) */}
-              <div className="md:col-span-5 flex flex-col justify-center select-none">
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="font-display text-6xl sm:text-7xl font-extrabold text-slate-950 leading-none">
-                    4,5
-                  </span>
-                  <span className="text-slate-400 text-lg font-bold">
-                    /5
-                  </span>
-                </div>
-                
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
-                  (50 New Reviews)
-                </p>
-
-                {/* Progress breakdown grid */}
-                <div className="space-y-3 max-w-sm">
-                  {/* 5 Stars row */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-700 w-12 text-right">5 Stars</span>
-                    <div className="flex-grow h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-950 w-full rounded-full" />
-                    </div>
+              <div className="md:col-span-5 flex flex-col">
+                <div className="select-none">
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="font-display text-6xl sm:text-7xl font-extrabold text-slate-950 leading-none">
+                      {averageRating}
+                    </span>
+                    <span className="text-slate-400 text-lg font-bold">
+                      /5
+                    </span>
                   </div>
+                  
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
+                    ({totalReviewsCount} {totalReviewsCount === 1 ? 'Review' : 'Reviews'})
+                  </p>
 
-                  {/* 4 Stars row */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-700 w-12 text-right">4 Stars</span>
-                    <div className="flex-grow h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-950 w-[20%] rounded-full" />
-                    </div>
-                  </div>
-
-                  {/* 3 Stars row */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-700 w-12 text-right">3 Stars</span>
-                    <div className="flex-grow h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-950 w-0 rounded-full" />
-                    </div>
-                  </div>
-
-                  {/* 2 Stars row */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-700 w-12 text-right">2 Stars</span>
-                    <div className="flex-grow h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-950 w-0 rounded-full" />
-                    </div>
-                  </div>
-
-                  {/* 1 Star row */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-700 w-12 text-right">1 Star</span>
-                    <div className="flex-grow h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-950 w-0 rounded-full" />
-                    </div>
+                  {/* Progress breakdown grid */}
+                  <div className="space-y-3 max-w-sm mb-6">
+                    {[5, 4, 3, 2, 1].map((stars) => {
+                      const pct = getStarPercentage(stars);
+                      return (
+                        <div key={stars} className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-slate-700 w-12 text-right">{stars} {stars === 1 ? 'Star' : 'Stars'}</span>
+                          <div className="flex-grow h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-slate-950 rounded-full transition-all duration-500" 
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono font-bold text-slate-400 w-8 text-left">
+                            {Math.round(pct)}%
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
+
+                {/* Leave a Review Form inside the Rating & Reviews Column */}
+                <div className="mt-8 border-t border-slate-100 pt-6 max-w-sm select-none" id="reviews-form-container-bottom">
+                  <h3 className="text-xs font-extrabold text-slate-950 uppercase tracking-widest mb-4">
+                    Share Your Experience
+                  </h3>
+
+                  {currentUser ? (
+                    <form onSubmit={handleReviewSubmit} className="space-y-4">
+                      {/* Interactive Stars Selection */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                          Your Rating
+                        </label>
+                        <div className="flex gap-1.5">
+                          {[1, 2, 3, 4, 5].map((star) => {
+                            const isFilled = ratingHover !== null ? star <= ratingHover : star <= newRating;
+                            return (
+                              <button
+                                type="button"
+                                key={star}
+                                onClick={() => setNewRating(star)}
+                                onMouseEnter={() => setRatingHover(star)}
+                                onMouseLeave={() => setRatingHover(null)}
+                                className="p-1 -ml-1 text-slate-200 hover:scale-110 transition-transform cursor-pointer"
+                                aria-label={`Rate ${star} Stars`}
+                              >
+                                <Star 
+                                  className={`w-5 h-5 transition-colors ${
+                                    isFilled ? "fill-amber-400 text-amber-400" : "text-slate-300"
+                                  }`} 
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Comment input */}
+                      <div>
+                        <label htmlFor="review-comment-input-bottom" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                          Your Comment
+                        </label>
+                        <textarea
+                          id="review-comment-input-bottom"
+                          rows={3}
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          placeholder="Write your honest thoughts about this piece..."
+                          className="w-full text-xs font-medium p-3 rounded-xl border border-slate-200 focus:border-slate-400 focus:outline-hidden resize-none bg-slate-50/50"
+                        />
+                      </div>
+
+                      {/* Error & Success States */}
+                      {reviewError && (
+                        <p className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg">
+                          {reviewError}
+                        </p>
+                      )}
+                      {reviewSuccess && (
+                        <p className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                          {reviewSuccess}
+                        </p>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={isSubmittingReview}
+                        className="w-full h-10 bg-slate-950 hover:bg-slate-900 disabled:bg-slate-300 text-white font-bold text-[10px] tracking-widest rounded-xl uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl text-center shadow-2xs">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Sign In to Review
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-normal font-medium">
+                        Only registered clients can leave a verified rating & review.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+
+
               </div>
 
               {/* Right reviewer card side (7 columns) */}
               <div className="md:col-span-7">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeReviewIndex}
-                    initial={{ opacity: 0, x: 15 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -15 }}
-                    transition={{ duration: 0.3 }}
-                    className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-xs relative flex flex-col justify-between min-h-[220px]"
-                  >
-                    <div>
-                      {/* Name, Stars, Date Header */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <h4 className="font-sans font-bold text-slate-950 text-base mb-1 select-none">
-                            {reviews[activeReviewIndex].name}
-                          </h4>
-                          <div className="text-xs font-bold text-slate-700">
-                             Rating: {reviews[activeReviewIndex].rating}/5
-                          </div>
-                        </div>
-                        <span className="text-xs font-bold text-slate-400 select-none">
-                          {reviews[activeReviewIndex].date}
-                        </span>
-                      </div>
-
-                      {/* Comment */}
-                      <p className="text-slate-600 text-xs sm:text-sm leading-relaxed font-medium mb-6">
-                        &quot;{reviews[activeReviewIndex].comment}&quot;
-                      </p>
-                    </div>
-
-                    {/* Bottom row: Reviewer Avatar, Pagination and Controls */}
-                    <div className="flex items-center justify-between border-t border-slate-50 pt-4 mt-auto">
-                      {/* Reviewer avatar image */}
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 select-none border border-slate-100">
-                        <img 
-                          src={reviews[activeReviewIndex].avatar} 
-                          alt={reviews[activeReviewIndex].name}
-                          className="w-full h-full object-cover object-center"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-
-                      {/* Dots Pagination and Next Button */}
-                      <div className="flex items-center gap-4">
-                        {/* Slide indicators dots */}
-                        <div className="flex gap-1.5 select-none">
-                          {reviews.map((_, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setActiveReviewIndex(idx)}
-                              className={`h-1.5 rounded-full transition-all duration-300 ${
-                                idx === activeReviewIndex ? "w-8 bg-slate-950" : "w-1.5 bg-slate-200"
-                              }`}
-                              aria-label={`Go to review ${idx + 1}`}
-                            />
-                          ))}
-                        </div>
-
-                        {/* Slide Next Arrow button */}
-                        <button
-                          onClick={handleNextReview}
-                          className="w-9 h-9 flex items-center justify-center rounded-full border border-slate-100 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-all active:scale-90 shadow-2xs"
-                          aria-label="Next review"
+                {reviews.length > 0 ? (
+                  (() => {
+                    const safeReviewIndex = activeReviewIndex % reviews.length;
+                    const currentReview = reviews[safeReviewIndex] || reviews[0];
+                    return (
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={safeReviewIndex}
+                          initial={{ opacity: 0, x: 15 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -15 }}
+                          transition={{ duration: 0.3 }}
+                          className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-xs relative flex flex-col justify-between min-h-[240px]"
                         >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
+                          <div>
+                            {/* Name, Stars, Date Header */}
+                            <div className="flex items-start justify-between mb-4">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-sans font-bold text-slate-950 text-base select-none">
+                                    {currentReview.name}
+                                  </h4>
+                                  {/* Display Email if current user is admin */}
+                                  {userData?.role === "admin" && currentReview.email && (
+                                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono font-medium">
+                                      {currentReview.email}
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                {/* Stars Display */}
+                                <div className="flex items-center gap-0.5 mt-1 select-none">
+                                  {[1, 2, 3, 4, 5].map((s) => (
+                                    <Star
+                                      key={s}
+                                      className={`w-3.5 h-3.5 ${
+                                        s <= currentReview.rating 
+                                          ? "fill-slate-900 text-slate-900" 
+                                          : "text-slate-200"
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
 
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-400 select-none">
+                                  {currentReview.date}
+                                </span>
+
+                                {/* Delete Button for admin or owner */}
+                                {(userData?.role === "admin" || (currentUser && currentUser.uid === currentReview.userId)) && !currentReview.isStatic && (
+                                  <button
+                                    onClick={() => handleDeleteReview(currentReview.id)}
+                                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors ml-1"
+                                    title="Delete Review"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Comment */}
+                            <p className="text-slate-600 text-xs sm:text-sm leading-relaxed font-medium mb-6">
+                              &quot;{currentReview.comment}&quot;
+                            </p>
+                          </div>
+
+                          {/* Bottom row: Reviewer Avatar, Pagination and Controls */}
+                          <div className="flex items-center justify-between border-t border-slate-50 pt-4 mt-auto">
+                            {/* Reviewer avatar image */}
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 select-none border border-slate-100 shrink-0">
+                              <img 
+                                src={currentReview.avatar} 
+                                alt={currentReview.name}
+                                className="w-full h-full object-cover object-center"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+
+                            {/* Dots Pagination and Next Button */}
+                            <div className="flex items-center gap-4">
+                              {/* Slide indicators dots */}
+                              <div className="flex gap-1.5 select-none max-w-[120px] overflow-hidden">
+                                {reviews.map((_, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => setActiveReviewIndex(idx)}
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                                      idx === safeReviewIndex ? "w-8 bg-slate-950" : "w-1.5 bg-slate-200"
+                                    }`}
+                                    aria-label={`Go to review ${idx + 1}`}
+                                  />
+                                ))}
+                              </div>
+
+                              {/* Slide Next Arrow button */}
+                              <button
+                                onClick={() => setActiveReviewIndex((prev) => (prev + 1) % reviews.length)}
+                                className="w-9 h-9 flex items-center justify-center rounded-full border border-slate-100 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-all active:scale-90 shadow-2xs"
+                                aria-label="Next review"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                          </div>
+                        </motion.div>
+                      </AnimatePresence>
+                    );
+                  })()
+                ) : (
+                  <div className="p-8 text-center bg-slate-50 rounded-3xl border border-slate-150">
+                    <p className="text-sm font-semibold text-slate-500">
+                      No reviews available for this product.
+                    </p>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -734,11 +985,11 @@ export default function ProductModal({
                   {/* Price Line with original price and discount */}
                   <div className="flex items-center gap-2 select-none">
                     <span className="text-xs sm:text-sm font-extrabold text-slate-950">
-                      ${rec.price}
+                      {formatNaira(rec.price)}
                     </span>
                     {rec.originalPrice && (
                       <span className="text-xs text-slate-400 line-through">
-                        ${rec.originalPrice}
+                        {formatNaira(rec.originalPrice)}
                       </span>
                     )}
                     {rec.discount && (

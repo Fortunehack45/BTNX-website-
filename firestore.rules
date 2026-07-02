@@ -55,5 +55,11 @@ service cloud.firestore {
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin() || resource.data.userId == 'broadcast');
       allow delete: if isAdmin();
     }
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
   }
 }

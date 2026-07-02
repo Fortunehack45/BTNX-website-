@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Sparkle } from "lucide-react";
 import { MARQUEE_ITEMS } from "../data";
 
 export default function Hero() {
@@ -77,7 +77,7 @@ export default function Hero() {
             {marqueeElements.map((item, idx) => (
               <span key={idx} className="flex items-center gap-12">
                 <span>{item}</span>
-                <span className="text-white/40 text-xs font-light">✖</span>
+                <Sparkle className="w-3.5 h-3.5 text-white/30" />
               </span>
             ))}
           </div>
