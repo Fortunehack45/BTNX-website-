@@ -428,6 +428,89 @@ export default function ProductModal({
                 ))}
               </div>
 
+              {/* Share Your Experience Rating & Review Form (Inside empty left column space to balance height) */}
+              <div className="mt-8 select-none bg-slate-50/40 p-6 sm:p-8 rounded-[24px] border border-slate-100" id="reviews-form-container-left">
+                <h3 className="text-xs font-extrabold text-slate-950 uppercase tracking-widest mb-4">
+                  Share Your Experience
+                </h3>
+
+                {currentUser ? (
+                  <form onSubmit={handleReviewSubmit} className="space-y-4">
+                    {/* Interactive Stars Selection */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Your Rating
+                      </label>
+                      <div className="flex gap-1.5">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const isFilled = ratingHover !== null ? star <= ratingHover : star <= newRating;
+                          return (
+                            <button
+                              type="button"
+                              key={star}
+                              onClick={() => setNewRating(star)}
+                              onMouseEnter={() => setRatingHover(star)}
+                              onMouseLeave={() => setRatingHover(null)}
+                              className="p-1 -ml-1 text-slate-200 hover:scale-110 transition-transform cursor-pointer"
+                              aria-label={`Rate ${star} Stars`}
+                            >
+                              <Star 
+                                className={`w-5 h-5 transition-colors ${
+                                  isFilled ? "fill-amber-400 text-amber-400" : "text-slate-300"
+                                }`} 
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Comment input */}
+                    <div>
+                      <label htmlFor="review-comment-input-left" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Your Comment
+                      </label>
+                      <textarea
+                        id="review-comment-input-left"
+                        rows={3}
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Write your honest thoughts about this piece..."
+                        className="w-full text-xs font-medium p-3 rounded-xl border border-slate-200 focus:border-slate-400 focus:outline-hidden resize-none bg-white shadow-3xs"
+                      />
+                    </div>
+
+                    {/* Error & Success States */}
+                    {reviewError && (
+                      <p className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg">
+                        {reviewError}
+                      </p>
+                    )}
+                    {reviewSuccess && (
+                      <p className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                        {reviewSuccess}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingReview}
+                      className="w-full h-11 bg-slate-950 hover:bg-slate-900 disabled:bg-slate-300 text-white font-bold text-[10px] tracking-widest rounded-xl uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="p-4 bg-white border border-slate-150 rounded-2xl text-center shadow-3xs">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                      Sign In to Review
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-normal font-medium">
+                      Only registered clients can leave a verified rating & review.
+                    </p>
+                  </div>
+                )}
+              </div>
 
             </div>
 
@@ -727,92 +810,6 @@ export default function ProductModal({
                     })}
                   </div>
                 </div>
-
-                {/* Leave a Review Form inside the Rating & Reviews Column */}
-                <div className="mt-8 border-t border-slate-100 pt-6 max-w-sm select-none" id="reviews-form-container-bottom">
-                  <h3 className="text-xs font-extrabold text-slate-950 uppercase tracking-widest mb-4">
-                    Share Your Experience
-                  </h3>
-
-                  {currentUser ? (
-                    <form onSubmit={handleReviewSubmit} className="space-y-4">
-                      {/* Interactive Stars Selection */}
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                          Your Rating
-                        </label>
-                        <div className="flex gap-1.5">
-                          {[1, 2, 3, 4, 5].map((star) => {
-                            const isFilled = ratingHover !== null ? star <= ratingHover : star <= newRating;
-                            return (
-                              <button
-                                type="button"
-                                key={star}
-                                onClick={() => setNewRating(star)}
-                                onMouseEnter={() => setRatingHover(star)}
-                                onMouseLeave={() => setRatingHover(null)}
-                                className="p-1 -ml-1 text-slate-200 hover:scale-110 transition-transform cursor-pointer"
-                                aria-label={`Rate ${star} Stars`}
-                              >
-                                <Star 
-                                  className={`w-5 h-5 transition-colors ${
-                                    isFilled ? "fill-amber-400 text-amber-400" : "text-slate-300"
-                                  }`} 
-                                />
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Comment input */}
-                      <div>
-                        <label htmlFor="review-comment-input-bottom" className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                          Your Comment
-                        </label>
-                        <textarea
-                          id="review-comment-input-bottom"
-                          rows={3}
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          placeholder="Write your honest thoughts about this piece..."
-                          className="w-full text-xs font-medium p-3 rounded-xl border border-slate-200 focus:border-slate-400 focus:outline-hidden resize-none bg-slate-50/50"
-                        />
-                      </div>
-
-                      {/* Error & Success States */}
-                      {reviewError && (
-                        <p className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg">
-                          {reviewError}
-                        </p>
-                      )}
-                      {reviewSuccess && (
-                        <p className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
-                          {reviewSuccess}
-                        </p>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={isSubmittingReview}
-                        className="w-full h-10 bg-slate-950 hover:bg-slate-900 disabled:bg-slate-300 text-white font-bold text-[10px] tracking-widest rounded-xl uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        {isSubmittingReview ? "Submitting..." : "Submit Review"}
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl text-center shadow-2xs">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                        Sign In to Review
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-1 leading-normal font-medium">
-                        Only registered clients can leave a verified rating & review.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-
 
               </div>
 
