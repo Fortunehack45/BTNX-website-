@@ -9,7 +9,7 @@ import Products from './pages/Products';
 import Orders from './pages/Orders';
 import Users from './pages/Users';
 import Notifications from './pages/Notifications';
-import Promos from './pages/Promos';
+import Campaigns from './pages/Campaigns';
 import Newsletters from './pages/Newsletters';
 
 function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: () => void }) {
@@ -21,7 +21,7 @@ function Layout({ children, onLogout }: { children: React.ReactNode; onLogout: (
     { name: 'Orders', path: '/orders', icon: <ShoppingCart className="w-5 h-5" />, mobileIcon: <ShoppingCart className="w-6 h-6" /> },
     { name: 'Users', path: '/users', icon: <UsersIcon className="w-5 h-5" />, mobileIcon: <UsersIcon className="w-6 h-6" /> },
     { name: 'Alerts', path: '/notifications', icon: <Bell className="w-5 h-5" />, mobileIcon: <Bell className="w-6 h-6" /> },
-    { name: 'Promos', path: '/promos', icon: <Tag className="w-5 h-5" />, mobileIcon: <Tag className="w-6 h-6" /> },
+    { name: 'Campaigns', path: '/campaigns', icon: <Tag className="w-5 h-5" />, mobileIcon: <Tag className="w-6 h-6" /> },
     { name: 'News', path: '/newsletters', icon: <Mail className="w-5 h-5" />, mobileIcon: <Mail className="w-6 h-6" /> },
   ];
 
@@ -354,7 +354,8 @@ export default function App() {
           <Route path="/orders" element={<Orders />} />
           <Route path="/users" element={<Users />} />
           <Route path="/notifications" element={<Notifications />} />
-          <Route path="/promos" element={<Promos />} />
+          <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/promos" element={<Campaigns />} />
           <Route path="/newsletters" element={<Newsletters />} />
         </Routes>
       </Layout>
