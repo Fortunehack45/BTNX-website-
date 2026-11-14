@@ -166,10 +166,10 @@ export default function Hero({ onOpenProduct, products }: HeroProps) {
       id="hero-section"
       className="w-full bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200"
     >
-      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-7 sm:py-12 lg:py-16">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 pt-8 pb-10 sm:pt-10 sm:pb-14 lg:pt-12 lg:pb-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-stretch">
           {/* Left Editorial Column */}
-          <div className="lg:col-span-5 flex flex-col justify-between gap-7 sm:gap-10 py-1 lg:py-6">
+          <div className="lg:col-span-5 flex flex-col justify-between gap-7 sm:gap-10 pb-1 lg:pb-6">
             <div className="flex items-center gap-2.5 text-xs text-[#66625B] dark:text-[#A7A299] whitespace-nowrap">
               <span className="uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium">
                 BTNX Store

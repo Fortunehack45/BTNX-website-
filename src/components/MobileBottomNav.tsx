@@ -19,9 +19,13 @@ export default function MobileBottomNav({
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Hide bottom navigation bar completely on customer support chat and staff pages so it does not obstruct chat input
+  // Hide bottom navigation bar ONLY on active live chat thread (/support?chat=...) and staff/admin pages
+  const isChatPage =
+    location.pathname.startsWith("/support") &&
+    Boolean(new URLSearchParams(location.search).get("chat"));
+
   if (
-    location.pathname.startsWith("/support") ||
+    isChatPage ||
     location.pathname.startsWith("/support-staff") ||
     location.pathname.startsWith("/admin")
   ) {

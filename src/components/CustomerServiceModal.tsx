@@ -14,6 +14,7 @@ import {
   Clock,
 } from "lucide-react";
 import { modalBackdropVariants, modalPanelVariants } from "../utils/motion";
+import CustomDropdown from "./CustomDropdown";
 
 interface CustomerServiceModalProps {
   isOpen: boolean;
@@ -238,20 +239,12 @@ export default function CustomerServiceModal({
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-medium uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] mb-1.5">
-                          Inquiry Topic
-                        </label>
-                        <select
+                        <CustomDropdown
+                          label="Inquiry Topic"
                           value={topic}
-                          onChange={(e) => setTopic(e.target.value)}
-                          className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] focus:border-[#141413] dark:focus:border-[#F3F1EC] text-xs sm:text-sm text-[#141413] dark:text-[#F3F1EC] outline-none"
-                        >
-                          {SUPPORT_TOPICS.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={setTopic}
+                          options={SUPPORT_TOPICS}
+                        />
                       </div>
 
                       <div>

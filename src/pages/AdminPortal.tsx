@@ -31,6 +31,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Product, Order, StoreShippingSettings } from "../types";
+import CustomDropdown from "../components/CustomDropdown";
 import { getSwatchHex } from "../utils/colors";
 import {
   auth,
@@ -1871,20 +1872,13 @@ export default function AdminPortal() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
-                          Collection / Category *
-                        </label>
-                        <select
+                        <CustomDropdown
+                          label="Collection / Category *"
                           value={productForm.category}
-                          onChange={(e) => setProductForm((p) => ({ ...p, category: e.target.value }))}
-                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] font-semibold outline-none"
-                        >
-                          {PRODUCT_CATEGORIES.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setProductForm((p) => ({ ...p, category: val }))}
+                          options={PRODUCT_CATEGORIES}
+                          buttonClassName="h-11 font-semibold"
+                        />
                       </div>
 
                       <div>
@@ -2562,19 +2556,13 @@ export default function AdminPortal() {
                             {formatNaira(ord.total)}
                           </td>
                           <td className="px-5 py-3.5">
-                            <select
+                            <CustomDropdown
                               value={ord.status || "Confirmed"}
-                              onChange={(e) =>
-                                handleOrderStatusUpdate(ord.id, e.target.value)
-                              }
-                              className="h-8 px-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-[11px] outline-none"
-                            >
-                              {ORDER_STATUSES.map((st) => (
-                                <option key={st} value={st}>
-                                  {st}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(val) => handleOrderStatusUpdate(ord.id, val)}
+                              options={ORDER_STATUSES}
+                              buttonClassName="h-8 text-[11px] font-mono px-2"
+                              menuClassName="w-40"
+                            />
                           </td>
                           <td className="px-5 py-3.5 text-right">
                             <button
@@ -3026,22 +3014,19 @@ export default function AdminPortal() {
                                       Status: {msg.attachedOrder.status}
                                     </p>
                                   </div>
-                                  <select
-                                    value={msg.attachedOrder.status}
-                                    onChange={(e) =>
-                                      handleOrderStatusUpdate(
-                                        msg.attachedOrder!.id,
-                                        e.target.value
-                                      )
-                                    }
-                                    className="h-8 px-2 bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono"
-                                  >
-                                    {ORDER_STATUSES.map((st) => (
-                                      <option key={st} value={st}>
-                                        {st}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <div className="w-36 shrink-0">
+                                    <CustomDropdown
+                                      value={msg.attachedOrder.status}
+                                      onChange={(val) =>
+                                        handleOrderStatusUpdate(
+                                          msg.attachedOrder!.id,
+                                          val
+                                        )
+                                      }
+                                      options={ORDER_STATUSES}
+                                      buttonClassName="h-8 px-2 text-[10px] font-mono"
+                                    />
+                                  </div>
                                 </div>
                               )}
 

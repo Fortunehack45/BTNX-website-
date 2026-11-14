@@ -58,7 +58,20 @@ export default function CartDrawer({
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const discountAmount = subtotal * appliedDiscount;
+
+  // Promo codes apply ONLY to full-price products (products without an existing discount)
+  const eligibleSubtotal = cart.reduce((sum, item) => {
+    const hasExistingDiscount = Boolean(
+      item.product.originalPrice && item.product.originalPrice > item.product.price
+    );
+    return hasExistingDiscount ? sum : sum + item.product.price * item.quantity;
+  }, 0);
+  const discountAmount = eligibleSubtotal * appliedDiscount;
+  const hasExcludedDiscountedItems =
+    appliedDiscount > 0 &&
+    cart.some(
+      (item) => Boolean(item.product.originalPrice && item.product.originalPrice > item.product.price)
+    );
   const finalTotal = subtotal - discountAmount;
   const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -505,12 +518,19 @@ export default function CartDrawer({
                             </span>
                           </div>
                           {appliedDiscount > 0 && (
-                            <div className="flex justify-between text-[#966830] dark:text-[#C89B62]">
-                              <span>Promo ({appliedCode || "50%"})</span>
-                              <span className="font-mono tabular-nums">
-                                -{formatNaira(discountAmount)}
-                              </span>
-                            </div>
+                            <>
+                              <div className="flex justify-between text-[#966830] dark:text-[#C89B62]">
+                                <span>Promo ({appliedCode || "50%"})</span>
+                                <span className="font-mono tabular-nums">
+                                  -{formatNaira(discountAmount)}
+                                </span>
+                              </div>
+                              {hasExcludedDiscountedItems && (
+                                <p className="text-[10px] text-[#8C877D] italic leading-tight">
+                                  * Discount applied only to full-price items. Already discounted pieces are excluded.
+                                </p>
+                              )}
+                            </>
                           )}
                           <div className="flex justify-between">
                             <span>Express Shipping</span>

@@ -17,7 +17,9 @@ import {
   RotateCcw,
   Minus,
   Plus,
+  Share2,
 } from "lucide-react";
+import ShareProductModal from "./ShareProductModal";
 import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import { getSwatchHex } from "../utils/colors";
@@ -47,6 +49,7 @@ interface ProductModalProps {
   isWishlisted?: boolean;
   onToggleWishlist?: (product: Product) => void;
   onOpenAuth?: () => void;
+  onAddToast?: (message: string, type: "success" | "error" | "info") => void;
 }
 
 const SIZE_CHART = [
@@ -68,6 +71,7 @@ export default function ProductModal({
   isWishlisted = false,
   onToggleWishlist,
   onOpenAuth,
+  onAddToast,
 }: ProductModalProps) {
   const [selectedSize, setSelectedSize] = useState("S");
   const [selectedColor, setSelectedColor] = useState("");
@@ -77,6 +81,7 @@ export default function ProductModal({
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
   const [showAllReviews, setShowAllReviews] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -398,9 +403,20 @@ export default function ProductModal({
             <span className="text-[#141413] dark:text-[#F3F1EC] truncate max-w-[180px] sm:max-w-xs">{product.name}</span>
           </button>
 
-          <span className="text-[11px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] hidden sm:inline">
-            {product.category}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] hidden sm:inline">
+              {product.category}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(true)}
+              className="h-8 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Share piece"
+            >
+              <Share2 className="w-3.5 h-3.5 text-[#966830] dark:text-[#C89B62]" />
+              <span>Share</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -656,6 +672,16 @@ export default function ProductModal({
                     aria-label={isWishlisted ? "Remove from saved pieces" : "Save piece"}
                   >
                     <Heart className={`w-4 h-4 ${isWishlisted ? "fill-current" : ""}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsShareModalOpen(true)}
+                    className="w-14 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] text-[#141413] dark:text-[#F3F1EC] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center transition-colors cursor-pointer"
+                    aria-label="Share piece"
+                    title="Share piece"
+                  >
+                    <Share2 className="w-4 h-4 text-[#966830] dark:text-[#C89B62]" />
                   </button>
                 </div>
 
@@ -1263,6 +1289,13 @@ export default function ProductModal({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ShareProductModal
+        product={product}
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        onAddToast={onAddToast || ((msg) => alert(msg))}
+      />
     </div>
   );
 }

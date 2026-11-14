@@ -30,6 +30,18 @@
       "destination": "/api"
     },
     {
+      "source": "/product/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/p/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/share/product/(.*)",
+      "destination": "/api"
+    },
+    {
       "source": "/mcp",
       "destination": "/api"
     },

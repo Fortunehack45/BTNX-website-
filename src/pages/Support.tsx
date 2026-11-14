@@ -32,6 +32,7 @@ import { Order, Product, CartItem } from "../types";
 import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import GalleryImage from "../components/GalleryImage";
+import CustomDropdown from "../components/CustomDropdown";
 import {
   SupportTicket,
   SupportMessage,
@@ -1753,7 +1754,7 @@ export default function Support({
   // ============================================================================
   return (
     <section
-      className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12"
+      className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 pt-8 sm:pt-10 lg:pt-12 pb-24 lg:pb-16"
       id="customer-service-page"
     >
       <div className="w-full space-y-8">
@@ -1818,20 +1819,12 @@ export default function Support({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] mb-1">
-                  Topic
-                </label>
-                <select
+                <CustomDropdown
+                  label="Topic"
                   value={newTopic}
-                  onChange={(e) => setNewTopic(e.target.value)}
-                  className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] outline-none"
-                >
-                  {SUPPORT_TOPICS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setNewTopic}
+                  options={SUPPORT_TOPICS}
+                />
               </div>
 
               <div className="sm:col-span-2">

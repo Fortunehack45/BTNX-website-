@@ -397,7 +397,7 @@ export default function TrackOrder({
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-16">
       {/* Slim Editorial Header & Search Bar */}
       <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816]">
-        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-7 sm:py-10">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 pt-8 pb-8 sm:pt-10 sm:pb-10 lg:pt-12 lg:pb-12">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div className="space-y-1.5">
               <p className="text-[11px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium">

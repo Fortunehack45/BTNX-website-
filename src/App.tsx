@@ -340,10 +340,34 @@ export default function App() {
     const cleanCode = code.trim().toUpperCase();
     if (!cleanCode) return false;
 
+    // Rule: Promo codes do not apply to products that already have a discount (originalPrice > price)
+    const hasOnlyDiscountedItems =
+      cart.length > 0 &&
+      cart.every(
+        (item) => Boolean(item.product.originalPrice && item.product.originalPrice > item.product.price)
+      );
+
+    if (hasOnlyDiscountedItems) {
+      handleAddToast(
+        "Promo codes cannot be applied to items that already have a discount.",
+        "error"
+      );
+      return false;
+    }
+
+    const someDiscounted = cart.some(
+      (item) => Boolean(item.product.originalPrice && item.product.originalPrice > item.product.price)
+    );
+
     if (cleanCode === "KLAMBY50" || cleanCode === "BTNX50") {
       setAppliedDiscount(0.5);
       setAppliedCode(cleanCode);
-      handleAddToast(`Promo code '${cleanCode}' applied (50% off).`, "success");
+      handleAddToast(
+        someDiscounted
+          ? `Promo code '${cleanCode}' applied (50% off on eligible full-price pieces).`
+          : `Promo code '${cleanCode}' applied (50% off).`,
+        "success"
+      );
       return true;
     }
 
@@ -369,7 +393,12 @@ export default function App() {
           const discountPct = match.discountPercentage || 0;
           setAppliedDiscount(discountPct / 100);
           setAppliedCode(cleanCode);
-          handleAddToast(`Voucher '${cleanCode}' applied (${discountPct}% off).`, "success");
+          handleAddToast(
+            someDiscounted
+              ? `Voucher '${cleanCode}' applied (${discountPct}% off on eligible full-price pieces).`
+              : `Voucher '${cleanCode}' applied (${discountPct}% off).`,
+            "success"
+          );
           return true;
         }
       }
@@ -399,7 +428,12 @@ export default function App() {
       const discountPct = promoData.discountPercentage || 0;
       setAppliedDiscount(discountPct / 100);
       setAppliedCode(cleanCode);
-      handleAddToast(`Voucher '${cleanCode}' applied (${discountPct}% off).`, "success");
+      handleAddToast(
+        someDiscounted
+          ? `Voucher '${cleanCode}' applied (${discountPct}% off on eligible full-price pieces).`
+          : `Voucher '${cleanCode}' applied (${discountPct}% off).`,
+        "success"
+      );
       return true;
     } catch (err) {
       handleAddToast("Unable to validate voucher code right now.", "error");
@@ -591,6 +625,7 @@ export default function App() {
       isWishlisted={wishlist.some((p) => p.id === product.id)}
       onToggleWishlist={handleToggleWishlist}
       onOpenAuth={() => setIsAuthOpen(true)}
+      onAddToast={handleAddToast}
     />
   );
 

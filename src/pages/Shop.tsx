@@ -361,7 +361,7 @@ export default function Shop({
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-0">
       {/* Boutique Catalog Header */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-9 sm:py-12 lg:py-16">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 pt-8 pb-10 sm:pt-10 sm:pb-12 lg:pt-12 lg:pb-16">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-end">
             <div className="lg:col-span-7 space-y-2.5 sm:space-y-3">
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block">
