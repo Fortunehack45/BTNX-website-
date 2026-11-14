@@ -36,7 +36,6 @@ export default function MobileBottomNav({
           onClick={() => {
             onResetHome();
             navigate("/");
-            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-colors duration-150 cursor-pointer ${
             isHomeActive
@@ -57,7 +56,6 @@ export default function MobileBottomNav({
           onClick={() => {
             onNavigatePage();
             navigate("/shop");
-            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-colors duration-150 cursor-pointer ${
             isShopActive
@@ -78,7 +76,6 @@ export default function MobileBottomNav({
           onClick={() => {
             onNavigatePage();
             navigate("/promos");
-            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-colors duration-150 cursor-pointer ${
             isPromosActive
@@ -99,7 +96,6 @@ export default function MobileBottomNav({
           onClick={() => {
             onNavigatePage();
             navigate("/saved");
-            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-colors duration-150 cursor-pointer ${
             isSavedActive
@@ -125,7 +121,6 @@ export default function MobileBottomNav({
           onClick={() => {
             onNavigatePage();
             navigate("/bag");
-            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-colors duration-150 cursor-pointer ${
             isBagActive

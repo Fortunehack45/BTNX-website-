@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
 
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -49,14 +49,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => mediaQuery.removeEventListener("change", handleSystemChange);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     if (resolvedTheme === "dark") {
       root.classList.add("dark");
       root.style.colorScheme = "dark";
+      root.style.backgroundColor = "#111110";
     } else {
       root.classList.remove("dark");
       root.style.colorScheme = "light";
+      root.style.backgroundColor = "#FAF9F7";
     }
     try {
       localStorage.setItem(STORAGE_KEY, theme);

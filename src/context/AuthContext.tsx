@@ -110,9 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await addDoc(collection(db, "notifications"), {
           userId: result.user.uid,
-          title: "Welcome to BTNX Atelier!",
+          title: "Welcome to BTNX",
           message:
-            "Thank you for joining the BTNX Atelier. Enjoy premium bespoke designs, seasonal releases, and early access to curated collections. Use promo code BTNX50 in your cart for 50% off!",
+            "Thanks for signing up with BTNX. You'll get updates on new drops, restocks, and seasonal offers here. Use promo code BTNX50 at checkout for 50% off.",
           type: "promo",
           isRead: false,
           createdAt: new Date().toISOString(),
@@ -141,8 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await addDoc(collection(db, "notifications"), {
         userId: result.user.uid,
-        title: "Welcome to BTNX Atelier!",
-        message: `Dear ${name}, thank you for joining the BTNX collective. Discover exquisite seasonal garments, tailor-made styles, and dynamic coupon offers directly in your customer vault. Use promo code BTNX50 in your cart for 50% off!`,
+        title: "Welcome to BTNX",
+        message: `Hi ${name}, thanks for creating your BTNX account. You'll see order updates, restocks, and promo codes right here. Use promo code BTNX50 at checkout for 50% off.`,
         type: "promo",
         isRead: false,
         createdAt: new Date().toISOString(),

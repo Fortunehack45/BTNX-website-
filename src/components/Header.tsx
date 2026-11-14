@@ -29,6 +29,7 @@ import GalleryImage from "./GalleryImage";
 import BrandLogo from "./BrandLogo";
 import RecentSearchDropdown from "./RecentSearchDropdown";
 import { useSearchHistory } from "../hooks/useSearchHistory";
+import { NotificationRowSkeleton } from "./StoreSkeleton";
 
 interface HeaderProps {
   cart: CartItem[];
@@ -41,6 +42,7 @@ interface HeaderProps {
   onOpenProduct?: (product: Product | null) => void;
   notifications: AppNotification[];
   unreadCount: number;
+  isNotificationsLoading?: boolean;
   onMarkAsRead: (notif: AppNotification) => void;
   onMarkAllAsRead: () => void;
 }
@@ -56,6 +58,7 @@ export default function Header({
   onOpenProduct,
   notifications,
   unreadCount,
+  isNotificationsLoading = false,
   onMarkAsRead,
   onMarkAllAsRead,
 }: HeaderProps) {
@@ -69,6 +72,7 @@ export default function Header({
   const [currentAnnouncementIdx, setCurrentAnnouncementIdx] = useState(0);
   const [activeSection, setActiveSection] = useState<string>("Home");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const scrollLockUntilRef = useRef<number>(0);
   const { recentSearches, saveSearchQuery, removeSearchQuery, clearSearchHistory } =
     useSearchHistory();
 
@@ -165,6 +169,44 @@ export default function Header({
   const isSavedPage = location.pathname === "/saved";
   const isBagPage = location.pathname === "/bag";
   const isNotificationsPage = location.pathname === "/notifications";
+  const isHomePage = location.pathname === "/";
+
+  useEffect(() => {
+    if (isShopPage) {
+      setActiveSection("Shop");
+    } else if (isPromosPage) {
+      setActiveSection("Promos");
+    } else if (isHomePage) {
+      const navState = location.state as { scrollToSection?: string; activeLabel?: string } | null;
+      if (navState?.activeLabel) {
+        scrollLockUntilRef.current = Date.now() + 900;
+        setActiveSection(navState.activeLabel);
+      } else {
+        setActiveSection((prev) => (prev === "Shop" || prev === "Promos" ? "Home" : prev));
+      }
+    }
+  }, [isShopPage, isPromosPage, isHomePage, location.state]);
+
+  useEffect(() => {
+    if (!isHomePage) return;
+    const handleScroll = () => {
+      if (Date.now() < scrollLockUntilRef.current) return;
+      const scrollY = window.scrollY;
+      const collectionEl = document.getElementById("collection");
+      const newArrivalsEl = document.getElementById("new-arrivals");
+
+      if (collectionEl && scrollY >= collectionEl.offsetTop - 220) {
+        setActiveSection("Collection");
+      } else if (newArrivalsEl && scrollY >= newArrivalsEl.offsetTop - 220) {
+        setActiveSection("New");
+      } else {
+        setActiveSection("Home");
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isHomePage]);
+
   const activeItem = isShopPage
     ? "Shop"
     : isPromosPage
@@ -174,45 +216,51 @@ export default function Header({
     : activeSection;
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleNavClick = (label: string, e: React.MouseEvent) => {
+  const scrollToHomeSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    const headerHeight = window.innerWidth >= 1024 ? 68 : 56;
+    const targetTop = Math.max(0, el.getBoundingClientRect().top + window.scrollY - headerHeight);
+    window.scrollTo({ top: targetTop, behavior: "smooth" });
+  };
+
+  const handleNavClick = (label: string, e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     setIsSearchOpen(false);
+    scrollLockUntilRef.current = Date.now() + 900;
     setActiveSection(label);
 
-    if (onOpenProduct) {
-      onOpenProduct(null);
-    }
+    const isViewingProduct = location.search.includes("product=") || location.search.includes("account=");
 
     if (label === "Home") {
-      e.preventDefault();
       onCategoryFilter("");
-      navigate("/");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (!isHomePage || isViewingProduct) {
+        navigate("/");
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } else if (label === "New") {
-      e.preventDefault();
-      navigate("/");
-      setTimeout(() => {
-        document.getElementById("new-arrivals")?.scrollIntoView({ behavior: "smooth" });
-      }, 80);
+      if (!isHomePage || isViewingProduct) {
+        navigate("/", { state: { scrollToSection: "new-arrivals", activeLabel: "New" } });
+      } else {
+        scrollToHomeSection("new-arrivals");
+      }
     } else if (label === "Sale") {
-      e.preventDefault();
-      navigate("/");
-      setTimeout(() => {
-        document.getElementById("end-year-sale")?.scrollIntoView({ behavior: "smooth" });
-      }, 80);
+      if (!isHomePage || isViewingProduct) {
+        navigate("/", { state: { scrollToSection: "end-year-sale", activeLabel: "Sale" } });
+      } else {
+        scrollToHomeSection("end-year-sale");
+      }
     } else if (label === "Collection") {
-      e.preventDefault();
-      navigate("/");
-      setTimeout(() => {
-        document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" });
-      }, 80);
+      if (!isHomePage || isViewingProduct) {
+        navigate("/", { state: { scrollToSection: "collection", activeLabel: "Collection" } });
+      } else {
+        scrollToHomeSection("collection");
+      }
     } else if (label === "Shop") {
-      e.preventDefault();
       navigate("/shop");
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } else if (label === "Promos") {
-      e.preventDefault();
       navigate("/promos");
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -223,11 +271,10 @@ export default function Header({
       saveSearchQuery(trimmed);
       setIsSearchFocused(false);
       setIsSearchOpen(false);
-      if (isShopPage) {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+      if (isShopPage && !location.search.includes("product=")) {
+        window.scrollTo(0, 0);
       } else {
         navigate("/shop");
-        window.scrollTo({ top: 0, behavior: "smooth" });
       }
     }
   };
@@ -235,16 +282,12 @@ export default function Header({
   const handleInspectNotification = (notif: AppNotification) => {
     onMarkAsRead(notif);
     setIsNotificationsOpen(false);
-    if (onOpenProduct) onOpenProduct(null);
     navigate(`/notifications?id=${encodeURIComponent(notif.id)}`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleOpenAllNotifications = () => {
     setIsNotificationsOpen(false);
-    if (onOpenProduct) onOpenProduct(null);
     navigate("/notifications");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const cleanQuery = searchQuery.trim().toLowerCase();
@@ -281,63 +324,44 @@ export default function Header({
         id="global-nav-container"
       >
         <header className="w-full border-b border-[#E6E2DA]/80 dark:border-[#2C2A26]/85">
-          <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 h-14 lg:h-[68px] flex items-center justify-between gap-3 lg:gap-6 min-w-0">
+          <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 h-14 lg:h-[68px] flex items-center justify-between gap-3 lg:gap-6 min-w-0">
             {/* Zone 1: Vector Brand Logo */}
-            <a
-              href="/"
+            <button
+              type="button"
               onClick={(e) => handleNavClick("Home", e)}
-              className="flex items-center text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap shrink-0 hover:opacity-75 transition-opacity py-1"
+              className="flex items-center text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap shrink-0 hover:opacity-75 transition-opacity py-1 cursor-pointer select-none outline-none"
               id="header-logo"
               aria-label="BTNX Home"
             >
               <BrandLogo className="h-6 sm:h-7 lg:h-8 w-auto" />
-            </a>
+            </button>
 
             {/* Zone 2: Single-Line Navigation Links (Desktop lg: 1024px+) */}
             <nav className="hidden lg:flex items-center gap-6 xl:gap-9 min-w-0">
               {NAVIGATION_ITEMS.map((item) => {
                 const isActive = activeItem === item.label;
-                const displayLabel = item.label === "Sale" ? "Archive" : item.label;
-                const linkClasses = `relative py-1.5 text-[12px] font-medium uppercase tracking-[0.14em] whitespace-nowrap shrink-0 transition-colors duration-150 ${
+                const displayLabel = item.label;
+                const linkClasses = `relative py-1.5 text-[12px] font-medium uppercase tracking-[0.14em] whitespace-nowrap shrink-0 transition-colors duration-150 cursor-pointer select-none outline-none ${
                   isActive
                     ? "text-[#141413] dark:text-[#F3F1EC]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
                 }`;
 
-                if (item.label === "Shop" || item.label === "Promos") {
-                  return (
-                    <Link
-                      key={item.label}
-                      to={item.href}
-                      onClick={() => {
-                        setIsSearchOpen(false);
-                        setActiveSection(item.label);
-                        if (onOpenProduct) onOpenProduct(null);
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      className={linkClasses}
-                      id={`nav-item-${item.label.toLowerCase()}`}
-                    >
-                      {displayLabel}
-                      {isActive && (
-                        <span className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-[#141413] dark:bg-[#F3F1EC]" />
-                      )}
-                    </Link>
-                  );
-                }
                 return (
-                  <a
+                  <button
                     key={item.label}
-                    href={item.href}
+                    type="button"
                     onClick={(e) => handleNavClick(item.label, e)}
                     className={linkClasses}
                     id={`nav-item-${item.label.toLowerCase()}`}
                   >
                     {displayLabel}
-                    {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-[#141413] dark:bg-[#F3F1EC]" />
-                    )}
-                  </a>
+                    <span
+                      className={`absolute bottom-0 left-0 right-0 h-[1.5px] bg-[#141413] dark:bg-[#F3F1EC] transition-opacity duration-150 ${
+                        isActive ? "opacity-100" : "opacity-0"
+                      }`}
+                    />
+                  </button>
                 );
               })}
             </nav>
@@ -390,11 +414,11 @@ export default function Header({
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.98 }}
                       transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                      className="fixed inset-x-3 top-[60px] lg:absolute lg:inset-x-auto lg:top-auto lg:right-0 lg:mt-3 lg:w-96 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm shadow-[0_20px_50px_-12px_rgba(20,20,19,0.2)] dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.85)] z-50 overflow-hidden"
+                      className="fixed inset-x-3 top-16 lg:absolute lg:inset-x-auto lg:top-auto lg:right-0 lg:mt-3 lg:w-96 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm shadow-[0_20px_50px_-12px_rgba(20,20,19,0.2)] dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.85)] z-50 overflow-hidden"
                     >
                       <div className="px-5 py-3.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] flex items-center justify-between">
                         <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC]">
-                          Client Alerts
+                          Notifications
                         </span>
                         {currentUser && unreadCount > 0 && (
                           <button
@@ -411,10 +435,10 @@ export default function Header({
                           <div className="p-8 text-center">
                             <Lock className="w-5 h-5 text-[#66625B] dark:text-[#A7A299] mx-auto mb-3 stroke-[1.5]" />
                             <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] mb-1">
-                              Client Access
+                              Sign In
                             </p>
                             <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed mb-4">
-                              Sign in to view dispatch tracking and private seasonal invitations.
+                              Sign in to see your order updates and promo offers.
                             </p>
                             <button
                               onClick={() => {
@@ -426,13 +450,19 @@ export default function Header({
                               Sign In
                             </button>
                           </div>
+                        ) : isNotificationsLoading && notifications.length === 0 ? (
+                          <div className="divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]" aria-busy="true">
+                            {[0, 1, 2].map((row) => (
+                              <NotificationRowSkeleton key={row} />
+                            ))}
+                          </div>
                         ) : notifications.length === 0 ? (
                           <div className="p-8 text-center">
                             <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] mb-1">
-                              No New Alerts
+                              Nothing New Yet
                             </p>
                             <p className="text-xs text-[#66625B] dark:text-[#A7A299]">
-                              Order confirmations and archive notes will appear here.
+                              Order updates and store announcements will appear here.
                             </p>
                           </div>
                         ) : (
@@ -514,7 +544,7 @@ export default function Header({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 6, scale: 0.98 }}
                           transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                          className="fixed inset-x-3 top-[60px] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-64 m3-haze-surface border border-[#E6E2DA]/90 dark:border-[#2C2A26]/90 rounded-md z-50 overflow-hidden"
+                          className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-64 m3-haze-surface border border-[#E6E2DA]/90 dark:border-[#2C2A26]/90 rounded-md z-50 overflow-hidden"
                         >
                           <div className="px-4 py-3.5 border-b border-[#E6E2DA]/80 dark:border-[#2C2A26]/80">
                             <p className="text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
@@ -548,7 +578,6 @@ export default function Header({
                             <button
                               onClick={() => {
                                 setIsProfileDropdownOpen(false);
-                                if (onOpenProduct) onOpenProduct(null);
                                 navigate("/notifications");
                               }}
                               className="flex w-full items-center justify-between gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
@@ -566,7 +595,6 @@ export default function Header({
                             <button
                               onClick={() => {
                                 setIsProfileDropdownOpen(false);
-                                if (onOpenProduct) onOpenProduct(null);
                                 navigate("/saved");
                               }}
                               className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
@@ -645,7 +673,7 @@ export default function Header({
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 className="border-t border-[#E6E2DA]/80 dark:border-[#2C2A26]/80 m3-haze-surface overflow-visible"
               >
-                <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-6 sm:py-7">
+                <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-7">
                   <div className="relative">
                     <form
                       onSubmit={handleSearchSubmit}
@@ -655,7 +683,7 @@ export default function Header({
                       <input
                         ref={searchInputRef}
                         type="text"
-                        placeholder="Search silhouettes, heavy jersey, leather, or wool..."
+                        placeholder="Search hoodies, tees, jackets, or knitwear..."
                         value={searchQuery}
                         onFocus={() => setIsSearchFocused(true)}
                         onBlur={() => setIsSearchFocused(false)}
@@ -704,7 +732,7 @@ export default function Header({
                   <div className="mt-6">
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-[11px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] font-medium">
-                        {cleanQuery ? `Results (${suggestedProducts.length})` : "Featured Archive"}
+                        {cleanQuery ? `Results (${suggestedProducts.length})` : "Featured Pieces"}
                       </span>
                       <button
                         onClick={() => {
@@ -714,7 +742,7 @@ export default function Header({
                         }}
                         className="text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>View Full Catalog</span>
+                        <span>Shop All</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>

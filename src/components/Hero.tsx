@@ -69,7 +69,7 @@ export default function Hero({ onOpenProduct }: HeroProps) {
   };
 
   const handleScrollToCollection = () => {
-    document.getElementById("new-arrivals")?.scrollIntoView({ behavior: "smooth" });
+    document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
@@ -77,16 +77,16 @@ export default function Hero({ onOpenProduct }: HeroProps) {
       id="hero-section"
       className="w-full bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200"
     >
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-7 sm:py-12 lg:py-16">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-7 sm:py-12 lg:py-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-stretch">
           {/* Left Editorial Column */}
           <div className="lg:col-span-5 flex flex-col justify-between gap-7 sm:gap-10 py-1 lg:py-6">
-            <div className="flex items-center gap-3 text-xs text-[#66625B] dark:text-[#A7A299]">
+            <div className="flex items-center gap-2.5 text-xs text-[#66625B] dark:text-[#A7A299] whitespace-nowrap">
               <span className="uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium">
-                Season 04
+                BTNX Store
               </span>
               <span aria-hidden="true">·</span>
-              <span className="uppercase tracking-[0.14em]">Autumn–Winter Lookbook</span>
+              <span className="uppercase tracking-[0.14em]">Official Collection</span>
             </div>
 
             <div className="space-y-5 sm:space-y-6 my-auto">
@@ -94,35 +94,37 @@ export default function Hero({ onOpenProduct }: HeroProps) {
                 id="hero-headline"
                 className="font-display text-[clamp(2.4rem,4.8vw,4.6rem)] font-medium leading-[1.03] tracking-[-0.015em] text-[#141413] dark:text-[#F3F1EC] text-balance"
               >
-                Tailored streetwear in{" "}
-                <em className="italic font-normal text-[#966830] dark:text-[#C89B62]">architectural</em>{" "}
-                form.
+                Everyday style,{" "}
+                <em className="italic font-normal text-[#966830] dark:text-[#C89B62]">done right.</em>
               </h1>
 
               <p className="text-[15px] sm:text-base text-[#66625B] dark:text-[#A7A299] leading-[1.68] max-w-md">
-                Heavyweight organic cottons, structured wool outerwear, and restrained silhouettes crafted for quiet, everyday permanence.
+                Welcome to BTNX. Quality clothing, clean fits, and standout pieces made to keep you looking sharp wherever you go.
               </p>
 
-              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-4 sm:gap-6 pt-2">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-3 sm:gap-5 pt-2">
                 <button
                   onClick={handleScrollToCollection}
                   id="hero-explore-btn"
-                  className="w-full sm:w-auto min-h-[48px] px-8 py-3.5 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.15em] transition-colors flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer rounded-sm"
+                  className="min-h-[46px] sm:min-h-[48px] px-4 sm:px-8 py-3 sm:py-3.5 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-[11px] sm:text-xs font-medium uppercase tracking-[0.12em] sm:tracking-[0.15em] transition-colors flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer rounded-sm"
                 >
                   <span>Explore Collection</span>
                 </button>
 
                 <Link
                   to="/shop"
-                  className="min-h-[44px] inline-flex items-center justify-center sm:justify-start text-xs font-medium uppercase tracking-[0.15em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] sm:border-b sm:border-[#141413] dark:sm:border-[#F3F1EC] sm:hover:border-[#966830] dark:sm:hover:border-[#C89B62] sm:pb-1 transition-colors whitespace-nowrap shrink-0"
+                  className="min-h-[46px] sm:min-h-[48px] px-4 sm:px-6 py-3 sm:py-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] bg-white/75 dark:bg-[#191816] inline-flex items-center justify-center text-[11px] sm:text-xs font-medium uppercase tracking-[0.12em] sm:tracking-[0.15em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors whitespace-nowrap shrink-0 rounded-sm"
                 >
                   <span>Browse Catalog</span>
                 </Link>
               </div>
             </div>
 
-            <div className="pt-6 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex items-center text-xs text-[#66625B] dark:text-[#A7A299]">
-              <span>Lagos Atelier · Worldwide Dispatch</span>
+            <div className="pt-5 sm:pt-6 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-2 text-xs text-[#66625B] dark:text-[#A7A299]">
+              <span className="whitespace-nowrap">Osun Store · Nationwide Delivery</span>
+              <span className="font-mono text-[11px] text-[#966830] dark:text-[#C89B62] whitespace-nowrap">
+                Code: BTNX50
+              </span>
             </div>
           </div>
 
@@ -259,18 +261,33 @@ export default function Hero({ onOpenProduct }: HeroProps) {
           </div>
         </div>
 
-        {/* Clean 3-Column Atelier Strip below the split */}
+        {/* Clean 3-Column Store Highlights Strip below the split */}
         <div
           id="hero-marquee-bar"
-          className="mt-8 sm:mt-10 pt-6 sm:pt-7 border-t border-[#E6E2DA] dark:border-[#2C2A26] grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6"
+          className="mt-8 sm:mt-10 pt-6 sm:pt-7 border-t border-[#E6E2DA] dark:border-[#2C2A26] grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6"
         >
           {GALLERY_INDEX_ITEMS.map((item) => (
-            <div key={item.code} className="flex items-baseline gap-3">
-              <span className="font-mono text-xs text-[#966830] dark:text-[#C89B62] tabular-nums">{item.code}.</span>
-              <span className="text-xs font-medium tracking-[0.08em] text-[#141413] dark:text-[#F3F1EC] uppercase">
+            <button
+              key={item.code}
+              type="button"
+              onClick={() => {
+                if (item.code === "01") {
+                  document.getElementById("new-arrivals")?.scrollIntoView({ behavior: "smooth" });
+                } else if (item.code === "02") {
+                  navigate("/shop");
+                } else {
+                  navigate("/promos");
+                }
+              }}
+              className="flex items-center gap-2.5 text-left group cursor-pointer min-w-0"
+            >
+              <span className="font-mono text-xs text-[#966830] dark:text-[#C89B62] tabular-nums shrink-0">
+                {item.code}.
+              </span>
+              <span className="text-[11px] sm:text-xs font-medium tracking-[0.06em] sm:tracking-[0.08em] text-[#141413] dark:text-[#F3F1EC] group-hover:text-[#966830] dark:group-hover:text-[#C89B62] transition-colors uppercase whitespace-nowrap truncate">
                 {item.label}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       </div>

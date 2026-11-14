@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 interface GalleryImageProps {
   src?: string;
@@ -9,9 +9,16 @@ interface GalleryImageProps {
 
 export default function GalleryImage({ src, alt, className = "", id }: GalleryImageProps) {
   const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setHasError(false);
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
   }, [src]);
 
   if (!src || hasError) {
@@ -24,7 +31,7 @@ export default function GalleryImage({ src, alt, className = "", id }: GalleryIm
         <div className="w-8 h-[1px] bg-[#966830] dark:bg-[#C89B62] mb-3" />
         <span className="font-display text-lg text-[#141413] dark:text-[#F3F1EC] tracking-wide">{alt}</span>
         <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#66625B] dark:text-[#A7A299] mt-1">
-          BTNX Archive
+          BTNX Store
         </span>
       </div>
     );
@@ -32,12 +39,14 @@ export default function GalleryImage({ src, alt, className = "", id }: GalleryIm
 
   return (
     <img
+      ref={imgRef}
       id={id}
       src={src}
       alt={alt}
       referrerPolicy="no-referrer"
+      onLoad={() => setIsLoaded(true)}
       onError={() => setHasError(true)}
-      className={className}
+      className={`${className} ${!isLoaded ? "skeleton-shimmer" : ""}`}
     />
   );
 }

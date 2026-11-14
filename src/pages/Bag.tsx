@@ -59,7 +59,15 @@ export default function Bag({
   const navigate = useNavigate();
   const [voucherInput, setVoucherInput] = useState("");
   const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
-  const [checkoutStep, setCheckoutStep] = useState<"cart" | "payment" | "processing" | "success">("cart");
+  const [checkoutStep, setCheckoutStep] = useState<"cart" | "payment" | "processing" | "success">(() => {
+    try {
+      const saved = sessionStorage.getItem("btnx_checkout_step");
+      if (saved === "payment" && cart.length > 0) return "payment";
+    } catch {
+      // Ignore storage errors
+    }
+    return "cart";
+  });
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
   const [cardHolder, setCardHolder] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -68,7 +76,16 @@ export default function Bag({
   const [processingMsg, setProcessingMsg] = useState("");
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo(0, 0);
+    try {
+      if (checkoutStep === "cart" || checkoutStep === "payment") {
+        sessionStorage.setItem("btnx_checkout_step", checkoutStep);
+      } else {
+        sessionStorage.removeItem("btnx_checkout_step");
+      }
+    } catch {
+      // Ignore storage errors
+    }
   }, [checkoutStep]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
@@ -120,9 +137,9 @@ export default function Bag({
 
     setCheckoutStep("processing");
     const messages = [
-      "Verifying encrypted payment session...",
-      "Confirming atelier inventory allocation...",
-      "Recording order & dispatch notice...",
+      "Checking payment details...",
+      "Confirming stock availability...",
+      "Finishing your order...",
     ];
 
     let idx = 0;
@@ -175,11 +192,11 @@ export default function Bag({
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-0">
       {/* Page Header */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="space-y-2">
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block">
-                BTNX Atelier Checkout
+                Checkout
               </span>
               <h1 className="font-display text-4xl sm:text-5xl font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.015em]">
                 {checkoutStep === "payment"
@@ -222,7 +239,7 @@ export default function Bag({
         </div>
       </div>
 
-      <section className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-14">
+      <section className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12 lg:py-14">
         {checkoutStep === "success" ? (
           <div className="max-w-lg mx-auto bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-8 sm:p-10 text-center space-y-6">
             <div className="w-12 h-12 border border-[#141413] dark:border-[#F3F1EC] rounded-sm flex items-center justify-center mx-auto">
@@ -306,7 +323,7 @@ export default function Bag({
             <ShoppingBag className="w-8 h-8 text-[#66625B] dark:text-[#A7A299] mx-auto mb-3 stroke-[1.25]" />
             <h2 className="font-display text-3xl text-[#141413] dark:text-[#F3F1EC] mb-2">Your bag is empty</h2>
             <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-md mx-auto mb-6 leading-relaxed">
-              Select pieces from the seasonal archive or review active voucher codes before checkout.
+              Add a few items from the shop or check current promo codes before checking out.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
@@ -314,7 +331,7 @@ export default function Bag({
                 onClick={() => navigate("/shop")}
                 className="w-full sm:w-auto min-h-[46px] px-7 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-sm transition-colors cursor-pointer"
               >
-                Explore Seasonal Catalog
+                Browse Catalog
               </button>
               <Link
                 to="/promos"
@@ -429,18 +446,18 @@ export default function Bag({
             {/* Left Column: Packaging Progress & Bag Items */}
             <div className="lg:col-span-7 space-y-5">
               <div className="p-5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
-                <div className="flex justify-between items-center text-[11px] mb-2.5">
-                  <span className="uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299]">
-                    Complimentary Archival Packaging
+                <div className="flex justify-between items-center gap-2 text-[11px] mb-2.5">
+                  <span className="uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] truncate">
+                    Complimentary Luxury Gift Box
                   </span>
-                  <span className="font-mono text-[#141413] dark:text-[#F3F1EC] tabular-nums">
-                    {subtotal >= 150 ? "Unlocked" : `${formatNaira(150 - subtotal)} away`}
+                  <span className="font-mono text-[#141413] dark:text-[#F3F1EC] tabular-nums whitespace-nowrap shrink-0">
+                    {subtotal >= 134 ? "Unlocked" : `${formatNaira(134 - subtotal)} away`}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-[#F4F1EC] dark:bg-[#22211E] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#141413] dark:bg-[#C89B62] transition-all duration-300"
-                    style={{ width: `${Math.min((subtotal / 150) * 100, 100)}%` }}
+                    style={{ width: `${Math.min((subtotal / 134) * 100, 100)}%` }}
                   />
                 </div>
               </div>
@@ -611,7 +628,7 @@ export default function Bag({
                 </div>
                 {archiveSavings > 0 && (
                   <div className="flex justify-between text-[#966830] dark:text-[#C89B62]">
-                    <span>Archive Reduction Saved</span>
+                    <span>Sale Discount</span>
                     <span className="font-mono tabular-nums">
                       -{formatNaira(archiveSavings)}
                     </span>
@@ -619,15 +636,15 @@ export default function Bag({
                 )}
                 {appliedDiscount > 0 && (
                   <div className="flex justify-between text-[#966830] dark:text-[#C89B62]">
-                    <span>Privilege ({appliedCode})</span>
+                    <span>Promo ({appliedCode})</span>
                     <span className="font-mono tabular-nums">
                       -{formatNaira(discountAmount)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span>Express Courier</span>
-                  <span className="text-[#141413] dark:text-[#F3F1EC]">Complimentary</span>
+                  <span>Nationwide Delivery</span>
+                  <span className="text-[#141413] dark:text-[#F3F1EC]">Free</span>
                 </div>
                 <div className="pt-3 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex justify-between items-baseline text-[#141413] dark:text-[#F3F1EC]">
                   <span className="font-medium text-sm">Total</span>

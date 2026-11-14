@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect } from "react";
 import { AnimatePresence, MotionConfig } from "motion/react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import NewArrivals from "./components/NewArrivals";
@@ -19,7 +19,10 @@ import AuthModal from "./components/AuthModal";
 import InvoiceModal from "./components/InvoiceModal";
 import Notification, { Toast } from "./components/Notification";
 import MobileBottomNav from "./components/MobileBottomNav";
+import { AppBootSkeleton } from "./components/StoreSkeleton";
+import SeoManager from "./components/SeoManager";
 import { Product, CartItem, Order } from "./types";
+import { NEW_YEAR_PRODUCTS } from "./data";
 import { useAuth } from "./context/AuthContext";
 import { useNotifications } from "./hooks/useNotifications";
 import { db, handleFirestoreError, OperationType } from "./lib/firebase";
@@ -42,9 +45,15 @@ import {
 export default function App() {
   const { currentUser, userData, loading } = useAuth();
   const navigate = useNavigate();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(
-    currentUser?.uid
-  );
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    notifications,
+    unreadCount,
+    isLoading: isNotificationsLoading,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications(currentUser?.uid);
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const savedCart = localStorage.getItem("btnx_cart") || localStorage.getItem("klamby_cart");
@@ -94,16 +103,89 @@ export default function App() {
     return unsubscribe;
   }, [currentUser]);
 
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [activeProfileTab, setActiveProfileTab] = useState<"profile" | "orders" | "favorites">("profile");
-  const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [appliedCode, setAppliedCode] = useState<string>("");
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Persist current route so reloads (including preview container reloads) stay on the active page
+  useEffect(() => {
+    try {
+      const fullRoute = `${location.pathname}${location.search}`;
+      sessionStorage.setItem("btnx_last_route", fullRoute);
+      localStorage.setItem("btnx_last_route", fullRoute);
+    } catch {
+      // ignore storage errors
+    }
+  }, [location.pathname, location.search]);
+
+  // Derive activeProduct and account modal state from URL query params so reload preserves them
+  const urlProductId = searchParams.get("product");
+  const activeProduct: Product | null = urlProductId
+    ? NEW_YEAR_PRODUCTS.find((p) => p.id === urlProductId) || null
+    : null;
+
+  const accountParam = searchParams.get("account") as "profile" | "orders" | "favorites" | null;
+  const isProfileOpen = Boolean(accountParam);
+  const activeProfileTab: "profile" | "orders" | "favorites" =
+    accountParam === "orders" || accountParam === "favorites" ? accountParam : "profile";
+
+  // Synchronously position at the top of the new route/product view (or target section) before paint so the previous page never visibly scrolls up
+  useLayoutEffect(() => {
+    const navState = location.state as { scrollToSection?: string } | null;
+    if (location.pathname === "/" && navState?.scrollToSection && !activeProduct) {
+      const targetEl = document.getElementById(navState.scrollToSection);
+      if (targetEl) {
+        const headerHeight = window.innerWidth >= 1024 ? 68 : 56;
+        const targetTop = Math.max(0, targetEl.getBoundingClientRect().top + window.scrollY - headerHeight);
+        window.scrollTo(0, targetTop);
+        return;
+      }
+    }
+    window.scrollTo(0, 0);
+  }, [location.pathname, location.state, activeProduct?.id]);
+
+  const setActiveProduct = (product: Product | null) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (product) {
+          next.set("product", product.id);
+          next.delete("account");
+        } else {
+          next.delete("product");
+        }
+        return next;
+      },
+      { replace: false }
+    );
+  };
+
+  const handleOpenProfileModal = (tab: "profile" | "orders" | "favorites" = "profile") => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("product");
+        next.set("account", tab);
+        return next;
+      },
+      { replace: false }
+    );
+  };
+
+  const handleCloseProfileModal = () => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("account");
+        return next;
+      },
+      { replace: false }
+    );
+  };
 
   useEffect(() => {
     localStorage.setItem("btnx_cart", JSON.stringify(cart));
@@ -130,10 +212,7 @@ export default function App() {
   };
 
   const handleOpenCart = () => {
-    setActiveProduct(null);
-    setIsProfileOpen(false);
     navigate("/bag");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleDownloadInvoice = (order: Order) => {
@@ -148,7 +227,7 @@ export default function App() {
     if (cleanCode === "KLAMBY50" || cleanCode === "BTNX50") {
       setAppliedDiscount(0.5);
       setAppliedCode(cleanCode);
-      handleAddToast(`Voucher '${cleanCode}' applied (50% privilege).`, "success");
+      handleAddToast(`Promo code '${cleanCode}' applied (50% off).`, "success");
       return true;
     }
 
@@ -234,7 +313,7 @@ export default function App() {
           await addDoc(collection(db, "notifications"), {
             userId: currentUser.uid,
             title: "Order Confirmed",
-            message: `Your order #${newOrder.id} of ${formatNaira(newOrder.total)} was received and is now processing in our atelier.`,
+            message: `Your order #${newOrder.id} (${formatNaira(newOrder.total)}) has been received and is being prepared for shipping.`,
             type: "order_status",
             isRead: false,
             createdAt: new Date().toISOString(),
@@ -388,7 +467,6 @@ export default function App() {
       cart={cart}
       onClose={() => {
         setActiveProduct(null);
-        window.scrollTo({ top: 0, behavior: "smooth" });
       }}
       onAddToBag={handleAddToBag}
       onUpdateQuantity={handleUpdateQuantity}
@@ -400,10 +478,9 @@ export default function App() {
     />
   );
 
-  if (loading) return null;
-
   return (
     <MotionConfig reducedMotion="user">
+    <SeoManager activeProduct={activeProduct} />
     <div
       className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] font-sans text-[#111110] dark:text-[#F3F1EC] antialiased flex flex-col justify-between selection:bg-[#111110] selection:text-[#FAF9F7] dark:selection:bg-[#F3F1EC] dark:selection:text-[#111110] transition-colors duration-200"
       id="main-layout"
@@ -419,21 +496,23 @@ export default function App() {
         onCategoryFilter={setCategoryFilter}
         onOpenProfile={(tab) => {
           if (tab === "favorites") {
-            setActiveProduct(null);
             navigate("/saved");
             return;
           }
-          setActiveProfileTab(tab || "profile");
-          setIsProfileOpen(true);
+          handleOpenProfileModal(tab || "profile");
         }}
         onOpenProduct={setActiveProduct}
         notifications={notifications}
         unreadCount={unreadCount}
+        isNotificationsLoading={isNotificationsLoading}
         onMarkAsRead={markAsRead}
         onMarkAllAsRead={markAllAsRead}
       />
 
       <main className="flex-grow">
+        {loading ? (
+          <AppBootSkeleton />
+        ) : (
         <Routes>
           <Route
             path="/"
@@ -444,7 +523,6 @@ export default function App() {
                 <>
                   <Hero onOpenProduct={setActiveProduct} />
                   <NewArrivals onCategoryFilter={setCategoryFilter} />
-                  <BigSale onCategoryFilter={setCategoryFilter} />
                   <NewYearCollection
                     cart={cart}
                     categoryFilter={categoryFilter}
@@ -462,6 +540,7 @@ export default function App() {
                     wishlist={wishlist}
                     onToggleWishlist={handleToggleWishlist}
                   />
+                  <BigSale onCategoryFilter={setCategoryFilter} />
                   <Newsletter onAddToast={handleAddToast} />
                 </>
               )
@@ -542,10 +621,7 @@ export default function App() {
                   appliedCode={appliedCode}
                   onApplyVoucher={handleApplyVoucher}
                   onRemoveVoucher={handleRemoveVoucher}
-                  onOpenOrders={() => {
-                    setActiveProfileTab("orders");
-                    setIsProfileOpen(true);
-                  }}
+                  onOpenOrders={() => handleOpenProfileModal("orders")}
                   onViewInvoice={(order) => setInvoiceOrder(order)}
                   onDownloadInvoice={handleDownloadInvoice}
                 />
@@ -561,6 +637,7 @@ export default function App() {
                 <Notifications
                   notifications={notifications}
                   unreadCount={unreadCount}
+                  isLoading={isNotificationsLoading}
                   currentUser={currentUser}
                   orders={orders}
                   onMarkAsRead={markAsRead}
@@ -568,10 +645,7 @@ export default function App() {
                   onOpenAuth={() => setIsAuthOpen(true)}
                   onViewInvoice={(order) => setInvoiceOrder(order)}
                   onDownloadInvoice={handleDownloadInvoice}
-                  onOpenOrders={() => {
-                    setActiveProfileTab("orders");
-                    setIsProfileOpen(true);
-                  }}
+                  onOpenOrders={() => handleOpenProfileModal("orders")}
                   onApplyPromoToBag={async (code) => {
                     await handleApplyVoucher(code);
                     handleOpenCart();
@@ -583,19 +657,14 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        )}
       </main>
 
       <Footer
         onAddToast={handleAddToast}
-        onNavigateHome={(sectionId) => {
-          setActiveProduct(null);
-          if (sectionId) {
-            setTimeout(() => {
-              document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
-            }, 90);
-          } else {
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }
+        onNavigateHome={() => {
+          setCategoryFilter("");
+          setSearchQuery("");
         }}
       />
 
@@ -608,12 +677,11 @@ export default function App() {
           <UserProfileModal
             key="user-profile-modal"
             isOpen={isProfileOpen}
-            onClose={() => setIsProfileOpen(false)}
+            onClose={handleCloseProfileModal}
             orders={orders}
             wishlist={wishlist}
             onToggleWishlist={handleToggleWishlist}
             onOpenProduct={(product) => {
-              setIsProfileOpen(false);
               setActiveProduct(product);
             }}
             onAddToast={handleAddToast}
@@ -621,6 +689,7 @@ export default function App() {
             onOpenCart={handleOpenCart}
             onViewInvoice={(order) => setInvoiceOrder(order)}
             initialTab={activeProfileTab}
+            onTabChange={(tab) => handleOpenProfileModal(tab)}
           />
         )}
       </AnimatePresence>
@@ -642,13 +711,8 @@ export default function App() {
           cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
           wishlistCount={wishlist.length}
           isOverlayProfileOpen={isProfileOpen}
-          onNavigatePage={() => {
-            setActiveProduct(null);
-            setIsProfileOpen(false);
-          }}
+          onNavigatePage={() => {}}
           onResetHome={() => {
-            setActiveProduct(null);
-            setIsProfileOpen(false);
             setCategoryFilter("");
             setSearchQuery("");
           }}

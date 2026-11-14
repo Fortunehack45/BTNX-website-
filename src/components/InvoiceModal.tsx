@@ -76,7 +76,7 @@ export default function InvoiceModal({
           <div className="px-5 sm:px-8 py-4 m3-haze-bar border-b border-[#E6E2DA] dark:border-[#2C2A26] flex flex-wrap items-center justify-between gap-3 no-print">
             <div className="flex items-center gap-2.5">
               <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
-                Client Invoice
+                Order Invoice
               </span>
               <span className="text-[#E6E2DA] dark:text-[#2C2A26]">·</span>
               <span className="font-mono text-xs text-[#141413] dark:text-[#F3F1EC] tabular-nums">
@@ -122,15 +122,15 @@ export default function InvoiceModal({
               <div className="space-y-2">
                 <BrandLogo className="h-7 w-auto text-[#141413] dark:text-[#F3F1EC]" />
                 <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                  BTNX Contemporary Atelier · Lagos · London · Tokyo
+                  BTNX Store · Osun · Nationwide
                   <br />
-                  concierge@btnx.studio
+                  hello@btnx.store
                 </p>
               </div>
 
               <div className="sm:text-right space-y-1">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium">
-                  Commercial Receipt
+                  Order Receipt
                 </p>
                 <h2 className="font-mono text-lg font-semibold text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                   {invoiceNumber}
@@ -141,14 +141,14 @@ export default function InvoiceModal({
               </div>
             </motion.div>
 
-            {/* Client & Dispatch Info */}
+            {/* Customer & Shipping Info */}
             <motion.div variants={modalItemVariants} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="p-4 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm space-y-1.5">
                 <span className="text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] font-medium block">
-                  Billed &amp; Dispatched To
+                  Billed To
                 </span>
                 <p className="text-sm font-medium text-[#141413] dark:text-[#F3F1EC]">
-                  {clientInfo?.name || "BTNX Atelier Client"}
+                  {clientInfo?.name || "Customer"}
                 </p>
                 {clientInfo?.email && (
                   <p className="font-mono text-xs text-[#66625B] dark:text-[#A7A299] break-all">
@@ -161,34 +161,34 @@ export default function InvoiceModal({
                   </p>
                 )}
                 <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed pt-1">
-                  {addressLine || "Express Client Courier · Address Confirmed on File"}
+                  {addressLine || "Express Shipping · Address on File"}
                 </p>
               </div>
 
               <div className="p-4 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm space-y-2 text-xs">
                 <span className="text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] font-medium block">
-                  Order &amp; Fulfillment Summary
+                  Order Summary
                 </span>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#66625B] dark:text-[#A7A299]">Order Reference</span>
+                  <span className="text-[#66625B] dark:text-[#A7A299]">Order ID</span>
                   <span className="font-mono font-medium text-[#141413] dark:text-[#F3F1EC]">{order.id}</span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#66625B] dark:text-[#A7A299]">Waybill Tracking</span>
+                  <span className="text-[#66625B] dark:text-[#A7A299]">Tracking</span>
                   <span className="font-mono font-medium text-[#141413] dark:text-[#F3F1EC]">{trackingNumber}</span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#66625B] dark:text-[#A7A299]">Fulfillment Status</span>
+                  <span className="text-[#66625B] dark:text-[#A7A299]">Status</span>
                   <span className="inline-flex items-center gap-1 font-medium text-[#966830] dark:text-[#C89B62]">
                     <Truck className="w-3 h-3" />
                     {order.status}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#66625B] dark:text-[#A7A299]">Settlement</span>
+                  <span className="text-[#66625B] dark:text-[#A7A299]">Payment</span>
                   <span className="inline-flex items-center gap-1 font-medium text-[#141413] dark:text-[#F3F1EC]">
                     <CheckCircle2 className="w-3 h-3 text-[#966830] dark:text-[#C89B62]" />
-                    Paid in Full
+                    Paid
                   </span>
                 </div>
               </div>
@@ -240,7 +240,7 @@ export default function InvoiceModal({
               className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-2"
             >
               <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] max-w-xs leading-relaxed">
-                This receipt serves as your official proof of purchase for 14-day complimentary exchanges and archival garment care.
+                Keep this receipt as proof of purchase for 14-day free exchanges and product care support.
               </p>
 
               <div className="w-full sm:w-72 space-y-2 text-xs">
@@ -252,17 +252,17 @@ export default function InvoiceModal({
                 </div>
                 {voucherDiscount > 0 && (
                   <div className="flex justify-between text-[#966830] dark:text-[#C89B62]">
-                    <span>Privilege Discount</span>
+                    <span>Promo Discount</span>
                     <span className="font-mono tabular-nums">-{formatNaira(voucherDiscount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-[#66625B] dark:text-[#A7A299]">
-                  <span>Express Courier</span>
-                  <span className="text-[#141413] dark:text-[#F3F1EC]">Complimentary</span>
+                  <span>Express Shipping</span>
+                  <span className="text-[#141413] dark:text-[#F3F1EC]">Free</span>
                 </div>
                 <div className="pt-2.5 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex justify-between items-baseline">
                   <span className="font-medium text-sm text-[#141413] dark:text-[#F3F1EC]">
-                    Total Settled
+                    Total Paid
                   </span>
                   <span className="font-mono text-xl font-semibold text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                     {formatNaira(order.total)}

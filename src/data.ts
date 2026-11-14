@@ -24,7 +24,7 @@ export const NAVIGATION_ITEMS: NavItem[] = [
 
 export const HERO_MEDIA = {
   image: heroGalleryLookbook,
-  alt: "BTNX Autumn–Winter Editorial Lookbook in Limestone Gallery",
+  alt: "BTNX Store Collection",
 };
 
 export interface HeroSlide {
@@ -41,53 +41,53 @@ export const HERO_SLIDES: HeroSlide[] = [
   {
     id: "slide-1",
     lookNumber: "Look 01",
-    title: "Obsidian Wool Overcoat & Draped Trouser",
-    subtitle: "Limestone Gallery · Season 04 Opening",
+    title: "Wool Overcoat & Wide Trouser",
+    subtitle: "BTNX Collection · Featured Look",
     image: heroGalleryLookbook,
-    alt: "BTNX Autumn–Winter Editorial Lookbook in Limestone Gallery",
+    alt: "BTNX Store Collection",
     productId: "ny-6",
   },
   {
     id: "slide-2",
     lookNumber: "Look 02",
-    title: "Royale Leather Cropped Moto",
-    subtitle: "Outerwear · 25% Archive Reduction",
+    title: "Royale Cropped Leather Jacket",
+    subtitle: "Outerwear · 25% Off",
     image: productRoyaleLeather,
-    alt: "Royale Leather cropped biker silhouette with silver hardware",
+    alt: "Royale Cropped Leather Jacket with zip hardware",
     productId: "ny-6",
   },
   {
     id: "slide-3",
     lookNumber: "Look 03",
-    title: "Cropped Space Wool Overshirt",
-    subtitle: "Womenswear · Brushed Check Tailoring",
+    title: "Cropped Space Check Overshirt",
+    subtitle: "Womenswear · Brushed Wool Blend",
     image: productCroppedSpace,
-    alt: "Cropped Space brushed wool-blend check overshirt",
+    alt: "Cropped Space brushed wool check overshirt",
     productId: "ny-2",
   },
   {
     id: "slide-4",
     lookNumber: "Look 04",
-    title: "Birmania Sunt Loopback Crewneck",
-    subtitle: "Unisex · 460gsm Organic Cotton",
+    title: "Birmania Sunt Cotton Crewneck",
+    subtitle: "Unisex · 460gsm Heavy Cotton",
     image: productBirmaniaSunt,
-    alt: "Birmania Sunt deep slate-navy raglan crewneck",
+    alt: "Birmania Sunt navy raglan crewneck",
     productId: "ny-3",
   },
   {
     id: "slide-5",
     lookNumber: "Look 05",
-    title: "Purple Brooklyn Heavy Fleece",
-    subtitle: "Limited Run · Double-Lined Construction",
+    title: "Purple Brooklyn Fleece Hoodie",
+    subtitle: "Limited Run · Double-Lined Hood",
     image: productPurpleBrooklyn,
-    alt: "Purple Brooklyn structured heavyweight hoodie",
+    alt: "Purple Brooklyn heavyweight hoodie",
     productId: "ny-1",
   },
   {
     id: "slide-6",
     lookNumber: "Look 06",
-    title: "Melburne College Ribbed Cardigan",
-    subtitle: "Classic Knitwear · Horn Button Placket",
+    title: "Melburne College Knit Cardigan",
+    subtitle: "Knitwear · Horn Button Front",
     image: productMelburneCollege,
     alt: "Melburne College ribbed knit cardigan",
     productId: "ny-5",
@@ -96,35 +96,35 @@ export const HERO_SLIDES: HeroSlide[] = [
 
 export const ATELIER_BACKDROP = {
   image: newsletterAtelierBackdrop,
-  alt: "BTNX Limestone Atelier Studio",
+  alt: "BTNX Osun Store",
 };
 
 export const NEW_ARRIVALS = [
   {
     id: "arr-1",
     index: "01",
-    title: "Under ₦150,000",
-    subtitle: "Essential heavy-jersey silhouettes",
+    title: "Under ₦125,000",
+    subtitle: "Everyday heavy-cotton staples",
     image: arrivalUnder150k,
-    buttonText: "Explore Edit",
+    buttonText: "Shop Edit",
     href: "#under-100",
   },
   {
     id: "arr-2",
     index: "02",
     title: "Menswear",
-    subtitle: "Architectural wool & tailored layers",
+    subtitle: "Wool coats & layered essentials",
     image: arrivalMenswear,
-    buttonText: "Explore Edit",
+    buttonText: "Shop Edit",
     href: "#men",
   },
   {
     id: "arr-3",
     index: "03",
     title: "Womenswear",
-    subtitle: "Draped suiting & studio outerwear",
+    subtitle: "Tailored coats & relaxed knits",
     image: arrivalWomenswear,
-    buttonText: "Explore Edit",
+    buttonText: "Shop Edit",
     href: "#women",
   },
 ];
@@ -132,18 +132,18 @@ export const NEW_ARRIVALS = [
 export const END_YEAR_SALES = [
   {
     id: "sale-1",
-    index: "Archive 01",
+    index: "Edit 01",
     title: "The Modern Classic",
-    description: "Tailored knitwear, monochrome coats, and structured everyday staples.",
+    description: "Clean-cut knitwear, monochrome coats, and daily staples.",
     image: campaignModernClassic,
     buttonText: "View Womenswear",
     href: "#modern-classic",
   },
   {
     id: "sale-2",
-    index: "Archive 02",
+    index: "Edit 02",
     title: "Heritage Utility",
-    description: "Heavyweight canvas outerwear, organic fleece, and modular layers.",
+    description: "Heavy canvas jackets, brushed fleece, and layered outerwear.",
     image: campaignOldButGold,
     buttonText: "View Menswear",
     href: "#old-but-gold",
@@ -160,7 +160,7 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
     images: [productPurpleBrooklyn, arrivalUnder150k, campaignOldButGold],
     badge: "Limited Run",
     description:
-      "A structured heavyweight fleece hoodie in dusty plum. Engineered with dropped shoulders, deep ribbed cuffs, a double-lined hood, and a clean kangaroo pocket.",
+      "Heavyweight brushed fleece hoodie in dusty plum. Cut with dropped shoulders, thick ribbed cuffs, a double-lined hood, and a front pocket.",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Dusty Plum", "Lavender", "Slate"],
   },
@@ -174,7 +174,7 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
     images: [productCroppedSpace, arrivalWomenswear, campaignModernClassic],
     badge: "New Season",
     description:
-      "A brushed wool-blend cropped check overshirt featuring relaxed shoulders, horn buttons, and twin chest flap pockets. Balanced proportions for high-waisted tailoring.",
+      "Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets. Built to layer easily over tees or knits.",
     sizes: ["XS", "S", "M", "L"],
     colors: ["Beige Plaid", "Grey Plaid", "Charcoal"],
   },
@@ -188,7 +188,7 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
     images: [productBirmaniaSunt, arrivalMenswear, arrivalUnder150k],
     badge: "Core Essential",
     description:
-      "Monochromatic poise in 460gsm organic loopback cotton. This deep slate-navy raglan crewneck holds a sculptural drape with wide ribbed trims.",
+      "Deep navy raglan crewneck knitted from 460gsm loopback organic cotton. Soft inside with sturdy ribbed collars and cuffs.",
     sizes: ["S", "M", "L"],
     colors: ["Deep Navy", "Forest Green", "Oatmeal"],
   },
@@ -199,9 +199,9 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
     price: 90,
     image: productLayeringOrigin,
     images: [productLayeringOrigin, arrivalUnder150k, productPurpleBrooklyn],
-    badge: "Atelier Cut",
+    badge: "Signature",
     description:
-      "An asymmetrical paneled crewneck crafted from combed heavyweight cotton jersey in sky blue, chalk white, and heather grey.",
+      "Cut-and-sew paneled crewneck made from combed heavyweight cotton jersey in sky blue, chalk white, and heather grey.",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Sky / Chalk / Grey", "Sand / Charcoal"],
   },
@@ -214,7 +214,7 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
     images: [productMelburneCollege, campaignModernClassic, arrivalWomenswear],
     badge: "Classic",
     description:
-      "Heritage-inspired ribbed knit cardigan with contrast tipping and horn button placket, tailored to layer cleanly over cropped knits and pleated trousers.",
+      "Ribbed varsity cardigan with contrast trim and horn buttons, shaped for a clean, easy layered fit.",
     sizes: ["XS", "S", "M", "L"],
     colors: ["Deep Navy", "Ivory White", "Burgundy"],
   },
@@ -228,14 +228,14 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
     images: [productRoyaleLeather, heroGalleryLookbook, campaignOldButGold],
     badge: "Signature",
     description:
-      "A supple vegan-leather cropped moto jacket finished with brushed silver asymmetrical zip hardware, crisp notch lapels, and structured waist tabs.",
+      "Cropped matte vegan-leather moto jacket finished with brushed silver zip hardware, wide lapels, and adjustable waist tabs.",
     sizes: ["S", "M", "L"],
     colors: ["Noir Black", "Deep Espresso", "Oxblood"],
   },
 ];
 
 export const GALLERY_INDEX_ITEMS = [
-  { code: "01", label: "Autumn–Winter 2026 Release" },
-  { code: "02", label: "Complimentary Express Dispatch" },
-  { code: "03", label: "Private Code: BTNX50" },
+  { code: "01", label: "New Drops & Essentials" },
+  { code: "02", label: "Fast Nationwide Delivery" },
+  { code: "03", label: "50% Off Code: BTNX50" },
 ];

@@ -124,7 +124,7 @@ export default function ProductModal({
       setActiveImageIndex(0);
       setIsZoomOpen(false);
       setShowAllReviews(false);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo(0, 0);
     }
   }, [product]);
 
@@ -139,7 +139,7 @@ export default function ProductModal({
       rating: 5,
       date: "13 Oct 2026",
       comment:
-        "Substantial fabric weight and clean seam finishing. The drape holds its architectural shape even after travel.",
+        "Thick, heavy fabric that holds up well after washing. Stitching is really clean and it keeps its shape.",
       isStatic: true,
       userId: "static-1",
       email: "",
@@ -150,7 +150,7 @@ export default function ProductModal({
       rating: 5,
       date: "29 Oct 2026",
       comment:
-        "True to tailored sizing with refined cuff proportions. Arrived neatly boxed within 48 hours.",
+        "Fits true to size and the sleeve proportions are spot on. Arrived neatly boxed in two days.",
       isStatic: true,
       userId: "static-2",
       email: "",
@@ -161,7 +161,7 @@ export default function ProductModal({
       rating: 4,
       date: "04 Nov 2026",
       comment:
-        "Muted tone pairs effortlessly with wool trousers. Heavy organic cotton feels durable and breathable.",
+        "Easy to pair with tailored trousers or denim. Heavy cotton feels soft on the inside without feeling flimsy.",
       isStatic: true,
       userId: "static-3",
       email: "",
@@ -180,7 +180,7 @@ export default function ProductModal({
 
     return {
       id: r.id,
-      name: r.userName || "Atelier Client",
+      name: r.userName || "Verified Buyer",
       email: r.userEmail || "",
       rating: Number(r.rating) || 5,
       date: dateLabel,
@@ -220,11 +220,11 @@ export default function ProductModal({
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) {
-      setReviewError("Please sign in to share your experience.");
+      setReviewError("Please sign in to leave a review.");
       return;
     }
     if (!newComment.trim()) {
-      setReviewError("Please share a few words about fit, fabric, or finish.");
+      setReviewError("Please share a few words about the fit or fabric.");
       return;
     }
 
@@ -236,7 +236,7 @@ export default function ProductModal({
       await addDoc(collection(db, "reviews"), {
         productId: product.id,
         userId: currentUser.uid,
-        userName: (userData?.name || currentUser.displayName || "Atelier Client").slice(0, 120),
+        userName: (userData?.name || currentUser.displayName || "Verified Buyer").slice(0, 120),
         rating: newRating,
         comment: newComment.trim().slice(0, 2000),
         createdAt: new Date().toISOString(),
@@ -244,7 +244,7 @@ export default function ProductModal({
 
       setNewComment("");
       setNewRating(5);
-      setReviewSuccess("Thank you — your experience has been published.");
+      setReviewSuccess("Thanks — your review is now live.");
       setTimeout(() => setReviewSuccess(""), 4000);
     } catch (err) {
       setReviewError("Unable to publish review right now. Please try again.");
@@ -293,7 +293,7 @@ export default function ProductModal({
     >
       {/* Breadcrumb Bar */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-8 lg:px-12 py-2.5 sm:py-4 flex items-center justify-between gap-4">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-2.5 sm:py-4 flex items-center justify-between gap-4">
           <button
             onClick={onClose}
             id="back-to-home-btn"
@@ -313,7 +313,7 @@ export default function ProductModal({
 
       {/* Main Contiguous Purchase Module */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-6 sm:py-10 lg:py-14">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-10 lg:py-14">
           <motion.div
             variants={galleryContainerVariants}
             initial="hidden"
@@ -424,7 +424,7 @@ export default function ProductModal({
                     )}
                   </div>
                   <span className="text-xs text-[#66625B] dark:text-[#A7A299] tabular-nums">
-                    Small-batch run · {stockRemaining} available
+                    Limited stock · {stockRemaining} left
                   </span>
                 </div>
 
@@ -488,7 +488,7 @@ export default function ProductModal({
                     <span>Size Guide</span>
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(product.sizes || ["S", "M", "L", "XL"]).map((size) => {
                     const isSelected = selectedSize === size;
                     return (
@@ -496,7 +496,7 @@ export default function ProductModal({
                         key={size}
                         type="button"
                         onClick={() => setSelectedSize(size)}
-                        className={`min-h-[44px] py-3 text-xs font-mono uppercase border rounded-sm transition-colors cursor-pointer ${
+                        className={`flex-1 min-w-[64px] min-h-[44px] py-3 text-xs font-mono uppercase border rounded-sm transition-colors cursor-pointer ${
                           isSelected
                             ? "bg-[#141413] dark:bg-[#F3F1EC] border-[#141413] dark:border-[#F3F1EC] text-white dark:text-[#141413]"
                             : "bg-white dark:bg-[#22211E] border-[#E6E2DA] dark:border-[#2C2A26] text-[#141413] dark:text-[#F3F1EC] hover:border-[#141413] dark:hover:border-[#F3F1EC]"
@@ -586,7 +586,7 @@ export default function ProductModal({
                     onClick={() => setIsDescOpen(!isDescOpen)}
                     className="w-full flex items-center justify-between text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] cursor-pointer"
                   >
-                    <span>Fabrication &amp; Atelier Notes</span>
+                    <span>Fabric &amp; Care</span>
                     {isDescOpen ? (
                       <ChevronUp className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                     ) : (
@@ -605,7 +605,7 @@ export default function ProductModal({
                         <div className="pt-3 space-y-2 text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
                           <p>{product.description}</p>
                           <p>
-                            Cut to an architectural studio block with reinforced seam binding. Cold wash gentle inside out or dry clean to maintain handfeel.
+                            Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean.
                           </p>
                         </div>
                       </motion.div>
@@ -619,7 +619,7 @@ export default function ProductModal({
                     onClick={() => setIsShippingOpen(!isShippingOpen)}
                     className="w-full flex items-center justify-between text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] cursor-pointer"
                   >
-                    <span>Dispatch, Packaging &amp; Returns</span>
+                    <span>Shipping, Packaging &amp; Returns</span>
                     {isShippingOpen ? (
                       <ChevronUp className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                     ) : (
@@ -640,7 +640,7 @@ export default function ProductModal({
                             <Truck className="w-4 h-4 text-[#966830] dark:text-[#C89B62] shrink-0 mt-0.5" />
                             <div>
                               <span className="block text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
-                                Transit Window
+                                Delivery
                               </span>
                               <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">2–4 Business Days</span>
                             </div>
@@ -649,18 +649,18 @@ export default function ProductModal({
                             <Shield className="w-4 h-4 text-[#966830] dark:text-[#C89B62] shrink-0 mt-0.5" />
                             <div>
                               <span className="block text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
-                                Presentation
+                                Packaging
                               </span>
-                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">Archival Cotton Box</span>
+                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">Cotton Garment Box</span>
                             </div>
                           </div>
                           <div className="flex items-start gap-2.5">
                             <RotateCcw className="w-4 h-4 text-[#966830] dark:text-[#C89B62] shrink-0 mt-0.5" />
                             <div>
                               <span className="block text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
-                                Exchanges
+                                Returns
                               </span>
-                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">14-Day Complimentary</span>
+                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">14-Day Free Exchanges</span>
                             </div>
                           </div>
                         </div>
@@ -674,16 +674,16 @@ export default function ProductModal({
         </div>
       </div>
 
-      {/* Share Your Experience & Client Reviews Section */}
+      {/* Customer Reviews Section */}
       <section id="garment-experience" className="bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 lg:py-20">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16 lg:py-20">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-8 mb-10 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
             <div>
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-2">
-                Client Impressions
+                Customer Feedback
               </span>
               <h2 className="font-display text-3xl sm:text-4xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                Share Your Experience
+                Fit &amp; Fabric Reviews
               </h2>
             </div>
             <div className="flex items-center gap-3 text-xs text-[#66625B] dark:text-[#A7A299]">
@@ -694,7 +694,7 @@ export default function ProductModal({
                 </span>
               </div>
               <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums">{totalReviewsCount} Verified Notes</span>
+              <span className="font-mono tabular-nums">{totalReviewsCount} Verified Reviews</span>
             </div>
           </div>
 
@@ -723,7 +723,7 @@ export default function ProductModal({
 
               <div className="pt-6 border-t border-[#E6E2DA] dark:border-[#2C2A26]" id="reviews-form-container-left">
                 <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC] mb-4">
-                  Write a Client Note
+                  Write a Review
                 </h3>
 
                 {currentUser ? (
@@ -762,7 +762,7 @@ export default function ProductModal({
                       rows={4}
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Share your impression of fit, drape, fabric weight, and craftsmanship..."
+                      placeholder="How's the fit, fabric weight, and finish?"
                       className="w-full p-3.5 text-sm border border-[#E6E2DA] dark:border-[#2C2A26] focus:border-[#141413] dark:focus:border-[#F3F1EC] rounded-sm outline-none resize-none bg-[#FAF9F7] dark:bg-[#22211E] text-[#141413] dark:text-[#F3F1EC] placeholder-[#66625B] dark:placeholder-[#A7A299]"
                     />
 
@@ -774,13 +774,13 @@ export default function ProductModal({
                       disabled={isSubmittingReview}
                       className="w-full py-3.5 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] rounded-sm hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] disabled:opacity-50 transition-colors cursor-pointer"
                     >
-                      {isSubmittingReview ? "Publishing..." : "Publish Experience"}
+                      {isSubmittingReview ? "Posting..." : "Post Review"}
                     </button>
                   </form>
                 ) : (
                   <div className="bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-5 space-y-4">
                     <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                      Sign in with your BTNX account to share verified feedback on garment fit, silhouette, and fabric quality.
+                      Sign in with your BTNX account to leave feedback on fit, sizing, and fabric feel.
                     </p>
                     {onOpenAuth && (
                       <button
@@ -788,7 +788,7 @@ export default function ProductModal({
                         onClick={onOpenAuth}
                         className="w-full py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] rounded-sm hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] transition-colors cursor-pointer"
                       >
-                        Sign In to Share Experience
+                        Sign In to Review
                       </button>
                     )}
                   </div>
@@ -860,7 +860,7 @@ export default function ProductModal({
                       </div>
                     </div>
 
-                    <p className="font-display text-lg sm:text-[22px] text-[#141413] dark:text-[#F3F1EC] leading-relaxed">
+                    <p className="text-sm sm:text-[15px] text-[#141413] dark:text-[#F3F1EC] leading-relaxed">
                       &ldquo;{rev.comment}&rdquo;
                     </p>
                   </article>
@@ -875,8 +875,8 @@ export default function ProductModal({
                     className="text-xs font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] underline cursor-pointer"
                   >
                     {showAllReviews
-                      ? "Show Fewer Entries"
-                      : `View All ${reviews.length} Client Notes`}
+                      ? "Show Fewer Reviews"
+                      : `View All ${reviews.length} Reviews`}
                   </button>
                 </div>
               )}
@@ -885,15 +885,15 @@ export default function ProductModal({
         </div>
       </section>
 
-      {/* Complementary Silhouettes */}
+      {/* Complementary Pieces */}
       <section className="bg-white dark:bg-[#191816]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16">
           <div className="pb-8 mb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
             <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1.5">
-              Continue Exploring
+              Pair With
             </span>
             <h2 className="font-display text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-              Complementary Pieces
+              You May Also Like
             </h2>
           </div>
 
@@ -905,42 +905,50 @@ export default function ProductModal({
             viewport={EDITORIAL_VIEWPORT}
             className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 lg:gap-8"
           >
-            {complementaryPieces.map((item) => (
-              <motion.article
-                key={item.id}
-                variants={galleryCardVariants}
-                onClick={() => onSelectProduct && onSelectProduct(item)}
-                className="group cursor-pointer flex flex-col justify-between gap-2.5 sm:gap-3"
-              >
-                <div className="aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
-                  <GalleryImage
-                    src={item.image}
-                    alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
-                  />
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
-                      {item.category}
-                    </p>
-                    <h3 className="text-[13px] sm:text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate mt-0.5">
-                      {item.name}
-                    </h3>
-                  </div>
-                  <div className="flex items-baseline gap-1.5 shrink-0">
-                    {item.originalPrice && item.originalPrice > item.price && (
-                      <span className="font-mono text-[10px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
-                        {formatNaira(item.originalPrice)}
+            {complementaryPieces.map((item) => {
+              const discountPct = getDiscountPercent(item.price, item.originalPrice);
+              return (
+                <motion.article
+                  key={item.id}
+                  variants={galleryCardVariants}
+                  onClick={() => onSelectProduct && onSelectProduct(item)}
+                  className="group cursor-pointer flex flex-col justify-between gap-2.5 sm:gap-3"
+                >
+                  <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
+                    <GalleryImage
+                      src={item.image}
+                      alt={item.name}
+                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
+                    />
+                    {discountPct && (
+                      <span className="m3-haze-photo absolute top-2 left-2 sm:top-3 sm:left-3 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[#FAF9F7] font-mono text-[9px] sm:text-[10px] font-medium uppercase tracking-[0.1em] sm:tracking-[0.12em] rounded-sm">
+                        -{discountPct}%
                       </span>
                     )}
-                    <span className="font-mono text-[12px] sm:text-xs font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
-                      {formatNaira(item.price)}
-                    </span>
                   </div>
-                </div>
-              </motion.article>
-            ))}
+                  <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
+                        {item.category}
+                      </p>
+                      <h3 className="text-[13px] sm:text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate mt-0.5">
+                        {item.name}
+                      </h3>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 shrink-0">
+                      {item.originalPrice && item.originalPrice > item.price && (
+                        <span className="font-mono text-[10px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
+                          {formatNaira(item.originalPrice)}
+                        </span>
+                      )}
+                      <span className="font-mono text-[12px] sm:text-xs font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                        {formatNaira(item.price)}
+                      </span>
+                    </div>
+                  </div>
+                </motion.article>
+              );
+            })}
           </motion.div>
         </div>
       </section>
@@ -970,10 +978,10 @@ export default function ProductModal({
               >
                 <div>
                   <span className="text-[10px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1">
-                    Atelier Measurements
+                    Size Chart
                   </span>
                   <h3 className="font-display text-2xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                    Garment Size Guide (cm)
+                    Garment Measurements (cm)
                   </h3>
                 </div>
                 <button
@@ -1011,7 +1019,7 @@ export default function ProductModal({
               </motion.div>
 
               <motion.p variants={modalItemVariants} className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                Relaxed architectural block. Select your usual size for intended studio drape, or size down one step for a closer tailored line.
+                Relaxed fit. Take your usual size for an easy drape, or size down one step for a closer fit.
               </motion.p>
             </motion.div>
           </motion.div>

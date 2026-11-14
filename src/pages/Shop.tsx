@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, CartItem } from "../types";
 import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
-import { getSwatchHex } from "../utils/colors";
 import { getDiscountPercent } from "../utils/invoice";
 import {
   Search,
@@ -60,13 +60,13 @@ const PRICE_PRESETS = [
   { label: "₦120k+", min: 80, max: 150 },
 ];
 
-const ARCHIVE_EDITS = [
+const COLLECTION_TAGS = [
   "Limited Run",
   "New Season",
   "Core Essential",
   "Classic",
   "Signature",
-  "Atelier Cut",
+  "Heavyweight",
 ];
 
 export default function Shop({
@@ -80,12 +80,49 @@ export default function Shop({
   onToggleWishlist,
   globalSearchQuery = "",
 }: ShopProps) {
-  const [searchQuery, setSearchQuery] = useState(globalSearchQuery);
-  const [categoryFilter, setCategoryFilter] = useState("All Pieces");
-  const [badgeFilter, setBadgeFilter] = useState("");
-  const [minPrice, setMinPrice] = useState<number>(0);
-  const [maxPrice, setMaxPrice] = useState<number>(150);
-  const [sortBy, setSortBy] = useState<string>("featured");
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get("q") || "";
+  const [searchQuery, setSearchQuery] = useState(urlQuery || globalSearchQuery);
+  const [categoryFilter, setCategoryFilter] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("btnx_shop_filters");
+      return saved ? JSON.parse(saved).categoryFilter || "All Pieces" : "All Pieces";
+    } catch {
+      return "All Pieces";
+    }
+  });
+  const [badgeFilter, setBadgeFilter] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("btnx_shop_filters");
+      return saved ? JSON.parse(saved).badgeFilter || "" : "";
+    } catch {
+      return "";
+    }
+  });
+  const [minPrice, setMinPrice] = useState<number>(() => {
+    try {
+      const saved = sessionStorage.getItem("btnx_shop_filters");
+      return saved ? Number(JSON.parse(saved).minPrice ?? 0) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [maxPrice, setMaxPrice] = useState<number>(() => {
+    try {
+      const saved = sessionStorage.getItem("btnx_shop_filters");
+      return saved ? Number(JSON.parse(saved).maxPrice ?? 150) : 150;
+    } catch {
+      return 150;
+    }
+  });
+  const [sortBy, setSortBy] = useState<string>(() => {
+    try {
+      const saved = sessionStorage.getItem("btnx_shop_filters");
+      return saved ? JSON.parse(saved).sortBy || "featured" : "featured";
+    } catch {
+      return "featured";
+    }
+  });
   const [recOffset, setRecOffset] = useState(0);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -93,8 +130,19 @@ export default function Shop({
     useSearchHistory();
 
   useEffect(() => {
-    setSearchQuery(globalSearchQuery);
-  }, [globalSearchQuery]);
+    setSearchQuery(urlQuery || globalSearchQuery);
+  }, [urlQuery, globalSearchQuery]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        "btnx_shop_filters",
+        JSON.stringify({ categoryFilter, badgeFilter, minPrice, maxPrice, sortBy })
+      );
+    } catch {
+      // Ignore storage errors
+    }
+  }, [categoryFilter, badgeFilter, minPrice, maxPrice, sortBy]);
 
   const handleResetFilters = () => {
     setSearchQuery("");
@@ -103,6 +151,11 @@ export default function Shop({
     setMinPrice(0);
     setMaxPrice(150);
     setSortBy("featured");
+    try {
+      sessionStorage.removeItem("btnx_shop_filters");
+    } catch {
+      // Ignore storage errors
+    }
     onAddToast("Catalog filters reset.", "info");
   };
 
@@ -273,13 +326,13 @@ export default function Shop({
         </div>
       </div>
 
-      {/* 3. Archive Edits */}
+      {/* 3. Collection Tags */}
       <div className="pt-4 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
         <h2 className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#66625B] dark:text-[#A7A299] mb-2.5">
-          Archive Edits
+          Tags
         </h2>
         <div className="grid grid-cols-2 gap-1.5">
-          {ARCHIVE_EDITS.map((tag) => {
+          {COLLECTION_TAGS.map((tag) => {
             const active = badgeFilter === tag;
             return (
               <button
@@ -305,17 +358,17 @@ export default function Shop({
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-0">
       {/* Boutique Catalog Header */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-9 sm:py-12 lg:py-16">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-9 sm:py-12 lg:py-16">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-end">
             <div className="lg:col-span-7 space-y-2.5 sm:space-y-3">
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block">
-                BTNX Complete Archive
+                Full Collection
               </span>
               <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.015em] text-balance">
                 Seasonal Catalog
               </h1>
               <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-lg leading-relaxed">
-                Explore silhouettes across heavyweight cottons, tailored outerwear, and signature knitwear. Every order ships with complimentary express dispatch.
+                Explore everything in stock at BTNX Store — from everyday streetwear and knitwear to statement outerwear, with fast nationwide delivery from Osun.
               </p>
             </div>
 
@@ -383,14 +436,14 @@ export default function Shop({
 
           {/* Clean Active Status Bar */}
           <div className="mt-7 sm:mt-10 pt-4 sm:pt-5 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex flex-wrap items-center justify-between gap-3 text-xs text-[#66625B] dark:text-[#A7A299]">
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-              <span>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <span className="whitespace-nowrap">
                 Collection: <strong className="text-[#141413] dark:text-[#F3F1EC] font-medium">{categoryFilter}</strong>
               </span>
               {searchQuery.trim() && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span>
+                  <span className="whitespace-nowrap">
                     Query: <strong className="text-[#141413] dark:text-[#F3F1EC] font-medium">&ldquo;{searchQuery.trim()}&rdquo;</strong>
                   </span>
                 </>
@@ -398,7 +451,7 @@ export default function Shop({
               {badgeFilter && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span>
+                  <span className="whitespace-nowrap">
                     Edit: <strong className="text-[#966830] dark:text-[#C89B62] font-medium">{badgeFilter}</strong>
                   </span>
                 </>
@@ -406,21 +459,21 @@ export default function Shop({
               {(minPrice > 0 || maxPrice < 150) && (
                 <>
                   <span aria-hidden="true">·</span>
-                  <span className="font-mono tabular-nums text-[#141413] dark:text-[#F3F1EC]">
+                  <span className="font-mono tabular-nums text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
                     {formatNaira(minPrice)} – {formatNaira(maxPrice)}
                   </span>
                 </>
               )}
             </div>
 
-            <div className="flex items-center gap-4 sm:gap-5">
-              <span className="font-mono tabular-nums">
+            <div className="flex items-center gap-4 sm:gap-5 shrink-0">
+              <span className="font-mono tabular-nums whitespace-nowrap">
                 Showing <strong className="text-[#141413] dark:text-[#F3F1EC]">{sortedProducts.length}</strong> of {NEW_YEAR_PRODUCTS.length}
               </span>
               {hasActiveFilters && (
                 <button
                   onClick={handleResetFilters}
-                  className="inline-flex items-center gap-1.5 min-h-[36px] text-[11px] font-medium uppercase tracking-[0.12em] text-[#966830] dark:text-[#C89B62] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] text-[11px] font-medium uppercase tracking-[0.12em] text-[#966830] dark:text-[#C89B62] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer whitespace-nowrap"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Reset</span>
@@ -432,7 +485,7 @@ export default function Shop({
       </div>
 
       {/* Main Boutique Layout */}
-      <div className="max-w-[1360px] mx-auto px-3.5 sm:px-8 lg:px-12 py-6 sm:py-12 lg:py-14">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-12 lg:py-14">
         {/* Mobile Quick Category Strip & Compact Filter/Sort Toolbar */}
         <div className="lg:hidden space-y-2.5 mb-7">
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
@@ -490,7 +543,7 @@ export default function Shop({
           <div className="lg:col-span-9 space-y-6">
             <div className="hidden lg:flex items-center justify-between gap-4 pb-4 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
               <p className="text-xs text-[#66625B] dark:text-[#A7A299] font-mono tabular-nums">
-                {sortedProducts.length} {sortedProducts.length === 1 ? "Silhouette" : "Silhouettes"} Displayed
+                {sortedProducts.length} {sortedProducts.length === 1 ? "Piece" : "Pieces"} Shown
               </p>
               <div className="w-56">
                 <CustomSelect
@@ -534,7 +587,7 @@ export default function Shop({
               <div className="py-20 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
                 <p className="font-display text-3xl text-[#141413] dark:text-[#F3F1EC] mb-2">No matching pieces</p>
                 <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-sm mx-auto mb-6">
-                  Adjust your price range or category filter to view available studio garments.
+                  Adjust your price range or category filter to view available store items.
                 </p>
                 <button
                   onClick={handleResetFilters}
@@ -571,7 +624,7 @@ export default function Shop({
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[10px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium block">
-                      Catalog Controls
+                      Refine
                     </span>
                     <h2 className="font-display text-2xl font-medium text-[#141413] dark:text-[#F3F1EC]">
                       Filter Pieces
@@ -617,14 +670,14 @@ export default function Shop({
 
       {/* Curated Recommendations */}
       <section className="bg-white dark:bg-[#191816] border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16">
           <div className="flex items-end justify-between gap-4 pb-8 mb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
             <div>
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1.5">
-                Atelier Selection
+                Picked For You
               </span>
               <h2 className="font-display text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                Recommended Silhouettes
+                You Might Also Like
               </h2>
             </div>
 

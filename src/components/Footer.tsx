@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Monitor, Sun, Moon } from "lucide-react";
-import { motion } from "motion/react";
+import { Monitor, Sun, Moon, X } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import BrandLogo from "./BrandLogo";
 import { useTheme, ThemePreference } from "../context/ThemeContext";
+import { modalBackdropVariants, modalPanelVariants } from "../utils/motion";
 
 interface FooterProps {
   onAddToast?: (message: string, type: "success" | "error" | "info") => void;
@@ -19,37 +21,92 @@ const THEME_OPTIONS: {
   { value: "dark", label: "Dark", icon: Moon },
 ];
 
-export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
+const CUSTOMER_CARE_POLICIES: Record<
+  string,
+  { eyebrow: string; title: string; paragraphs: string[] }
+> = {
+  "Shipping & Returns": {
+    eyebrow: "Delivery & Exchanges",
+    title: "Shipping & Returns",
+    paragraphs: [
+      "Orders placed at BTNX Store are dispatched from Osun within 24 hours and delivered nationwide across Nigeria within 2 to 4 business days.",
+      "Every order includes complimentary nationwide delivery and arrives neatly packed. Orders over ₦200,000 include our signature cotton garment gift box.",
+      "We offer free size exchanges and returns within 14 days of delivery on unworn items with original tags attached. Reach out to hello@btnx.store with your order reference to start an exchange.",
+    ],
+  },
+  "Care & Garment Guide": {
+    eyebrow: "Garment Longevity",
+    title: "Care & Garment Guide",
+    paragraphs: [
+      "Heavyweight cotton fleece and jersey pieces should be washed cold (30°C) inside out with mild detergent and laid flat or hung in the shade to dry.",
+      "Brushed wool coats, overshirts, and structured knitwear should be spot-cleaned or professionally dry-cleaned to preserve their drape and collar structure.",
+      "For vegan-leather outerwear, wipe clean with a damp soft cloth and store on wide-shoulder hangers away from direct heat.",
+    ],
+  },
+  "Privacy Policy": {
+    eyebrow: "Data Protection",
+    title: "Privacy Policy",
+    paragraphs: [
+      "BTNX Store collects only the personal details required to fulfill your orders, save your wishlist, and deliver your packages accurately across Nigeria.",
+      "Your shipping address, contact information, and order history are stored securely and are never sold or shared with third-party marketers.",
+      "You can update your profile details or unsubscribe from release alerts at any time from your account settings or by contacting hello@btnx.store.",
+    ],
+  },
+  "Terms of Sale": {
+    eyebrow: "Store Terms",
+    title: "Terms of Sale",
+    paragraphs: [
+      "All prices on BTNX Store are listed in Nigerian Naira (₦). Promotional voucher codes (such as BTNX50) apply to eligible items in your shopping bag and are limited to one code per order.",
+      "Limited-run drops are allocated on a first-come basis. Once your order is confirmed, an official invoice and tracking reference are generated immediately in your account.",
+      "For questions regarding bulk orders, sizing, or store pickup in Osun, email hello@btnx.store.",
+    ],
+  },
+};
+
+export default function Footer({ onNavigateHome }: FooterProps) {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const [activePolicyKey, setActivePolicyKey] = useState<string | null>(null);
 
   const handleInfoLink = (label: string) => {
-    if (onAddToast) {
-      onAddToast(`${label} — Contact concierge@btnx.studio for full atelier documentation.`, "info");
-    }
+    setActivePolicyKey(label);
   };
 
   const handleSectionLink = (sectionId?: string) => {
-    navigate("/");
-    if (onNavigateHome) {
-      onNavigateHome(sectionId);
-    } else if (sectionId) {
-      setTimeout(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
-      }, 90);
+    const activeLabel =
+      sectionId === "new-arrivals"
+        ? "New"
+        : sectionId === "collection"
+        ? "Collection"
+        : sectionId === "end-year-sale"
+        ? "Sale"
+        : "Home";
+
+    if (sectionId) {
+      navigate("/", { state: { scrollToSection: sectionId, activeLabel } });
+      if (onNavigateHome) {
+        onNavigateHome(sectionId);
+      }
     } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      navigate("/");
+      if (onNavigateHome) {
+        onNavigateHome();
+      } else {
+        window.scrollTo(0, 0);
+      }
     }
   };
+
+  const activePolicy = activePolicyKey ? CUSTOMER_CARE_POLICIES[activePolicyKey] : null;
 
   return (
     <footer
       className="bg-[#FAF9F7] dark:bg-[#111110] pb-20 lg:pb-0 transition-colors duration-200"
       id="footer-section"
     >
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12">
-        <div className="py-14 sm:py-16 grid grid-cols-1 md:grid-cols-12 gap-10">
-          <div className="md:col-span-5 space-y-4">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6">
+        <div className="py-14 sm:py-16 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-10">
+          <div className="sm:col-span-2 md:col-span-5 space-y-4">
             <button
               type="button"
               onClick={() => handleSectionLink()}
@@ -59,7 +116,7 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
               <BrandLogo className="h-9 w-auto" />
             </button>
             <p className="text-xs text-[#66625B] dark:text-[#A7A299] max-w-xs leading-relaxed">
-              Contemporary streetwear and structured outerwear studio. Crafted with architectural discipline and natural-fiber permanence.
+              Your go-to clothing store in Osun for quality fashion, clean everyday fits, and standout pieces delivered nationwide.
             </p>
           </div>
 
@@ -77,23 +134,22 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
               </button>
               <button
                 type="button"
-                onClick={() => handleSectionLink("end-year-sale")}
-                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
-              >
-                Seasonal Archive
-              </button>
-              <button
-                type="button"
                 onClick={() => handleSectionLink("collection")}
                 className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
               >
                 Collection
               </button>
+              <button
+                type="button"
+                onClick={() => handleSectionLink("end-year-sale")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                End of Season
+              </button>
               <Link
                 to="/shop"
                 onClick={() => {
                   if (onNavigateHome) onNavigateHome();
-                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
               >
@@ -103,7 +159,6 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
                 to="/promos"
                 onClick={() => {
                   if (onNavigateHome) onNavigateHome();
-                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
               >
@@ -113,7 +168,6 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
                 to="/notifications"
                 onClick={() => {
                   if (onNavigateHome) onNavigateHome();
-                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
               >
@@ -124,7 +178,7 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
 
           <div className="md:col-span-4 space-y-3.5">
             <p className="text-[11px] uppercase tracking-[0.16em] text-[#66625B] dark:text-[#A7A299] font-medium">
-              Client Services
+              Customer Care
             </p>
             <div className="flex flex-col gap-1 text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
               <button
@@ -161,7 +215,7 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
 
         {/* Bottom Utility Bar with Material 3 + Haze 3-Way Theme Switcher */}
         <div className="py-6 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#66625B] dark:text-[#A7A299]">
-          <p className="order-2 sm:order-1">© 2026 BTNX Studio. All Rights Reserved.</p>
+          <p className="order-2 sm:order-1">© 2026 BTNX Store. All Rights Reserved.</p>
 
           <div
             role="radiogroup"
@@ -199,9 +253,70 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
             })}
           </div>
 
-          <span className="order-3 tracking-[0.14em] uppercase">Lagos · London · Tokyo</span>
+          <span className="order-3 tracking-[0.14em] uppercase whitespace-nowrap">Osun · Nationwide</span>
         </div>
       </div>
+
+      {/* Customer Care Policy Modal */}
+      <AnimatePresence>
+        {activePolicy && (
+          <motion.div
+            variants={modalBackdropVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => setActivePolicyKey(null)}
+            className="fixed inset-0 z-[70] bg-[#141413]/50 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              variants={modalPanelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={(e) => e.stopPropagation()}
+              className="m3-haze-surface border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm max-w-lg w-full p-6 sm:p-8 space-y-5 text-[#141413] dark:text-[#F3F1EC]"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1">
+                    {activePolicy.eyebrow}
+                  </span>
+                  <h3 className="font-display text-2xl sm:text-3xl font-medium">
+                    {activePolicy.title}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActivePolicyKey(null)}
+                  className="p-2 rounded-sm text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                  aria-label="Close policy window"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3.5 text-xs sm:text-sm text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+                {activePolicy.paragraphs.map((p, idx) => (
+                  <p key={idx}>{p}</p>
+                ))}
+              </div>
+
+              <div className="pt-2 flex items-center justify-between gap-4 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299]">
+                  Support: hello@btnx.store
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActivePolicyKey(null)}
+                  className="min-h-[40px] px-5 py-2 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </footer>
   );
 }

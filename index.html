@@ -3,22 +3,102 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <link rel="icon" type="image/svg+xml" href="/btnx-logo.svg" />
-    <title>BTNX — Contemporary Streetwear &amp; Luxury Boutique</title>
-    <meta name="description" content="BTNX contemporary athletic and luxury streetwear boutique featuring seasonal collections, curated editorial releases, and seamless checkout." />
-    <meta property="og:title" content="BTNX — Contemporary Streetwear &amp; Luxury Boutique" />
-    <meta property="og:description" content="BTNX contemporary athletic and luxury streetwear boutique featuring seasonal collections, curated editorial releases, and seamless checkout." />
     <script>
       (function () {
         try {
           var saved = localStorage.getItem("btnx_theme");
-          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-          if (saved === "dark" || (!saved && prefersDark)) {
-            document.documentElement.classList.add("dark");
-            document.documentElement.style.colorScheme = "dark";
+          var prefersDark =
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var isDark = saved === "dark" || ((saved === "system" || !saved) && prefersDark);
+          var root = document.documentElement;
+          if (isDark) {
+            root.classList.add("dark");
+            root.style.colorScheme = "dark";
+            root.style.backgroundColor = "#111110";
+          } else {
+            root.classList.remove("dark");
+            root.style.colorScheme = "light";
+            root.style.backgroundColor = "#FAF9F7";
           }
         } catch (e) {}
       })();
+    </script>
+    <style>
+      html,
+      body {
+        background-color: #FAF9F7;
+        color: #141413;
+      }
+      html.dark,
+      html.dark body {
+        background-color: #111110 !important;
+        color: #F3F1EC !important;
+        color-scheme: dark;
+      }
+    </style>
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#FAF9F7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    />
+    <title>BTNX — Fashion &amp; Everyday Clothing Store</title>
+    <meta
+      name="description"
+      content="Welcome to BTNX Store. Shop quality clothing, clean everyday fits, and standout pieces for men and women in Osun with nationwide delivery."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="BTNX Store" />
+    <meta property="og:title" content="BTNX — Fashion &amp; Everyday Clothing Store" />
+    <meta
+      property="og:description"
+      content="Welcome to BTNX Store. Shop quality clothing, clean everyday fits, and standout pieces for men and women in Osun with nationwide delivery."
+    />
+    <meta property="og:image" content="/og-preview.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="BTNX Store" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="BTNX — Fashion &amp; Everyday Clothing Store" />
+    <meta
+      name="twitter:description"
+      content="Welcome to BTNX Store. Shop quality clothing, clean everyday fits, and standout pieces for men and women in Osun with nationwide delivery."
+    />
+    <meta name="twitter:image" content="/og-preview.jpg" />
+    <meta name="twitter:image:alt" content="BTNX Store" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "ClothingStore",
+            "name": "BTNX Store",
+            "description": "Welcome to BTNX Store. Shop quality clothing, clean everyday fits, and standout pieces for men and women in Osun with nationwide delivery.",
+            "image": "/og-preview.jpg",
+            "logo": "/favicon-512x512.png",
+            "email": "hello@btnx.store"
+          },
+          {
+            "@type": "WebSite",
+            "name": "BTNX Store",
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "/shop?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          }
+        ]
+      }
     </script>
   </head>
   <body class="bg-[#FAF9F7] text-[#141413] dark:bg-[#111110] dark:text-[#F3F1EC]">

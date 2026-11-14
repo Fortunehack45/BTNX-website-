@@ -27,12 +27,12 @@ export default function NewArrivals({ onCategoryFilter }: NewArrivalsProps) {
 
   return (
     <section id="new-arrivals" className="w-full bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16 sm:py-22">
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-10 mb-10 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
           <div>
             <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-2">
-              Curated Edits
+              Just Landed
             </span>
             <h2
               id="arrivals-heading"
@@ -42,7 +42,7 @@ export default function NewArrivals({ onCategoryFilter }: NewArrivalsProps) {
             </h2>
           </div>
           <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-sm leading-relaxed">
-            Seasonal studies in proportion, clean drape, and heavyweight cotton jersey.
+            Fresh arrivals across menswear, womenswear, and everyday essentials.
           </p>
         </div>
 
@@ -71,24 +71,23 @@ export default function NewArrivals({ onCategoryFilter }: NewArrivalsProps) {
                 />
               </div>
 
-              <div className="flex flex-wrap items-baseline justify-between gap-2 sm:gap-3">
-                <div className="min-w-0">
-                  <span className="font-mono text-[11px] text-[#966830] dark:text-[#C89B62] tabular-nums block mb-1">
-                    {arrival.index}
-                  </span>
-                  <h3 className="font-display text-2xl md:text-xl xl:text-[28px] font-medium text-[#141413] dark:text-[#F3F1EC]">
+              <div className="space-y-1">
+                <span className="font-mono text-[11px] text-[#966830] dark:text-[#C89B62] tabular-nums block">
+                  {arrival.index}
+                </span>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="font-display text-2xl md:text-xl xl:text-[28px] font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
                     {arrival.title}
                   </h3>
-                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] mt-1">{arrival.subtitle}</p>
+                  <span
+                    aria-label={`Explore ${arrival.title}`}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC] group-hover:text-[#966830] dark:group-hover:text-[#C89B62] transition-colors shrink-0 whitespace-nowrap pb-0.5 border-b border-transparent group-hover:border-[#966830] dark:group-hover:border-[#C89B62]"
+                  >
+                    <span>{arrival.buttonText}</span>
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                  </span>
                 </div>
-
-                <span
-                  aria-label={`Explore ${arrival.title}`}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC] group-hover:text-[#966830] dark:group-hover:text-[#C89B62] transition-colors shrink-0 pb-0.5 border-b border-transparent group-hover:border-[#966830] dark:group-hover:border-[#C89B62]"
-                >
-                  <span>{arrival.buttonText}</span>
-                  <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
-                </span>
+                <p className="text-xs text-[#66625B] dark:text-[#A7A299]">{arrival.subtitle}</p>
               </div>
             </motion.article>
           ))}

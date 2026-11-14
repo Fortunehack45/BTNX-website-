@@ -43,6 +43,7 @@ interface UserProfileModalProps {
   onOpenCart: () => void;
   onViewInvoice?: (order: Order) => void;
   initialTab?: "profile" | "orders" | "favorites";
+  onTabChange?: (tab: "profile" | "orders" | "favorites") => void;
 }
 
 export default function UserProfileModal({
@@ -57,9 +58,15 @@ export default function UserProfileModal({
   onOpenCart,
   onViewInvoice,
   initialTab = "profile",
+  onTabChange,
 }: UserProfileModalProps) {
   const { userData, currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<"profile" | "orders" | "favorites">(initialTab);
+
+  const handleSelectTab = (tab: "profile" | "orders" | "favorites") => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Processing" | "In Transit" | "Delivered">("All");
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
@@ -181,12 +188,12 @@ export default function UserProfileModal({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.24, ease: EDITORIAL_EASE }}
-      className="fixed inset-x-0 top-0 bottom-14 lg:bottom-0 z-[45] bg-[#FAF9F7] dark:bg-[#111110] flex flex-col overflow-hidden text-[#141413] dark:text-[#F3F1EC]"
+      className="fixed inset-x-0 top-0 bottom-[60px] lg:bottom-0 z-[45] bg-[#FAF9F7] dark:bg-[#111110] flex flex-col overflow-hidden text-[#141413] dark:text-[#F3F1EC]"
       id="user-profile-fullscreen-page"
     >
       {/* Top Portal Bar */}
       <header className="m3-haze-bar border-b border-[#E6E2DA] dark:border-[#2C2A26] shrink-0">
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-8 lg:px-12 h-14 sm:h-16 flex items-center justify-between gap-3">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
           <button
             onClick={onClose}
             id="profile-back-to-store"
@@ -198,12 +205,12 @@ export default function UserProfileModal({
 
           <div className="flex items-center gap-2">
             <BrandLogo className="h-5 w-auto text-[#141413] dark:text-[#F3F1EC]" />
-            <span className="hidden sm:inline text-xs uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">Client Portal</span>
+            <span className="hidden sm:inline text-xs uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">Account</span>
           </div>
 
           <div className="flex items-center gap-3">
             <span className="hidden md:inline font-mono text-xs text-[#66625B] dark:text-[#A7A299]">
-              {currentUser?.email || "Guest Session"}
+              {currentUser?.email || "Guest"}
             </span>
             <div className="w-8 h-8 bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] font-mono text-xs rounded-full flex items-center justify-center">
               {initials}
@@ -213,7 +220,7 @@ export default function UserProfileModal({
       </header>
 
       {/* Main Split Workspace */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden max-w-[1360px] w-full mx-auto">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden max-w-[1680px] w-full mx-auto">
         {/* Left Navigation Rail */}
         <aside className="w-full lg:w-72 bg-[#FAF9F7] dark:bg-[#111110] border-b lg:border-b-0 lg:border-r border-[#E6E2DA] dark:border-[#2C2A26] p-4 sm:p-8 flex flex-col justify-between shrink-0">
           <div className="space-y-4 sm:space-y-8">
@@ -222,7 +229,7 @@ export default function UserProfileModal({
                 {initials}
               </div>
               <h3 className="font-display text-xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                {profileName || "Client Account"}
+                {profileName || "My Account"}
               </h3>
               <p className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299] truncate">
                 {currentUser?.email || "Guest"}
@@ -231,7 +238,7 @@ export default function UserProfileModal({
 
             <nav className="grid grid-cols-3 lg:flex lg:flex-col gap-1.5">
               <button
-                onClick={() => setActiveTab("profile")}
+                onClick={() => handleSelectTab("profile")}
                 className={`min-h-[42px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.04em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "profile"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
@@ -243,7 +250,7 @@ export default function UserProfileModal({
               </button>
 
               <button
-                onClick={() => setActiveTab("orders")}
+                onClick={() => handleSelectTab("orders")}
                 id="orders-tab-trigger"
                 className={`min-h-[42px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.04em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "orders"
@@ -256,7 +263,7 @@ export default function UserProfileModal({
               </button>
 
               <button
-                onClick={() => setActiveTab("favorites")}
+                onClick={() => handleSelectTab("favorites")}
                 className={`min-h-[42px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.04em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "favorites"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
@@ -284,7 +291,7 @@ export default function UserProfileModal({
               >
                 <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-5">
                   <span className="text-[11px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1">
-                    Account Directory
+                    Account
                   </span>
                   <h1 className="font-display text-3xl sm:text-4xl font-medium text-[#141413] dark:text-[#F3F1EC]">
                     Profile &amp; Shipping
@@ -445,7 +452,7 @@ export default function UserProfileModal({
                 <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                   <div>
                     <span className="text-[11px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1">
-                      Purchase Ledger
+                      Your Orders
                     </span>
                     <h1 className="font-display text-3xl sm:text-4xl font-medium text-[#141413] dark:text-[#F3F1EC]">
                       Order History
@@ -670,7 +677,7 @@ export default function UserProfileModal({
                     <div className="py-16 px-6 text-center bg-white dark:bg-[#191816]">
                       <p className="font-display text-2xl text-[#141413] dark:text-[#F3F1EC] mb-1">No orders found</p>
                       <p className="text-xs text-[#66625B] dark:text-[#A7A299]">
-                        Placed orders and shipment statuses will appear in this ledger.
+                        Your past orders and tracking details will show up here.
                       </p>
                     </div>
                   )}
@@ -690,7 +697,7 @@ export default function UserProfileModal({
                 <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-5 flex items-end justify-between">
                   <div>
                     <span className="text-[11px] uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1">
-                      Personal Archive
+                      Wishlist
                     </span>
                     <h1 className="font-display text-3xl sm:text-4xl font-medium text-[#141413] dark:text-[#F3F1EC]">
                       Saved Pieces
@@ -763,7 +770,7 @@ export default function UserProfileModal({
                       No saved pieces yet
                     </p>
                     <p className="text-xs text-[#66625B] dark:text-[#A7A299]">
-                      Save garments from any collection card or product view to curate your edit.
+                      Tap the heart on any item to save it here for later.
                     </p>
                   </div>
                 )}

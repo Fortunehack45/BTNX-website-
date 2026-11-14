@@ -34,8 +34,8 @@ export function downloadOrderInvoice(order: Order, client?: InvoiceClientInfo): 
   );
   const voucherDiscount = Math.max(0, computedSubtotal - order.total);
 
-  const clientName = client?.name?.trim() || "BTNX Atelier Client";
-  const clientEmail = client?.email?.trim() || "client@btnx.studio";
+  const clientName = client?.name?.trim() || "Customer";
+  const clientEmail = client?.email?.trim() || "customer@btnx.store";
   const addressParts = [
     client?.shippingStreet,
     client?.shippingCity,
@@ -64,7 +64,7 @@ export function downloadOrderInvoice(order: Order, client?: InvoiceClientInfo): 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>BTNX Studio Invoice — ${escapeHtml(invoiceNumber)}</title>
+  <title>BTNX Store Invoice — ${escapeHtml(invoiceNumber)}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #FAF9F7; color: #141413; margin: 0; padding: 36px 20px; }
     .sheet { max-width: 780px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E6E2DA; padding: 40px; }
@@ -85,11 +85,11 @@ export function downloadOrderInvoice(order: Order, client?: InvoiceClientInfo): 
   <div class="sheet">
     <div class="header">
       <div>
-        <div class="brand">BTNX STUDIO</div>
-        <div style="font-size:12px;color:#66625B;margin-top:6px;">Lagos &middot; London &middot; Tokyo<br/>concierge@btnx.studio</div>
+        <div class="brand">BTNX STORE</div>
+        <div style="font-size:12px;color:#66625B;margin-top:6px;">Osun &middot; Nationwide<br/>hello@btnx.store</div>
       </div>
       <div style="text-align:right;">
-        <div class="muted">Official Commercial Invoice</div>
+        <div class="muted">Order Invoice</div>
         <div style="font-family:monospace;font-size:16px;font-weight:600;margin-top:4px;">${escapeHtml(invoiceNumber)}</div>
         <div style="font-size:12px;color:#66625B;margin-top:4px;">Issued: ${escapeHtml(order.date)}</div>
       </div>
@@ -97,18 +97,18 @@ export function downloadOrderInvoice(order: Order, client?: InvoiceClientInfo): 
 
     <div class="grid">
       <div class="box">
-        <div class="muted" style="margin-bottom:6px;">Billed &amp; Dispatched To</div>
+        <div class="muted" style="margin-bottom:6px;">Billed To</div>
         <div style="font-weight:600;font-size:14px;">${escapeHtml(clientName)}</div>
         <div style="font-size:12px;color:#66625B;margin-top:4px;">${escapeHtml(clientEmail)}</div>
         ${client?.phone ? `<div style="font-size:12px;color:#66625B;margin-top:2px;">${escapeHtml(client.phone)}</div>` : ""}
         ${addressParts ? `<div style="font-size:12px;color:#66625B;margin-top:6px;line-height:1.4;">${escapeHtml(addressParts)}</div>` : ""}
       </div>
       <div class="box">
-        <div class="muted" style="margin-bottom:6px;">Dispatch Reference</div>
+        <div class="muted" style="margin-bottom:6px;">Order Summary</div>
         <div style="font-size:12px;margin-bottom:4px;"><strong>Order ID:</strong> <span style="font-family:monospace;">${escapeHtml(order.id)}</span></div>
         <div style="font-size:12px;margin-bottom:4px;"><strong>Tracking:</strong> <span style="font-family:monospace;">${escapeHtml(trackingNumber)}</span></div>
         <div style="font-size:12px;margin-bottom:4px;"><strong>Status:</strong> ${escapeHtml(order.status)}</div>
-        <div style="font-size:12px;"><strong>Settlement:</strong> Paid &middot; Verified</div>
+        <div style="font-size:12px;"><strong>Payment:</strong> Paid &middot; Verified</div>
       </div>
     </div>
 
@@ -134,14 +134,14 @@ export function downloadOrderInvoice(order: Order, client?: InvoiceClientInfo): 
       ${
         voucherDiscount > 0
           ? `<div class="totals-row" style="color:#966830;">
-               <span>Privilege Discount</span>
+               <span>Promo Discount</span>
                <span style="font-family:monospace;">-${escapeHtml(formatNaira(voucherDiscount))}</span>
              </div>`
           : ""
       }
       <div class="totals-row">
-        <span>Express Courier</span>
-        <span style="color:#141413;">Complimentary</span>
+        <span>Express Shipping</span>
+        <span style="color:#141413;">Free</span>
       </div>
       <div class="totals-grand">
         <span>Total Paid</span>
@@ -150,8 +150,8 @@ export function downloadOrderInvoice(order: Order, client?: InvoiceClientInfo): 
     </div>
 
     <div style="margin-top:36px;padding-top:16px;border-top:1px solid #E6E2DA;font-size:11px;color:#66625B;display:flex;justify-content:space-between;">
-      <span>Thank you for choosing BTNX Studio.</span>
-      <span>14-Day Complimentary Atelier Exchange</span>
+      <span>Thank you for shopping with BTNX.</span>
+      <span>14-Day Free Exchanges</span>
     </div>
   </div>
 </body>

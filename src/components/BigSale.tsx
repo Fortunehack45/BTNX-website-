@@ -24,11 +24,11 @@ export default function BigSale({ onCategoryFilter }: BigSaleProps) {
 
   return (
     <section id="end-year-sale" className="w-full bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16 sm:py-22">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-10 mb-10 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
           <div>
             <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-2">
-              Seasonal Archive
+              Season Highlights
             </span>
             <h2
               id="sale-heading"
@@ -38,7 +38,7 @@ export default function BigSale({ onCategoryFilter }: BigSaleProps) {
             </h2>
           </div>
           <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-sm leading-relaxed">
-            Two distinct wardrobe directions curated from the 2026 studio archives.
+            Two distinct wardrobe edits from our 2026 release.
           </p>
         </div>
 

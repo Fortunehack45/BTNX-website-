@@ -29,7 +29,7 @@ const FILTER_TABS = [
   { key: "", label: "All Pieces", mobileLabel: "All" },
   { key: "Women", label: "Womenswear", mobileLabel: "Women" },
   { key: "Men", label: "Menswear", mobileLabel: "Men" },
-  { key: "under-100", label: "Under ₦150,000", mobileLabel: "< ₦150k" },
+  { key: "under-100", label: "Under ₦125,000", mobileLabel: "< ₦125k" },
 ];
 
 export default function NewYearCollection({
@@ -59,7 +59,7 @@ export default function NewYearCollection({
 
   const matchesCategory = (product: Product) => {
     if (!categoryFilter) return true;
-    if (categoryFilter === "under-100") return product.price <= 100;
+    if (categoryFilter === "under-100") return product.price <= 82;
     if (categoryFilter === "Women") {
       return product.category.includes("Womenswear") || product.category.includes("Outerwear");
     }
@@ -90,7 +90,7 @@ export default function NewYearCollection({
 
   return (
     <section id="collection" className="w-full bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
-      <div className="max-w-[1360px] mx-auto px-3.5 sm:px-8 lg:px-12 py-14 sm:py-22 space-y-8 sm:space-y-12">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-14 sm:py-22 space-y-8 sm:space-y-12">
         {/* Header + Interactive Filter Controls */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
           <div>
@@ -198,20 +198,20 @@ export default function NewYearCollection({
           </div>
         )}
 
-        {/* Full-Width Architectural Privilege Strip */}
+        {/* End of Season Promo Strip */}
         <div
           id="voucher-promo-card"
           className="bg-[#141413] dark:bg-[#12110F] dark:border dark:border-[#C89B62]/30 text-[#FAF9F7] p-8 sm:p-10 lg:px-14 lg:py-12 rounded-sm flex flex-col lg:flex-row lg:items-center justify-between gap-8"
         >
           <div className="space-y-2.5 max-w-xl">
             <span className="text-[11px] uppercase tracking-[0.18em] text-[#C69B62] font-medium block">
-              Private Client Privilege · 50% Reduction
+              Seasonal Offer · 50% Off
             </span>
             <h3 className="font-display text-3xl sm:text-4xl font-medium text-white text-balance">
-              End of Year Archive Privilege
+              End of Season Sale
             </h3>
             <p className="text-sm text-[#E6E2DA]/80 leading-relaxed">
-              Enter invitation code <span className="font-mono text-white tracking-wider">BTNX50</span> in your shopping bag to receive 50% off selected seasonal garments.
+              Use code <span className="font-mono text-white tracking-wider">BTNX50</span> in your shopping bag for 50% off eligible seasonal pieces.
             </p>
           </div>
 
@@ -238,7 +238,7 @@ export default function NewYearCollection({
               to="/promos"
               className="min-h-[48px] px-6 py-4 border border-white/25 bg-white/8 hover:bg-white/15 backdrop-blur-md text-[#FAF9F7] text-xs font-medium uppercase tracking-[0.14em] flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0 rounded-sm"
             >
-              <span>All Privileges</span>
+              <span>All Offers</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>

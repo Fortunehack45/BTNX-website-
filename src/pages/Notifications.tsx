@@ -22,10 +22,12 @@ import { AppNotification, isNotificationUnread } from "../hooks/useNotifications
 import { Order } from "../types";
 import { formatNaira } from "../utils/currency";
 import GalleryImage from "../components/GalleryImage";
+import { NotificationRowSkeleton, SkeletonBlock } from "../components/StoreSkeleton";
 
 interface NotificationsProps {
   notifications: AppNotification[];
   unreadCount: number;
+  isLoading?: boolean;
   currentUser: any | null;
   orders: Order[];
   onMarkAsRead: (notif: AppNotification) => void;
@@ -44,13 +46,14 @@ const FILTER_TABS: { key: FilterKey; label: string; mobileLabel: string }[] = [
   { key: "all", label: "All", mobileLabel: "All" },
   { key: "unread", label: "Unread", mobileLabel: "Unread" },
   { key: "order_status", label: "Orders", mobileLabel: "Orders" },
-  { key: "promo", label: "Privileges", mobileLabel: "Promos" },
-  { key: "new_arrival", label: "Releases", mobileLabel: "New" },
+  { key: "promo", label: "Promos", mobileLabel: "Promos" },
+  { key: "new_arrival", label: "Drops", mobileLabel: "New" },
 ];
 
 export default function Notifications({
   notifications,
   unreadCount,
+  isLoading = false,
   currentUser,
   orders,
   onMarkAsRead,
@@ -72,7 +75,7 @@ export default function Notifications({
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
@@ -119,22 +122,22 @@ export default function Notifications({
     switch (type) {
       case "order_status":
         return {
-          label: "Order & Dispatch",
+          label: "Order Update",
           icon: <Truck className="w-4 h-4 text-[#141413] dark:text-[#F3F1EC]" />,
         };
       case "promo":
         return {
-          label: "Client Privilege",
+          label: "Promo Offer",
           icon: <Percent className="w-4 h-4 text-[#966830] dark:text-[#C89B62]" />,
         };
       case "new_arrival":
         return {
-          label: "Seasonal Release",
+          label: "New Drop",
           icon: <Tag className="w-4 h-4 text-[#141413] dark:text-[#F3F1EC]" />,
         };
       default:
         return {
-          label: "Atelier Notice",
+          label: "Store Notice",
           icon: <Bell className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />,
         };
     }
@@ -264,7 +267,7 @@ export default function Notifications({
                 Channel
               </span>
               <p className="text-[#141413] dark:text-[#F3F1EC] font-medium">
-                {notif.userId === "broadcast" ? "Atelier Broadcast" : "Direct Client Notice"}
+                {notif.userId === "broadcast" ? "Store Announcement" : "Account Alert"}
               </p>
             </div>
 
@@ -343,7 +346,7 @@ export default function Notifications({
                   onClick={onOpenOrders}
                   className="min-h-[42px] px-4 py-2 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] bg-white dark:bg-[#191816] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <span>Order Ledger</span>
+                  <span>Order History</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -374,7 +377,7 @@ export default function Notifications({
             <div className="border border-[#966830]/35 dark:border-[#C89B62]/35 rounded-sm p-5 bg-[#FAF9F7] dark:bg-[#22211E] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <span className="text-[10px] uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-medium block">
-                  Privilege Invitation Code
+                  Promo Code
                 </span>
                 <p className="font-mono text-base font-semibold text-[#141413] dark:text-[#F3F1EC] tracking-[0.14em] mt-1">
                   {promoCode}
@@ -426,7 +429,7 @@ export default function Notifications({
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-0">
       {/* Page Header */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5">
             <div className="space-y-2">
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block">
@@ -462,7 +465,7 @@ export default function Notifications({
       </div>
 
       {/* Main Inbox Workspace */}
-      <section className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12">
+      <section className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12">
         {!currentUser ? (
           <div className="py-20 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm max-w-xl mx-auto space-y-4">
             <Lock className="w-7 h-7 text-[#66625B] dark:text-[#A7A299] mx-auto stroke-[1.25]" />
@@ -470,7 +473,7 @@ export default function Notifications({
               Client Access Required
             </h2>
             <p className="text-sm text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-              Sign in to inspect your personal order confirmations, shipment notices, and studio invitations.
+              Sign in to view your order confirmations, shipping notices, and store offers.
             </p>
             <button
               type="button"
@@ -480,6 +483,26 @@ export default function Notifications({
               Sign In
             </button>
           </div>
+        ) : isLoading && notifications.length === 0 ? (
+          <div className="space-y-6" aria-busy="true" aria-label="Loading notifications">
+            <SkeletonBlock className="h-[44px] w-full sm:w-96" />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+              <div className="lg:col-span-5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+                {[0, 1, 2, 3].map((row) => (
+                  <NotificationRowSkeleton key={row} />
+                ))}
+              </div>
+              <div className="hidden lg:block lg:col-span-7 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-8 space-y-5">
+                <SkeletonBlock className="h-3 w-24" />
+                <SkeletonBlock className="h-8 w-3/4" />
+                <div className="space-y-2 pt-2">
+                  <SkeletonBlock className="h-3.5 w-full" />
+                  <SkeletonBlock className="h-3.5 w-11/12" />
+                  <SkeletonBlock className="h-3.5 w-3/4" />
+                </div>
+              </div>
+            </div>
+          </div>
         ) : notifications.length === 0 ? (
           <div className="py-20 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm space-y-4">
             <Bell className="w-8 h-8 text-[#66625B] dark:text-[#A7A299] mx-auto stroke-[1.25]" />
@@ -487,7 +510,7 @@ export default function Notifications({
               All Caught Up
             </h2>
             <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-md mx-auto">
-              Order updates and private atelier releases will appear here as soon as they are issued.
+              Order updates, delivery tracking, and new drop alerts will show up here.
             </p>
             <button
               type="button"

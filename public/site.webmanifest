@@ -1,0 +1,21 @@
+{
+  "name": "BTNX Store",
+  "short_name": "BTNX",
+  "description": "Welcome to BTNX Store. Shop quality clothing, clean everyday fits, and standout pieces for men and women in Osun with nationwide delivery.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF9F7",
+  "theme_color": "#141413",
+  "icons": [
+    {
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { Product } from "../types";
 import { formatNaira } from "../utils/currency";
 import { getDiscountPercent } from "../utils/invoice";
 import GalleryImage from "../components/GalleryImage";
+import { PromoCardSkeleton } from "../components/StoreSkeleton";
 import {
   galleryContainerVariants,
   galleryCardVariants,
@@ -38,8 +39,8 @@ const FLAGSHIP_PROMO: PromoRecord = {
   discountPercentage: 50,
   expiresAt: "2026-12-31T23:59:59Z",
   isActive: true,
-  title: "End of Year Archive Privilege",
-  note: "Client invitation privilege applicable across seasonal outerwear, knitwear, and heavyweight fleece silhouettes.",
+  title: "End of Season Sale",
+  note: "Take 50% off eligible outerwear, knitwear, and heavyweight fleece at checkout.",
 };
 
 export default function Promos({
@@ -49,6 +50,7 @@ export default function Promos({
 }: PromosProps) {
   const navigate = useNavigate();
   const [firestorePromos, setFirestorePromos] = useState<PromoRecord[]>([]);
+  const [isLoadingPromos, setIsLoadingPromos] = useState(true);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [lookupCode, setLookupCode] = useState("");
   const [lookupResult, setLookupResult] = useState<{
@@ -58,7 +60,7 @@ export default function Promos({
   } | null>(null);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo(0, 0);
     const unsub = onSnapshot(
       collection(db, "promoCodes"),
       (snap) => {
@@ -67,8 +69,10 @@ export default function Promos({
           ...(d.data() as Omit<PromoRecord, "id">),
         }));
         setFirestorePromos(rows);
+        setIsLoadingPromos(false);
       },
       (err) => {
+        setIsLoadingPromos(false);
         handleFirestoreError(err, OperationType.LIST, "promoCodes");
       }
     );
@@ -115,14 +119,14 @@ export default function Promos({
     if (!match) {
       setLookupResult({
         status: "not_found",
-        message: `No active privilege matches "${clean}". Check spelling or use BTNX50.`,
+        message: `No active promo code matches "${clean}". Check your spelling or use BTNX50.`,
       });
       return;
     }
     if (match.isActive === false) {
       setLookupResult({
         status: "inactive",
-        message: `Voucher "${clean}" is currently paused by atelier concierge.`,
+        message: `Promo code "${clean}" is currently paused.`,
       });
       return;
     }
@@ -161,17 +165,17 @@ export default function Promos({
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-0">
       {/* Editorial Header */}
       <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-10 sm:py-14 lg:py-16">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-10 sm:py-14 lg:py-16">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
             <div className="lg:col-span-7 space-y-3">
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block">
-                Private Privileges · Client Vouchers
+                Offers &amp; Vouchers
               </span>
               <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.015em] text-balance">
-                Promo Codes &amp; Archive Access
+                Promo Codes &amp; Seasonal Offers
               </h1>
               <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-xl leading-relaxed">
-                Redeem seasonal studio codes directly in your shopping bag for immediate reductions across selected garments. Only one privilege code may be active per order.
+                Copy any active code or apply it straight to your bag for an instant discount at checkout. Limit one code per order.
               </p>
             </div>
 
@@ -228,7 +232,7 @@ export default function Promos({
       </div>
 
       {/* Active Promo Ledger */}
-      <section className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-10 sm:py-14 lg:py-16 space-y-12">
+      <section className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-10 sm:py-14 lg:py-16 space-y-12">
         <div className="space-y-6">
           <div className="flex items-baseline justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
             <div>
@@ -244,6 +248,12 @@ export default function Promos({
             </span>
           </div>
 
+          {isLoadingPromos ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" aria-busy="true" aria-label="Loading promo codes">
+              <PromoCardSkeleton featured />
+              <PromoCardSkeleton />
+            </div>
+          ) : (
           <motion.div
             variants={galleryContainerVariants}
             initial="hidden"
@@ -273,7 +283,7 @@ export default function Promos({
                           }`}
                         />
                         <span className={isFlagship ? "text-[#C69B62]" : "text-[#966830] dark:text-[#C89B62]"}>
-                          {promo.discountPercentage || 0}% Privilege · Valid Until {formatExpiry(promo.expiresAt)}
+                          {promo.discountPercentage || 0}% Off · Valid Until {formatExpiry(promo.expiresAt)}
                         </span>
                       </div>
                     </div>
@@ -344,6 +354,7 @@ export default function Promos({
               );
             })}
           </motion.div>
+          )}
         </div>
 
         {/* Eligible Archive Highlights */}
@@ -351,10 +362,10 @@ export default function Promos({
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-6">
             <div>
               <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1.5">
-                Eligible Archive
+                On Sale Now
               </span>
               <h2 className="font-display text-2xl sm:text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                Featured Silhouettes for Privilege Redemption
+                Eligible Pieces for This Offer
               </h2>
             </div>
 
@@ -398,9 +409,14 @@ export default function Promos({
                   </div>
                   <div className="space-y-1 sm:space-y-1.5">
                     <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
-                      <h3 className="text-[13px] sm:text-[15px] font-semibold text-[#141413] dark:text-[#F3F1EC] truncate">
-                        {product.name}
-                      </h3>
+                      <div className="min-w-0">
+                        <p className="text-[9px] sm:text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
+                          {product.category}
+                        </p>
+                        <h3 className="text-[13px] sm:text-[15px] font-semibold text-[#141413] dark:text-[#F3F1EC] mt-0.5 truncate">
+                          {product.name}
+                        </h3>
+                      </div>
                       <div className="flex items-baseline gap-1.5 shrink-0">
                         {product.originalPrice && product.originalPrice > product.price && (
                           <span className="font-mono text-[10px] sm:text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">

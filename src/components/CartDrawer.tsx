@@ -89,9 +89,9 @@ export default function CartDrawer({
 
     setCheckoutStep("processing");
     const messages = [
-      "Verifying encrypted payment session...",
-      "Confirming atelier inventory allocation...",
-      "Recording order & dispatch notice...",
+      "Checking payment details...",
+      "Checking stock availability...",
+      "Finalizing your order...",
     ];
 
     let idx = 0;
@@ -362,12 +362,12 @@ export default function CartDrawer({
                     exit={{ opacity: 0 }}
                     className="flex-1 flex flex-col overflow-hidden"
                   >
-                    {/* Archival Box Progress */}
+                    {/* Free Packaging Progress */}
                     {cart.length > 0 && (
                       <div className="px-6 py-4 bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
                         <div className="flex justify-between items-center text-[11px] mb-2">
                           <span className="uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299]">
-                            Complimentary Archival Packaging
+                            Free Gift Box
                           </span>
                           <span className="font-mono text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                             {subtotal >= 150 ? "Unlocked" : `${formatNaira(150 - subtotal)} away`}
@@ -472,7 +472,7 @@ export default function CartDrawer({
                             Your bag is empty
                           </p>
                           <p className="text-xs text-[#66625B] dark:text-[#A7A299]">
-                            Select pieces from the seasonal archive to begin.
+                            Add pieces from the shop to get started.
                           </p>
                         </div>
                       )}
@@ -506,15 +506,15 @@ export default function CartDrawer({
                           </div>
                           {appliedDiscount > 0 && (
                             <div className="flex justify-between text-[#966830] dark:text-[#C89B62]">
-                              <span>Privilege ({appliedCode || "50%"})</span>
+                              <span>Promo ({appliedCode || "50%"})</span>
                               <span className="font-mono tabular-nums">
                                 -{formatNaira(discountAmount)}
                               </span>
                             </div>
                           )}
                           <div className="flex justify-between">
-                            <span>Express Courier</span>
-                            <span className="text-[#141413] dark:text-[#F3F1EC]">Complimentary</span>
+                            <span>Express Shipping</span>
+                            <span className="text-[#141413] dark:text-[#F3F1EC]">Free</span>
                           </div>
                           <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex justify-between items-baseline text-[#141413] dark:text-[#F3F1EC]">
                             <span className="font-medium text-sm">Total</span>

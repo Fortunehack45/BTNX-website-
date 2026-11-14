@@ -28,7 +28,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
         createdAt: new Date().toISOString(),
       });
       setIsSubscribed(true);
-      onAddToast(`Subscribed ${email} to BTNX dispatches.`, "success");
+      onAddToast(`Subscribed ${email} to BTNX updates.`, "success");
     } catch (err) {
       onAddToast("Unable to subscribe right now. Please try again.", "error");
       handleFirestoreError(err, OperationType.CREATE, "newsletters");
@@ -39,7 +39,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
 
   return (
     <section id="newsletter" className="w-full bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16 sm:py-22">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm overflow-hidden">
           {/* Atelier Photography Left */}
           <div className="lg:col-span-6 aspect-[16/10] lg:aspect-[4/3] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden">
@@ -54,7 +54,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
           {/* Editorial Newsletter Form Right */}
           <div className="lg:col-span-6 p-6 sm:p-12 lg:p-14 flex flex-col justify-center">
             <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium mb-3">
-              Private Dispatch
+              Lookbook &amp; Drops
             </span>
 
             {!isSubscribed ? (
@@ -63,11 +63,11 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
                   id="newsletter-heading"
                   className="font-display text-3xl sm:text-4xl font-medium text-[#141413] dark:text-[#F3F1EC] leading-[1.08] text-balance"
                 >
-                  Receive seasonal lookbooks and private archive releases.
+                  Get early access to new drops and restocks.
                 </h2>
 
                 <p id="newsletter-desc" className="text-sm text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                  Subscribers receive early access to limited garment runs and private atelier invitations.
+                  Sign up for release updates, seasonal lookbooks, and subscriber-only promo codes.
                 </p>
 
                 <form onSubmit={handleSubmit} id="newsletter-email-form" className="pt-2">
@@ -98,10 +98,10 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
                   <Check className="w-4 h-4 text-[#141413] dark:text-[#F3F1EC]" />
                 </div>
                 <h3 className="font-display text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                  Subscription Confirmed
+                  You&rsquo;re on the list
                 </h3>
                 <p className="text-sm text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                  Your address is registered for upcoming BTNX atelier dispatches and private releases.
+                  We&rsquo;ll email you whenever new pieces drop or subscriber promo codes go live.
                 </p>
                 <button
                   onClick={() => {

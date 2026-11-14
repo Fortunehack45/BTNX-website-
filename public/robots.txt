@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /shop
+Allow: /promos
+Disallow: /admin/
+Disallow: /bag
+Disallow: /saved
+Disallow: /notifications
+
+Sitemap: /sitemap.xml

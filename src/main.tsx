@@ -33,6 +33,24 @@ window.addEventListener('error', (event) => {
   }
 });
 
+// Restore active route on reload if preview container resets pathname to "/"
+try {
+  const currentFull = window.location.pathname + window.location.search + window.location.hash;
+  if (window.location.pathname === '/' && !window.location.search && !window.location.hash) {
+    const savedRoute =
+      sessionStorage.getItem('btnx_last_route') ||
+      localStorage.getItem('btnx_last_route');
+    if (savedRoute && savedRoute !== '/' && savedRoute.startsWith('/')) {
+      window.history.replaceState(null, '', savedRoute);
+    }
+  } else {
+    sessionStorage.setItem('btnx_last_route', currentFull);
+    localStorage.setItem('btnx_last_route', currentFull);
+  }
+} catch {
+  // Ignore storage access errors in restricted modes
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
