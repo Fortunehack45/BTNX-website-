@@ -417,7 +417,14 @@ app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
     const text = req.body.Body || req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || req.body.text || "";
     const senderName = req.body.ProfileName || req.body.senderName || "Client";
 
-    const result = await processWhatsAppMessage({ from, text, senderName });
+    const reqOrigin = `${req.protocol}://${req.get("host")}`;
+    const result = await processWhatsAppMessage({
+      from,
+      text,
+      senderName,
+      authHeader: req.headers.authorization,
+      reqOrigin,
+    });
 
     // Respond in Twilio TwiML or standard JSON depending on caller
     if (req.body.From) {
@@ -439,10 +446,13 @@ app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
 app.post("/api/whatsapp/chat", async (req: Request, res: Response) => {
   try {
     const { from, customerId, text, message, senderName } = req.body;
+    const reqOrigin = `${req.protocol}://${req.get("host")}`;
     const result = await processWhatsAppMessage({
       from: from || customerId || "test-user-1",
       text: text || message || "hi",
       senderName: senderName || "Test Client",
+      authHeader: req.headers.authorization,
+      reqOrigin,
     });
     res.json(result);
   } catch (err: any) {

@@ -570,16 +570,16 @@ export default function UserProfileModal({
 
                         <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
                           <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
-                            2. Server URL (SSE)
+                            2. Server URL (Remote MCP)
                           </span>
                           <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
-                            {window.location.origin}/sse
+                            {window.location.origin}/mcp
                           </p>
                           <button
                             type="button"
                             onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/sse`);
-                              onAddToast("Copied SSE URL!", "info");
+                              navigator.clipboard.writeText(`${window.location.origin}/mcp`);
+                              onAddToast("Copied MCP URL!", "info");
                             }}
                             className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
                           >

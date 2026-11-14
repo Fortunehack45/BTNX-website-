@@ -971,7 +971,7 @@ export function setupRemoteMcp(app: Express) {
     res.sendStatus(200);
   });
 
-  // 1. GET /sse & GET /mcp/sse - Standard Server-Sent Events Endpoint for ChatGPT / Claude / Cursor
+  // 1. GET /mcp & GET /sse - Standard MCP Server-Sent Events Endpoint for ChatGPT / Claude / Cursor
   const handleSseConnection = async (req: Request, res: Response) => {
     const token = extractAuthToken(req);
     const authenticatedUser = await resolveMcpUser(token);
@@ -981,11 +981,11 @@ export function setupRemoteMcp(app: Express) {
       res.status(401).json({
         error: "Unauthorized",
         message:
-          "Invalid or missing MCP Authentication Token. Provide your personal key in 'Authorization: Bearer <token>' or '?token=<token>'. Log into your BTNX account &rarr; Profile to copy your personal key.",
+          "Invalid or missing MCP Authentication Token. Provide your personal key in 'Authorization: Bearer <token>' or '?token=<token>'. Log into your BTNX account -> Profile to copy your personal key.",
         expectedAuthType: "Bearer Token",
         connectionFormat: {
           name: "BTNX Luxury Store",
-          url: `${req.protocol}://${req.get("host")}/sse`,
+          url: `${req.protocol}://${req.get("host")}/mcp`,
           auth: "Bearer btnx_pat_<your_unique_account_key>",
         },
       });
@@ -1018,8 +1018,24 @@ export function setupRemoteMcp(app: Express) {
     }
   };
 
-  app.get("/sse", handleSseConnection);
+  // Primary MCP Endpoint: /mcp (Dual-mode: SSE for AI clients, Visual Dashboard for browsers)
+  app.get("/mcp", (req: Request, res: Response) => {
+    const token = extractAuthToken(req);
+    const isSseClient =
+      req.headers.accept?.includes("text/event-stream") ||
+      Boolean(token) ||
+      req.query.sse === "true";
+
+    if (isSseClient) {
+      return handleSseConnection(req, res);
+    }
+    return handleMcpDashboard(req, res);
+  });
+
+  // Dedicated routes & backward-compatible aliases
   app.get("/mcp/sse", handleSseConnection);
+  app.get("/sse", handleSseConnection);
+  app.get("/mcp/dashboard", (req: Request, res: Response) => handleMcpDashboard(req, res));
 
   // 2. POST /messages & POST /mcp/messages - Client JSON-RPC 2.0 messages dispatcher
   const handlePostMessage = async (req: Request, res: Response) => {
@@ -1109,7 +1125,7 @@ export function setupRemoteMcp(app: Express) {
         success: true,
         token,
         serverName: "BTNX Luxury Store",
-        sseUrl: `${host}/sse`,
+        mcpUrl: `${host}/mcp`,
         user: { userId, email, name },
       });
     } catch (err: any) {
@@ -1120,7 +1136,7 @@ export function setupRemoteMcp(app: Express) {
   // 5. GET /mcp & GET /api/mcp - Branded Web Connection Dashboard & Documentation
   const handleMcpDashboard = (req: Request, res: Response) => {
     const host = `${req.protocol}://${req.get("host")}`;
-    const sseUrl = `${host}/sse`;
+    const mcpUrl = `${host}/mcp`;
     const authKey = DEFAULT_MCP_AUTH_KEY;
 
     const html = `<!DOCTYPE html>
@@ -1231,13 +1247,13 @@ export function setupRemoteMcp(app: Express) {
         <div class="bg-[#FAF9F7] border border-[#E6E2DA] p-4 flex flex-col justify-between">
           <div>
             <label class="text-[10px] font-mono uppercase tracking-wider text-[#66625B] block font-semibold mb-1">
-              2. Server URL (SSE)
+              2. Server URL (Remote MCP)
             </label>
             <div class="mono text-sm font-semibold text-[#141413] break-all select-all">
-              ${sseUrl}
+              ${mcpUrl}
             </div>
           </div>
-          <button onclick="navigator.clipboard.writeText('${sseUrl}'); alert('Copied Server URL!');" class="mt-3 w-full py-1.5 px-3 bg-[#141413] hover:bg-[#2C2A26] text-white text-[11px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center">
+          <button onclick="navigator.clipboard.writeText('${mcpUrl}'); alert('Copied Server URL!');" class="mt-3 w-full py-1.5 px-3 bg-[#141413] hover:bg-[#2C2A26] text-white text-[11px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center">
             Copy URL
           </button>
         </div>
@@ -1264,7 +1280,7 @@ export function setupRemoteMcp(app: Express) {
           Verify via Terminal / Curl:
         </div>
         <div class="select-all text-emerald-400">
-          curl -H "Authorization: Bearer ${authKey}" "${sseUrl}"
+          curl -H "Authorization: Bearer ${authKey}" "${mcpUrl}"
         </div>
       </div>
     </div>
