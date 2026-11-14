@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   FileText,
   Download,
+  Truck,
 } from "lucide-react";
 import { CartItem, Order, Product } from "../types";
 import { formatNaira } from "../utils/currency";
@@ -288,22 +289,20 @@ export default function Bag({
             )}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
-              {onOpenOrders && (
+              {lastPlacedOrder && (
                 <button
                   type="button"
-                  onClick={() => {
-                    handleSuccessReset("/");
-                    onOpenOrders();
-                  }}
-                  className="flex-1 min-h-[46px] px-5 py-3 border border-[#141413] dark:border-[#F3F1EC] text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] text-xs font-medium uppercase tracking-[0.14em] rounded-sm transition-colors cursor-pointer"
+                  onClick={() => handleSuccessReset(`/track?order=${encodeURIComponent(lastPlacedOrder.id)}`)}
+                  className="flex-1 min-h-[46px] px-5 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  Order History
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Track Shipment</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => handleSuccessReset("/shop")}
-                className="flex-1 min-h-[46px] px-5 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="flex-1 min-h-[46px] px-5 py-3 border border-[#141413] dark:border-[#F3F1EC] text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] text-xs font-medium uppercase tracking-[0.14em] rounded-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <span>Continue Shopping</span>
                 <ArrowRight className="w-3.5 h-3.5" />

@@ -24,7 +24,7 @@ import { getSwatchHex } from "../utils/colors";
 import { getDiscountPercent } from "../utils/invoice";
 import { useAuth } from "../context/AuthContext";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, setDoc, deleteDoc, doc } from "firebase/firestore";
 import GalleryImage from "./GalleryImage";
 import {
   EDITORIAL_EASE,
@@ -82,8 +82,17 @@ export default function ProductModal({
 
   const { currentUser, userData } = useAuth();
   const [firestoreReviews, setFirestoreReviews] = useState<any[]>([]);
+  const [localReviews, setLocalReviews] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("btnx_product_reviews");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState("");
+  const [isEditingReview, setIsEditingReview] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [reviewSuccess, setReviewSuccess] = useState("");
@@ -110,8 +119,8 @@ export default function ProductModal({
         fetched.sort((a: any, b: any) => parseTimestampMs(b.createdAt) - parseTimestampMs(a.createdAt));
         setFirestoreReviews(fetched);
       },
-      (err) => {
-        handleFirestoreError(err, OperationType.LIST, "reviews");
+      () => {
+        // Fallback to local reviews if offline
       }
     );
     return () => unsubscribe();
@@ -124,6 +133,9 @@ export default function ProductModal({
       setActiveImageIndex(0);
       setIsZoomOpen(false);
       setShowAllReviews(false);
+      setIsEditingReview(false);
+      setReviewError("");
+      setReviewSuccess("");
       window.scrollTo(0, 0);
     }
   }, [product]);
@@ -168,7 +180,24 @@ export default function ProductModal({
     },
   ];
 
-  const formattedFirestoreReviews = firestoreReviews.map((r) => {
+  // Merge Firestore reviews + local reviews for this product, strictly deduplicating to 1 review per user
+  const combinedRawReviews = [
+    ...firestoreReviews,
+    ...localReviews.filter((lr) => lr.productId === product.id),
+  ].sort((a: any, b: any) => parseTimestampMs(b.createdAt) - parseTimestampMs(a.createdAt));
+
+  const seenUserKeys = new Set<string>();
+  const deduplicatedProductReviews = combinedRawReviews.filter((r) => {
+    const uidKey = r.userId ? `uid:${r.userId}` : "";
+    const emailKey = r.userEmail ? `email:${String(r.userEmail).toLowerCase()}` : "";
+    if (uidKey && seenUserKeys.has(uidKey)) return false;
+    if (emailKey && seenUserKeys.has(emailKey)) return false;
+    if (uidKey) seenUserKeys.add(uidKey);
+    if (emailKey) seenUserKeys.add(emailKey);
+    return true;
+  });
+
+  const formattedFirestoreReviews = deduplicatedProductReviews.map((r) => {
     const ms = parseTimestampMs(r.createdAt);
     const dateLabel = ms
       ? new Date(ms).toLocaleDateString("en-GB", {
@@ -190,6 +219,16 @@ export default function ProductModal({
     };
   });
 
+  const existingUserReview = currentUser
+    ? formattedFirestoreReviews.find(
+        (r) =>
+          r.userId === currentUser.uid ||
+          (currentUser.email &&
+            r.email &&
+            r.email.toLowerCase() === currentUser.email.toLowerCase())
+      ) || null
+    : null;
+
   const reviews = [...formattedFirestoreReviews, ...baseReviews];
   const totalReviewsCount = reviews.length;
   const averageRating =
@@ -206,10 +245,38 @@ export default function ProductModal({
   const getStarPercentage = (stars: number) =>
     totalReviewsCount === 0 ? 0 : (starCounts[stars - 1] / totalReviewsCount) * 100;
 
+  const saveLocalReviewsList = (nextList: any[]) => {
+    setLocalReviews(nextList);
+    try {
+      localStorage.setItem("btnx_product_reviews", JSON.stringify(nextList));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const handleDeleteReview = async (reviewId: string) => {
+    const updatedLocal = localReviews.filter(
+      (r) =>
+        r.id !== reviewId &&
+        !(r.productId === product.id && currentUser && r.userId === currentUser.uid)
+    );
+    saveLocalReviewsList(updatedLocal);
+    setIsEditingReview(false);
+    setNewComment("");
+    setNewRating(5);
+
     try {
       await deleteDoc(doc(db, "reviews", reviewId));
-      setReviewSuccess("Review removed.");
+      // Also clean up any older duplicate docs by this user for this product
+      if (currentUser) {
+        const extraDocs = firestoreReviews.filter(
+          (r) => r.userId === currentUser.uid && r.id !== reviewId
+        );
+        for (const extra of extraDocs) {
+          await deleteDoc(doc(db, "reviews", extra.id)).catch(() => {});
+        }
+      }
+      setReviewSuccess("Your review has been removed.");
       setTimeout(() => setReviewSuccess(""), 3000);
     } catch (err) {
       setReviewError("Failed to remove review.");
@@ -223,6 +290,10 @@ export default function ProductModal({
       setReviewError("Please sign in to leave a review.");
       return;
     }
+    if (existingUserReview && !isEditingReview) {
+      setReviewError("You have already reviewed this piece. Each client is limited to one review per product.");
+      return;
+    }
     if (!newComment.trim()) {
       setReviewError("Please share a few words about the fit or fabric.");
       return;
@@ -232,23 +303,45 @@ export default function ProductModal({
     setReviewError("");
     setReviewSuccess("");
 
+    const reviewDocId = `${product.id}_${currentUser.uid}`;
+    const reviewPayload = {
+      id: reviewDocId,
+      productId: product.id,
+      userId: currentUser.uid,
+      userName: (userData?.name || currentUser.displayName || "Verified Buyer").slice(0, 120),
+      userEmail: (currentUser.email || "").slice(0, 254),
+      rating: newRating,
+      comment: newComment.trim().slice(0, 2000),
+      createdAt: new Date().toISOString(),
+    };
+
+    // Save locally immediately (replacing any previous review for this product + user)
+    const filteredLocal = localReviews.filter(
+      (r) => !(r.productId === product.id && r.userId === currentUser.uid)
+    );
+    saveLocalReviewsList([reviewPayload, ...filteredLocal]);
+
     try {
-      await addDoc(collection(db, "reviews"), {
-        productId: product.id,
-        userId: currentUser.uid,
-        userName: (userData?.name || currentUser.displayName || "Verified Buyer").slice(0, 120),
-        rating: newRating,
-        comment: newComment.trim().slice(0, 2000),
-        createdAt: new Date().toISOString(),
-      });
+      await setDoc(doc(db, "reviews", reviewDocId), reviewPayload);
+
+      // Clean up any legacy duplicate review docs for the same product & user
+      const duplicateDocs = firestoreReviews.filter(
+        (r) => r.userId === currentUser.uid && r.id !== reviewDocId
+      );
+      for (const dup of duplicateDocs) {
+        await deleteDoc(doc(db, "reviews", dup.id)).catch(() => {});
+      }
 
       setNewComment("");
       setNewRating(5);
-      setReviewSuccess("Thanks — your review is now live.");
+      setIsEditingReview(false);
+      setReviewSuccess(
+        existingUserReview ? "Your review has been updated." : "Thanks — your review is now live."
+      );
       setTimeout(() => setReviewSuccess(""), 4000);
     } catch (err) {
       setReviewError("Unable to publish review right now. Please try again.");
-      handleFirestoreError(err, OperationType.CREATE, "reviews");
+      handleFirestoreError(err, OperationType.CREATE, `reviews/${reviewDocId}`);
     } finally {
       setIsSubmittingReview(false);
     }
@@ -722,61 +815,149 @@ export default function ProductModal({
               </div>
 
               <div className="pt-6 border-t border-[#E6E2DA] dark:border-[#2C2A26]" id="reviews-form-container-left">
-                <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC] mb-4">
-                  Write a Review
-                </h3>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-[#141413] dark:text-[#F3F1EC]">
+                    {existingUserReview && !isEditingReview
+                      ? "Your Verified Review"
+                      : isEditingReview
+                      ? "Update Your Review"
+                      : "Write a Review"}
+                  </h3>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
+                    1 Review Per Piece
+                  </span>
+                </div>
 
                 {currentUser ? (
-                  <form onSubmit={handleReviewSubmit} className="space-y-4">
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => {
-                        const isFilled =
-                          ratingHover !== null ? star <= ratingHover : star <= newRating;
-                        return (
-                          <button
-                            type="button"
-                            key={star}
-                            onClick={() => setNewRating(star)}
-                            onMouseEnter={() => setRatingHover(star)}
-                            onMouseLeave={() => setRatingHover(null)}
-                            className="w-10 h-11 flex items-center justify-center cursor-pointer"
-                            aria-label={`Rate ${star} Stars`}
-                          >
+                  existingUserReview && !isEditingReview ? (
+                    <div className="p-5 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm space-y-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((s) => (
                             <Star
-                              className={`w-5 h-5 transition-colors ${
-                                isFilled
+                              key={s}
+                              className={`w-3.5 h-3.5 ${
+                                s <= existingUserReview.rating
                                   ? "fill-[#966830] dark:fill-[#C89B62] text-[#966830] dark:text-[#C89B62]"
                                   : "text-[#E6E2DA] dark:text-[#3A3731]"
                               }`}
                             />
-                          </button>
-                        );
-                      })}
-                      <span className="ml-2 font-mono text-xs text-[#66625B] dark:text-[#A7A299] tabular-nums">
-                        {newRating}.0 / 5.0
-                      </span>
+                          ))}
+                          <span className="ml-1.5 font-mono text-xs text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                            {existingUserReview.rating}.0 / 5.0
+                          </span>
+                        </div>
+                        <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299]">
+                          {existingUserReview.date}
+                        </span>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-[#141413] dark:text-[#F3F1EC] leading-relaxed">
+                        &ldquo;{existingUserReview.comment}&rdquo;
+                      </p>
+
+                      <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+                        You have already submitted a review for {product.name}. Each client can post one review per piece.
+                      </p>
+
+                      {reviewSuccess && (
+                        <p className="text-xs text-[#966830] dark:text-[#C89B62] font-medium">
+                          {reviewSuccess}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-2.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewRating(existingUserReview.rating);
+                            setNewComment(existingUserReview.comment);
+                            setIsEditingReview(true);
+                            setReviewError("");
+                          }}
+                          className="flex-1 py-2.5 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm hover:opacity-90 transition-opacity cursor-pointer"
+                        >
+                          Edit Review
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReview(existingUserReview.id)}
+                          className="py-2.5 px-4 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] text-[#66625B] dark:text-[#A7A299] hover:text-rose-600 dark:hover:text-rose-400 text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
+                  ) : (
+                    <form onSubmit={handleReviewSubmit} className="space-y-4">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const isFilled =
+                            ratingHover !== null ? star <= ratingHover : star <= newRating;
+                          return (
+                            <button
+                              type="button"
+                              key={star}
+                              onClick={() => setNewRating(star)}
+                              onMouseEnter={() => setRatingHover(star)}
+                              onMouseLeave={() => setRatingHover(null)}
+                              className="w-10 h-11 flex items-center justify-center cursor-pointer"
+                              aria-label={`Rate ${star} Stars`}
+                            >
+                              <Star
+                                className={`w-5 h-5 transition-colors ${
+                                  isFilled
+                                    ? "fill-[#966830] dark:fill-[#C89B62] text-[#966830] dark:text-[#C89B62]"
+                                    : "text-[#E6E2DA] dark:text-[#3A3731]"
+                                }`}
+                              />
+                            </button>
+                          );
+                        })}
+                        <span className="ml-2 font-mono text-xs text-[#66625B] dark:text-[#A7A299] tabular-nums">
+                          {newRating}.0 / 5.0
+                        </span>
+                      </div>
 
-                    <textarea
-                      id="review-comment-input-left"
-                      rows={4}
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="How's the fit, fabric weight, and finish?"
-                      className="w-full p-3.5 text-sm border border-[#E6E2DA] dark:border-[#2C2A26] focus:border-[#141413] dark:focus:border-[#F3F1EC] rounded-sm outline-none resize-none bg-[#FAF9F7] dark:bg-[#22211E] text-[#141413] dark:text-[#F3F1EC] placeholder-[#66625B] dark:placeholder-[#A7A299]"
-                    />
+                      <textarea
+                        id="review-comment-input-left"
+                        rows={4}
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="How's the fit, fabric weight, and finish?"
+                        className="w-full p-3.5 text-sm border border-[#E6E2DA] dark:border-[#2C2A26] focus:border-[#141413] dark:focus:border-[#F3F1EC] rounded-sm outline-none resize-none bg-[#FAF9F7] dark:bg-[#22211E] text-[#141413] dark:text-[#F3F1EC] placeholder-[#66625B] dark:placeholder-[#A7A299]"
+                      />
 
-                    {reviewError && <p className="text-xs text-rose-700 dark:text-rose-400">{reviewError}</p>}
-                    {reviewSuccess && <p className="text-xs text-[#966830] dark:text-[#C89B62] font-medium">{reviewSuccess}</p>}
+                      {reviewError && <p className="text-xs text-rose-700 dark:text-rose-400">{reviewError}</p>}
+                      {reviewSuccess && <p className="text-xs text-[#966830] dark:text-[#C89B62] font-medium">{reviewSuccess}</p>}
 
-                    <button
-                      type="submit"
-                      disabled={isSubmittingReview}
-                      className="w-full py-3.5 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] rounded-sm hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] disabled:opacity-50 transition-colors cursor-pointer"
-                    >
-                      {isSubmittingReview ? "Posting..." : "Post Review"}
-                    </button>
-                  </form>
+                      <div className="flex items-center gap-2.5">
+                        {isEditingReview && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditingReview(false);
+                              setReviewError("");
+                            }}
+                            className="py-3.5 px-4 border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-medium uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] rounded-sm transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                        <button
+                          type="submit"
+                          disabled={isSubmittingReview}
+                          className="flex-1 py-3.5 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] rounded-sm hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] disabled:opacity-50 transition-colors cursor-pointer"
+                        >
+                          {isSubmittingReview
+                            ? "Saving..."
+                            : isEditingReview
+                            ? "Update Review"
+                            : "Post Review"}
+                        </button>
+                      </div>
+                    </form>
+                  )
                 ) : (
                   <div className="bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-5 space-y-4">
                     <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
@@ -823,17 +1004,15 @@ export default function ProductModal({
                             <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299] whitespace-nowrap tabular-nums">
                               {rev.date}
                             </span>
-                            {(userData?.role === "admin" ||
-                              (currentUser && currentUser.uid === rev.userId)) &&
-                              !rev.isStatic && (
-                                <button
-                                  onClick={() => handleDeleteReview(rev.id)}
-                                  className="p-1 text-[#66625B] dark:text-[#A7A299] hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-                                  title="Delete Review"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                            {currentUser && currentUser.uid === rev.userId && !rev.isStatic && (
+                              <button
+                                onClick={() => handleDeleteReview(rev.id)}
+                                className="p-1 text-[#66625B] dark:text-[#A7A299] hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                                title="Delete Review"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
 

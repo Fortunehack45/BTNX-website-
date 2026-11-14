@@ -8,15 +8,15 @@ import {
   Settings,
   LogOut,
   Package,
-  Shield,
   Bell,
   Percent,
   Truck,
   Tag,
   Lock,
   ArrowRight,
+  Headphones,
 } from "lucide-react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { CartItem, Product } from "../types";
 import { NAVIGATION_ITEMS, NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
@@ -45,6 +45,7 @@ interface HeaderProps {
   isNotificationsLoading?: boolean;
   onMarkAsRead: (notif: AppNotification) => void;
   onMarkAllAsRead: () => void;
+  onOpenSupport?: () => void;
 }
 
 export default function Header({
@@ -61,8 +62,9 @@ export default function Header({
   isNotificationsLoading = false,
   onMarkAsRead,
   onMarkAllAsRead,
+  onOpenSupport,
 }: HeaderProps) {
-  const { currentUser, logout, userData } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -169,6 +171,7 @@ export default function Header({
   const isSavedPage = location.pathname === "/saved";
   const isBagPage = location.pathname === "/bag";
   const isNotificationsPage = location.pathname === "/notifications";
+  const isTrackPage = location.pathname === "/track";
   const isHomePage = location.pathname === "/";
 
   useEffect(() => {
@@ -211,7 +214,7 @@ export default function Header({
     ? "Shop"
     : isPromosPage
     ? "Promos"
-    : isSavedPage || isBagPage || isNotificationsPage
+    : isSavedPage || isBagPage || isNotificationsPage || isTrackPage
     ? ""
     : activeSection;
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -544,9 +547,9 @@ export default function Header({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 6, scale: 0.98 }}
                           transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                          className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-64 m3-haze-surface border border-[#E6E2DA]/90 dark:border-[#2C2A26]/90 rounded-md z-50 overflow-hidden"
+                          className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-64 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm shadow-[0_20px_50px_-12px_rgba(20,20,19,0.22)] dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.88)] z-50 overflow-hidden"
                         >
-                          <div className="px-4 py-3.5 border-b border-[#E6E2DA]/80 dark:border-[#2C2A26]/80">
+                          <div className="px-4 py-3.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413]">
                             <p className="text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
                               Signed In As
                             </p>
@@ -554,23 +557,13 @@ export default function Header({
                               {currentUser.email}
                             </p>
                           </div>
-                          <div className="p-1.5 space-y-0.5">
-                            {userData?.role === "admin" && (
-                              <a
-                                href="/admin/"
-                                onClick={() => setIsProfileDropdownOpen(false)}
-                                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#966830] dark:text-[#C89B62] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors"
-                              >
-                                <Shield className="w-4 h-4 shrink-0" />
-                                <span>Admin Portal</span>
-                              </a>
-                            )}
+                          <div className="p-1.5 space-y-0.5 bg-white dark:bg-[#191816]">
                             <button
                               onClick={() => {
                                 onOpenProfile("orders");
                                 setIsProfileDropdownOpen(false);
                               }}
-                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
                             >
                               <Package className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                               <span>Orders</span>
@@ -578,9 +571,19 @@ export default function Header({
                             <button
                               onClick={() => {
                                 setIsProfileDropdownOpen(false);
+                                navigate("/track");
+                              }}
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
+                            >
+                              <Truck className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
+                              <span>Track Order</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsProfileDropdownOpen(false);
                                 navigate("/notifications");
                               }}
-                              className="flex w-full items-center justify-between gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              className="flex w-full items-center justify-between gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
                             >
                               <span className="flex items-center gap-2.5">
                                 <Bell className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
@@ -597,7 +600,7 @@ export default function Header({
                                 setIsProfileDropdownOpen(false);
                                 navigate("/saved");
                               }}
-                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
                             >
                               <Heart className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                               <span>Saved Pieces</span>
@@ -607,18 +610,26 @@ export default function Header({
                                 onOpenProfile("profile");
                                 setIsProfileDropdownOpen(false);
                               }}
-                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
                             >
                               <Settings className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                               <span>Profile &amp; Shipping</span>
                             </button>
-                            <div className="h-[1px] bg-[#E6E2DA]/80 dark:bg-[#2C2A26]/80 my-1 mx-2" />
+                            <a
+                              href="/support/"
+                              onClick={() => setIsProfileDropdownOpen(false)}
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
+                            >
+                              <Headphones className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
+                              <span>Customer Service</span>
+                            </a>
+                            <div className="h-[1px] bg-[#E6E2DA] dark:bg-[#2C2A26] my-1 mx-2" />
                             <button
                               onClick={() => {
                                 logout();
                                 setIsProfileDropdownOpen(false);
                               }}
-                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-[#141413]/[0.04] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
                             >
                               <LogOut className="w-4 h-4" />
                               <span>Sign Out</span>
@@ -663,7 +674,7 @@ export default function Header({
             </div>
           </div>
 
-          {/* Search Drawer — Haze Frosted Surface */}
+          {/* Search Drawer — Solid Surface */}
           <AnimatePresence>
             {isSearchOpen && (
               <motion.div
@@ -671,7 +682,7 @@ export default function Header({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                className="border-t border-[#E6E2DA]/80 dark:border-[#2C2A26]/80 m3-haze-surface overflow-visible"
+                className="border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] shadow-[0_20px_50px_-12px_rgba(20,20,19,0.18)] dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.85)] overflow-visible"
               >
                 <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-7">
                   <div className="relative">

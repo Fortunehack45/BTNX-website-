@@ -29,6 +29,14 @@
       "destination": "/admin/index.html"
     },
     {
+      "source": "/support",
+      "destination": "/support/index.html"
+    },
+    {
+      "source": "/support/(.*)",
+      "destination": "/support/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

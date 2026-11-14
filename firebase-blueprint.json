@@ -165,6 +165,33 @@
         "avatar": { "type": "string", "maxLength": 500 }
       },
       "required": ["productId", "userId", "userName", "rating", "comment", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "A customer service conversation thread supporting bot and human specialist modes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 64 },
+        "status": {
+          "type": "string",
+          "enum": ["bot_active", "human_requested", "human_active", "resolved"]
+        },
+        "priority": { "type": "string", "enum": ["normal", "priority"] },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "customerEmail": { "type": "string", "maxLength": 254 },
+        "assignedAgentName": { "type": "string", "maxLength": 120 },
+        "assignedAgentRole": { "type": "string", "maxLength": 120 },
+        "linkedOrderId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "unreadByAdmin": { "type": "number" },
+        "unreadByCustomer": { "type": "number" },
+        "messages": { "type": "array" }
+      },
+      "required": ["id", "subject", "category", "status", "customerName", "customerEmail", "createdAt", "updatedAt", "messages"]
     }
   },
   "firestore": {
@@ -177,6 +204,7 @@
     "/newsletters/{newsletterId}": { "schema": "Newsletter", "description": "Newsletter subscribers" },
     "/siteContent/{contentId}": { "schema": "SiteContent", "description": "Storefront announcement banners" },
     "/notifications/{notificationId}": { "schema": "Notification", "description": "Notifications collection" },
-    "/reviews/{reviewId}": { "schema": "Review", "description": "Product reviews collection" }
+    "/reviews/{reviewId}": { "schema": "Review", "description": "Product reviews collection" },
+    "/supportTickets/{ticketId}": { "schema": "SupportTicket", "description": "Customer service live chat and support tickets" }
   }
 }

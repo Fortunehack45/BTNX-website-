@@ -48,6 +48,12 @@ const ROUTE_META: Record<string, RouteMeta> = {
     description: "Order updates, shipping confirmations, and seasonal promo alerts for your BTNX Store account.",
     robots: "noindex, nofollow",
   },
+  "/track": {
+    title: "Track Your Order — BTNX Store",
+    description:
+      "Track your BTNX Store shipment in real time from our Osun dispatch center to your delivery address nationwide.",
+    robots: "index, follow",
+  },
 };
 
 function upsertMeta(attr: "name" | "property", key: string, content: string) {

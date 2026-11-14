@@ -15,6 +15,8 @@ import {
   Trash2,
   ShoppingBag,
   FileText,
+  Truck,
+  Headphones,
 } from "lucide-react";
 import { Product, Order } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -42,6 +44,8 @@ interface UserProfileModalProps {
   onAddToBag: (product: Product, size?: string, color?: string) => void;
   onOpenCart: () => void;
   onViewInvoice?: (order: Order) => void;
+  onTrackOrder?: (order: Order) => void;
+  onOpenSupport?: (orderId?: string) => void;
   initialTab?: "profile" | "orders" | "favorites";
   onTabChange?: (tab: "profile" | "orders" | "favorites") => void;
 }
@@ -57,6 +61,8 @@ export default function UserProfileModal({
   onAddToBag,
   onOpenCart,
   onViewInvoice,
+  onTrackOrder,
+  onOpenSupport,
   initialTab = "profile",
   onTabChange,
 }: UserProfileModalProps) {
@@ -274,6 +280,19 @@ export default function UserProfileModal({
                 <span>Saved ({wishlist.length})</span>
               </button>
             </nav>
+
+            {onOpenSupport && (
+              <div className="pt-2 lg:pt-4 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                <button
+                  type="button"
+                  onClick={() => onOpenSupport()}
+                  className="w-full min-h-[40px] flex items-center justify-center lg:justify-start gap-2.5 px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-medium uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26] rounded-sm transition-colors cursor-pointer"
+                >
+                  <Headphones className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                  <span>Customer Service</span>
+                </button>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -578,10 +597,23 @@ export default function UserProfileModal({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3 self-end md:self-auto">
+                            <div className="flex items-center gap-2 sm:gap-3 self-end md:self-auto">
+                              {onTrackOrder && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onTrackOrder(order);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] bg-[#FAF9F7] dark:bg-[#22211E] text-[#141413] dark:text-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm transition-colors cursor-pointer whitespace-nowrap"
+                                >
+                                  <Truck className="w-3 h-3" />
+                                  <span>Track</span>
+                                </button>
+                              )}
                               <button
                                 onClick={(e) => handleReorder(order, e)}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-[#141413] dark:bg-[#F3F1EC] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm transition-colors cursor-pointer"
+                                className="flex items-center gap-1.5 px-4 py-2 bg-[#141413] dark:bg-[#F3F1EC] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm transition-colors cursor-pointer whitespace-nowrap"
                               >
                                 <RefreshCw className="w-3 h-3" />
                                 <span>Reorder</span>
@@ -597,7 +629,82 @@ export default function UserProfileModal({
                           </div>
 
                           {isExpanded && (
-                            <div className="border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#111110] p-6 space-y-6">
+                            <div className="border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#111110] p-5 sm:p-6 space-y-5">
+                              {/* Connected Flat Shipment Progress Strip */}
+                              {(() => {
+                                const s = (order.status || "").toLowerCase();
+                                const activeStep =
+                                  s === "delivered"
+                                    ? 3
+                                    : s === "in transit" || s === "shipped"
+                                    ? 2
+                                    : s === "processing" || s === "confirmed"
+                                    ? 1
+                                    : 0;
+                                const pct =
+                                  activeStep === 3 ? 100 : activeStep === 2 ? 75 : activeStep === 1 ? 50 : 25;
+                                const steps = ["Confirmed", "Packed in Osun", "In Transit", "Delivered"];
+                                return (
+                                  <div className="pb-5 border-b border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                      <span className="font-mono text-[#66625B] dark:text-[#A7A299]">
+                                        Tracking:{" "}
+                                        <strong className="text-[#141413] dark:text-[#F3F1EC]">{trackingNumber}</strong>
+                                      </span>
+                                      <div className="flex items-center gap-4">
+                                        {onOpenSupport && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onOpenSupport(order.id);
+                                            }}
+                                            className="text-[11px] uppercase tracking-[0.12em] font-medium text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                                          >
+                                            Need Help?
+                                          </button>
+                                        )}
+                                        {onTrackOrder && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onTrackOrder(order);
+                                            }}
+                                            className="text-[11px] uppercase tracking-[0.12em] font-medium text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                                          >
+                                            Live Tracking &rarr;
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="w-full h-[2px] bg-[#E6E2DA] dark:bg-[#2C2A26] overflow-hidden">
+                                      <div
+                                        className="h-full bg-[#141413] dark:bg-[#F3F1EC]"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-2">
+                                      {steps.map((stepLabel, idx) => {
+                                        const reached = idx <= activeStep;
+                                        return (
+                                          <p
+                                            key={stepLabel}
+                                            className={`text-[10px] sm:text-[11px] truncate ${
+                                              reached
+                                                ? "font-medium text-[#141413] dark:text-[#F3F1EC]"
+                                                : "text-[#66625B] dark:text-[#A7A299]"
+                                            }`}
+                                          >
+                                            0{idx + 1} · {stepLabel}
+                                          </p>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <span className="text-[11px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
                                   Line Items ({order.items.reduce((s, i) => s + i.quantity, 0)})
@@ -655,7 +762,7 @@ export default function UserProfileModal({
 
                               <div className="flex flex-col sm:flex-row justify-between gap-4 text-xs pt-2">
                                 <div className="font-mono text-[#66625B] dark:text-[#A7A299]">
-                                  Tracking: <strong className="text-[#141413] dark:text-[#F3F1EC]">{trackingNumber}</strong>
+                                  Origin: <strong className="text-[#141413] dark:text-[#F3F1EC]">Osun Store · Nationwide Courier</strong>
                                 </div>
                                 <div className="space-y-1 text-right font-mono tabular-nums">
                                   {computedDiscount > 0 && (

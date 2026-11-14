@@ -14,6 +14,7 @@ import Promos from "./pages/Promos";
 import Saved from "./pages/Saved";
 import Bag from "./pages/Bag";
 import Notifications from "./pages/Notifications";
+import TrackOrder from "./pages/TrackOrder";
 import UserProfileModal from "./components/UserProfileModal";
 import AuthModal from "./components/AuthModal";
 import InvoiceModal from "./components/InvoiceModal";
@@ -478,6 +479,15 @@ export default function App() {
     />
   );
 
+  const handleOpenSupport = (orderId?: string) => {
+    handleCloseProfileModal();
+    if (orderId) {
+      window.location.href = `/support/?order=${encodeURIComponent(orderId)}`;
+    } else {
+      window.location.href = "/support/";
+    }
+  };
+
   return (
     <MotionConfig reducedMotion="user">
     <SeoManager activeProduct={activeProduct} />
@@ -507,6 +517,7 @@ export default function App() {
         isNotificationsLoading={isNotificationsLoading}
         onMarkAsRead={markAsRead}
         onMarkAllAsRead={markAllAsRead}
+        onOpenSupport={() => handleOpenSupport()}
       />
 
       <main className="flex-grow">
@@ -655,6 +666,31 @@ export default function App() {
               )
             }
           />
+          <Route
+            path="/track"
+            element={
+              activeProduct ? (
+                renderProductDetail(activeProduct)
+              ) : (
+                <TrackOrder
+                  orders={orders}
+                  currentUser={currentUser}
+                  clientAddress={
+                    [userData?.shippingStreet, userData?.shippingCity, userData?.shippingCountry]
+                      .filter(Boolean)
+                      .join(", ") || undefined
+                  }
+                  onViewInvoice={(order) => setInvoiceOrder(order)}
+                  onDownloadInvoice={handleDownloadInvoice}
+                  onAddToBag={handleAddToBag}
+                  onOpenCart={handleOpenCart}
+                  onOpenProduct={(product) => setActiveProduct(product)}
+                  onAddToast={handleAddToast}
+                  onOpenSupport={handleOpenSupport}
+                />
+              )
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         )}
@@ -666,6 +702,7 @@ export default function App() {
           setCategoryFilter("");
           setSearchQuery("");
         }}
+        onOpenSupport={() => handleOpenSupport()}
       />
 
       <AnimatePresence>
@@ -688,6 +725,11 @@ export default function App() {
             onAddToBag={handleAddToBag}
             onOpenCart={handleOpenCart}
             onViewInvoice={(order) => setInvoiceOrder(order)}
+            onTrackOrder={(order) => {
+              handleCloseProfileModal();
+              navigate(`/track?order=${encodeURIComponent(order.id)}`);
+            }}
+            onOpenSupport={handleOpenSupport}
             initialTab={activeProfileTab}
             onTabChange={(tab) => handleOpenProfileModal(tab)}
           />

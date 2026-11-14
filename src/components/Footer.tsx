@@ -9,6 +9,7 @@ import { modalBackdropVariants, modalPanelVariants } from "../utils/motion";
 interface FooterProps {
   onAddToast?: (message: string, type: "success" | "error" | "info") => void;
   onNavigateHome?: (sectionId?: string) => void;
+  onOpenSupport?: () => void;
 }
 
 const THEME_OPTIONS: {
@@ -63,7 +64,7 @@ const CUSTOMER_CARE_POLICIES: Record<
   },
 };
 
-export default function Footer({ onNavigateHome }: FooterProps) {
+export default function Footer({ onNavigateHome, onOpenSupport }: FooterProps) {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [activePolicyKey, setActivePolicyKey] = useState<string | null>(null);
@@ -165,6 +166,15 @@ export default function Footer({ onNavigateHome }: FooterProps) {
                 Promo Codes
               </Link>
               <Link
+                to="/track"
+                onClick={() => {
+                  if (onNavigateHome) onNavigateHome();
+                }}
+                className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
+              >
+                Track Order
+              </Link>
+              <Link
                 to="/notifications"
                 onClick={() => {
                   if (onNavigateHome) onNavigateHome();
@@ -181,6 +191,21 @@ export default function Footer({ onNavigateHome }: FooterProps) {
               Customer Care
             </p>
             <div className="flex flex-col gap-1 text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+              <a
+                href="/support/"
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
+              >
+                Customer Service &amp; Live Chat
+              </a>
+              <Link
+                to="/track"
+                onClick={() => {
+                  if (onNavigateHome) onNavigateHome();
+                }}
+                className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
+              >
+                Order Tracking &amp; Dispatch
+              </Link>
               <button
                 type="button"
                 onClick={() => handleInfoLink("Shipping & Returns")}
@@ -274,7 +299,7 @@ export default function Footer({ onNavigateHome }: FooterProps) {
               animate="visible"
               exit="exit"
               onClick={(e) => e.stopPropagation()}
-              className="m3-haze-surface border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm max-w-lg w-full p-6 sm:p-8 space-y-5 text-[#141413] dark:text-[#F3F1EC]"
+              className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm max-w-lg w-full p-6 sm:p-8 space-y-5 text-[#141413] dark:text-[#F3F1EC] shadow-[0_24px_64px_-12px_rgba(20,20,19,0.3)] dark:shadow-[0_28px_70px_-12px_rgba(0,0,0,0.9)]"
             >
               <div className="flex items-start justify-between gap-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
                 <div>

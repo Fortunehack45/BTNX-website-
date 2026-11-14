@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("btnx_theme");
+          var prefersDark =
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var isDark = saved === "dark" || ((saved === "system" || !saved) && prefersDark);
+          var root = document.documentElement;
+          if (isDark) {
+            root.classList.add("dark");
+            root.style.colorScheme = "dark";
+            root.style.backgroundColor = "#111110";
+          } else {
+            root.classList.remove("dark");
+            root.style.colorScheme = "light";
+            root.style.backgroundColor = "#FAF9F7";
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html,
+      body {
+        background-color: #FAF9F7;
+        color: #141413;
+      }
+      html.dark,
+      html.dark body {
+        background-color: #111110 !important;
+        color: #F3F1EC !important;
+        color-scheme: dark;
+      }
+    </style>
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#FAF9F7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    />
+    <title>BTNX — Client Care &amp; Customer Service</title>
+    <meta
+      name="description"
+      content="BTNX Client Care &amp; Live Support. Chat with our automated concierge or connect with a human customer care specialist for orders, delivery, and exchanges."
+    />
+  </head>
+  <body class="bg-[#FAF9F7] text-[#141413] dark:bg-[#111110] dark:text-[#F3F1EC]">
+    <div id="root"></div>
+    <script type="module" src="/support/src/main.tsx"></script>
+  </body>
+</html>

@@ -173,6 +173,30 @@ service cloud.firestore {
         (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 500));
     }
 
+    function isValidSupportTicket(data, ticketId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'userEmail', 'userName', 'subject', 'topic', 'status', 'mode', 'messages', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userEmail', 'userName', 'subject', 'topic', 'orderId', 'status', 'mode',
+          'assignedAgent', 'messages', 'createdAt', 'updatedAt', 'unreadByAdmin'
+        ]) &&
+        data.id is string && data.id == ticketId &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 254 &&
+        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 200 &&
+        data.topic is string && data.topic.size() >= 1 && data.topic.size() <= 120 &&
+        (!('orderId' in data) || (data.orderId is string && data.orderId.size() <= 128)) &&
+        data.status is string && data.status in ['open', 'escalated', 'resolved'] &&
+        data.mode is string && data.mode in ['bot', 'human'] &&
+        (!('assignedAgent' in data) || (data.assignedAgent is string && data.assignedAgent.size() <= 120)) &&
+        data.messages is list && data.messages.size() >= 1 && data.messages.size() <= 250 &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        data.updatedAt is string && data.updatedAt.size() <= 64 &&
+        (!('unreadByAdmin' in data) || data.unreadByAdmin is bool);
+    }
+
     // Collection Rules
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
@@ -280,9 +304,24 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow get: if isValidId(reviewId);
       allow list: if true;
-      allow create: if isValidId(reviewId) && isSignedIn() && isValidReview(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isValidId(reviewId) && isAdmin() && isValidReview(incoming());
+      allow create: if isValidId(reviewId) && isSignedIn() && isValidReview(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        reviewId == incoming().productId + '_' + request.auth.uid;
+      allow update: if isValidId(reviewId) && isSignedIn() && isValidReview(incoming()) && (
+        (existing().userId == request.auth.uid && incoming().userId == request.auth.uid) || isAdmin()
+      );
       allow delete: if isValidId(reviewId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    match /supportTickets/{ticketId} {
+      allow get, list: if isSignedIn();
+      allow create: if isValidId(ticketId) && isSignedIn() && isValidSupportTicket(incoming(), ticketId) && (
+        incoming().userId == request.auth.uid || isAdmin()
+      );
+      allow update: if isValidId(ticketId) && isSignedIn() && isValidSupportTicket(incoming(), ticketId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+      allow delete: if isValidId(ticketId) && isAdmin();
     }
   }
 }

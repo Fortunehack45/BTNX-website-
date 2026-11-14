@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 
 export interface AppNotification {
@@ -33,10 +33,11 @@ export function useNotifications(uid?: string | null) {
     }
 
     setIsLoading(true);
+    // Avoid combining `where("userId", "in", ...)` with `orderBy("createdAt", "desc")` in Firestore
+    // so the query never fails due to a missing composite index; sort client-side instead.
     const q = query(
       collection(db, "notifications"),
-      where("userId", "in", [uid, "broadcast"]),
-      orderBy("createdAt", "desc")
+      where("userId", "in", [uid, "broadcast"])
     );
 
     const unsub = onSnapshot(
@@ -46,12 +47,15 @@ export function useNotifications(uid?: string | null) {
           id: d.id,
           ...(d.data() as Omit<AppNotification, "id">),
         }));
+        allNotifs.sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
         setNotifications(allNotifs);
         setIsLoading(false);
       },
-      (err) => {
+      () => {
         setIsLoading(false);
-        handleFirestoreError(err, OperationType.LIST, "notifications");
       }
     );
 

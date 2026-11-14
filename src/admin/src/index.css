@@ -1,9 +1,101 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Bruno+Ace+SC&family=Passion+One:wght@400;700;900&display=swap');
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Bebas Neue", sans-serif;
-  --font-logo-bruno: "Bruno Ace SC", sans-serif;
-  --font-logo-passion: "Passion One", sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-canvas: #FAF9F7;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F4F1EC;
+  --color-ink: #141413;
+  --color-ink-muted: #66625B;
+  --color-hairline: #E6E2DA;
+  --color-accent: #966830;
+}
+
+@layer base {
+  html {
+    background-color: #FAF9F7;
+    color: #141413;
+    overflow-x: clip;
+    scrollbar-gutter: stable;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html.dark {
+    background-color: #111110;
+    color: #F3F1EC;
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #FAF9F7;
+    color: #141413;
+    overflow-x: clip;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html.dark body {
+    background-color: #111110;
+    color: #F3F1EC;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  .m3-haze-bar {
+    background-color: rgba(250, 249, 247, 0.78);
+    -webkit-backdrop-filter: blur(22px) saturate(165%);
+    backdrop-filter: blur(22px) saturate(165%);
+  }
+
+  .dark .m3-haze-bar {
+    background-color: rgba(17, 17, 16, 0.76);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    backdrop-filter: blur(22px) saturate(160%);
+  }
+
+  .m3-haze-surface {
+    background-color: #FFFFFF;
+    box-shadow:
+      0 18px 46px -14px rgba(20, 20, 19, 0.16),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .dark .m3-haze-surface {
+    background-color: #191816;
+    box-shadow:
+      0 24px 60px -12px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .m3-haze-chip {
+    background-color: rgba(250, 249, 247, 0.80);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(20, 20, 19, 0.08);
+  }
+
+  .dark .m3-haze-chip {
+    background-color: rgba(25, 24, 22, 0.76);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
 }

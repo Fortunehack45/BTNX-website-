@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
+import SupportPortalApp from '../support/src/App.tsx';
+import AdminApp from '../admin/src/App.tsx';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -40,10 +42,19 @@ try {
     const savedRoute =
       sessionStorage.getItem('btnx_last_route') ||
       localStorage.getItem('btnx_last_route');
-    if (savedRoute && savedRoute !== '/' && savedRoute.startsWith('/')) {
+    if (
+      savedRoute &&
+      savedRoute !== '/' &&
+      savedRoute.startsWith('/') &&
+      !savedRoute.startsWith('/admin') &&
+      !savedRoute.startsWith('/support')
+    ) {
       window.history.replaceState(null, '', savedRoute);
     }
-  } else {
+  } else if (
+    !window.location.pathname.startsWith('/admin') &&
+    !window.location.pathname.startsWith('/support')
+  ) {
     sessionStorage.setItem('btnx_last_route', currentFull);
     localStorage.setItem('btnx_last_route', currentFull);
   }
@@ -51,16 +62,24 @@ try {
   // Ignore storage access errors in restricted modes
 }
 
+const currentPathname = window.location.pathname;
+const isSupportRoot = currentPathname === '/support' || currentPathname.startsWith('/support/');
+const isAdminRoot = currentPathname === '/admin' || currentPathname.startsWith('/admin/');
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <ThemeProvider>
-        <AuthProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
-        </AuthProvider>
-      </ThemeProvider>
+      {isAdminRoot ? (
+        <AdminApp />
+      ) : (
+        <ThemeProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              {isSupportRoot ? <SupportPortalApp /> : <App />}
+            </BrowserRouter>
+          </AuthProvider>
+        </ThemeProvider>
+      )}
     </ErrorBoundary>
   </StrictMode>,
 );

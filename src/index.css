@@ -72,23 +72,19 @@
     backdrop-filter: blur(22px) saturate(160%);
   }
 
-  /* Haze Frosted Glass — Elevated Menus, Popovers, Dialogs & Sheets */
+  /* Solid Elevated Surface — Menus, Popovers, Dialogs & Sheets */
   .m3-haze-surface {
-    background-color: rgba(255, 255, 255, 0.86);
-    -webkit-backdrop-filter: blur(26px) saturate(175%);
-    backdrop-filter: blur(26px) saturate(175%);
+    background-color: #FFFFFF;
     box-shadow:
-      0 18px 46px -14px rgba(20, 20, 19, 0.14),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.75);
+      0 18px 46px -14px rgba(20, 20, 19, 0.16),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
   }
 
   .dark .m3-haze-surface {
-    background-color: rgba(25, 24, 22, 0.84);
-    -webkit-backdrop-filter: blur(26px) saturate(170%);
-    backdrop-filter: blur(26px) saturate(170%);
+    background-color: #191816;
     box-shadow:
-      0 22px 54px -14px rgba(0, 0, 0, 0.65),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+      0 24px 60px -12px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
   }
 
   /* Haze Frosted Glass — Smoked Photography Overlays & Caption Docks */

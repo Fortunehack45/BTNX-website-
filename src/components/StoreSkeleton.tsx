@@ -504,6 +504,58 @@ function ProductDetailSkeleton() {
   );
 }
 
+function TrackSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] pb-20 lg:pb-16">
+      <div className="bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26]">
+        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-7 sm:py-10">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+            <div className="space-y-2">
+              <SkeletonBlock className="h-3 w-40" />
+              <SkeletonBlock className="h-9 w-56" />
+            </div>
+            <div className="w-full lg:w-[420px]">
+              <SkeletonBlock className="h-9 w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 pt-6 sm:pt-10 space-y-5">
+        <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
+          <div className="flex gap-6">
+            <SkeletonBlock className="h-4 w-24" />
+            <SkeletonBlock className="h-4 w-24" />
+            <SkeletonBlock className="h-4 w-20" />
+          </div>
+          <SkeletonBlock className="h-3 w-28" />
+        </div>
+
+        <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              <div className="lg:col-span-4 flex items-center gap-3.5">
+                <SkeletonBlock className="w-11 h-14 shrink-0" />
+                <div className="space-y-2 flex-1">
+                  <SkeletonBlock className="h-3 w-36" />
+                  <SkeletonBlock className="h-4 w-48" />
+                </div>
+              </div>
+              <div className="lg:col-span-5 space-y-2">
+                <SkeletonBlock className="h-3 w-full" />
+                <SkeletonBlock className="h-2 w-full" />
+              </div>
+              <div className="lg:col-span-3 flex justify-end">
+                <SkeletonBlock className="h-8 w-32" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function AppBootSkeleton() {
   const path =
     typeof window !== "undefined" ? window.location.pathname : "/";
@@ -518,6 +570,7 @@ export function AppBootSkeleton() {
   else if (path.startsWith("/saved")) body = <SavedSkeleton />;
   else if (path.startsWith("/bag")) body = <BagSkeleton />;
   else if (path.startsWith("/notifications")) body = <NotificationsSkeleton />;
+  else if (path.startsWith("/track")) body = <TrackSkeleton />;
 
   return (
     <div role="status" aria-label="Loading store content">

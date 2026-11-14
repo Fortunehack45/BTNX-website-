@@ -327,8 +327,16 @@ export default function Notifications({
               <div className="pt-3 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex flex-wrap gap-2.5">
                 <button
                   type="button"
-                  onClick={() => onViewInvoice(matchedOrder)}
+                  onClick={() => navigate(`/track?order=${encodeURIComponent(matchedOrder.id)}`)}
                   className="min-h-[42px] px-4 py-2 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Track Shipment</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewInvoice(matchedOrder)}
+                  className="min-h-[42px] px-4 py-2 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   <span>View Invoice</span>
@@ -361,14 +369,24 @@ export default function Notifications({
                   #{orderRef} · Tracking TRK-{orderRef.replace(/^(KB-|BX-)/, "")}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={onOpenOrders}
-                className="min-h-[38px] px-4 py-2 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Open Orders</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/track?order=${encodeURIComponent(orderRef)}`)}
+                  className="min-h-[38px] px-4 py-2 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Track Shipment</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenOrders}
+                  className="min-h-[38px] px-4 py-2 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Orders</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ) : null}
 
