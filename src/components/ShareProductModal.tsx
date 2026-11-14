@@ -22,8 +22,18 @@ export default function ShareProductModal({
 
   if (!isOpen || !product) return null;
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://btnx.com";
-  // The shareable URL that will resolve on both social media crawlers (WhatsApp, Twitter) and real browsers
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname.startsWith("192.168."));
+
+  // In production/deployment, use current public origin; fallback to env or current origin
+  const origin =
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_PUBLIC_URL) ||
+    (typeof window !== "undefined" ? window.location.origin : "https://btnx.store");
+
+  // Clean canonical product link for social sharing
   const shareUrl = `${origin}/product/${encodeURIComponent(product.id)}`;
   const shareText = `Check out the ${product.name} (${formatNaira(product.price)}) on BTNX Store:\n${shareUrl}`;
 
@@ -132,6 +142,12 @@ export default function ShareProductModal({
               </p>
             </div>
           </div>
+
+          {isLocalhost && (
+            <div className="mb-4 p-2.5 bg-[#966830]/10 border border-[#966830]/20 rounded-sm text-[11px] text-[#966830] dark:text-[#C89B62] leading-relaxed">
+              <span className="font-semibold">Local dev notice:</span> WhatsApp crawlers run in the cloud and cannot reach <code className="font-mono text-[10px]">localhost</code>. Once deployed to your Vercel domain, WhatsApp automatically unfurls this card and product photo.
+            </div>
+          )}
 
           {/* Quick Share Buttons */}
           <div className="space-y-2.5">

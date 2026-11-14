@@ -535,8 +535,9 @@ app.get("/api/support/ticket/:id", async (req: Request, res: Response) => {
 
 // Helper function to extract request host origin
 function getHostOrigin(req: Request): string {
-  const host = req.get("host") || "";
-  const proto = req.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+  const forwardedHost = req.get("x-forwarded-host");
+  const host = forwardedHost || req.get("host") || "";
+  const proto = req.get("x-forwarded-proto") || (host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https");
   return `${proto}://${host}`;
 }
 
@@ -564,12 +565,15 @@ async function handleProductShare(req: Request, res: Response) {
   } catch {}
 
   if (!prod) {
-    prod = NEW_YEAR_PRODUCTS.find((p) => p.id === prodId) || NEW_YEAR_PRODUCTS[0];
+    prod =
+      NEW_YEAR_PRODUCTS.find((p) => p.id === prodId || p.id === `ny-${prodId}`) ||
+      NEW_YEAR_PRODUCTS[0];
   }
 
   // Determine absolute image URL for WhatsApp / Social Meta tags
-  let absoluteImageUrl = `${hostOrigin}/btnx-og-preview.jpg`;
-  if (prod.image) {
+  // WhatsApp strictly requires images to be under 300KB and directly accessible over HTTP(S)
+  let absoluteImageUrl = `${hostOrigin}/og/${encodeURIComponent(prod.id)}.jpg`;
+  if (prod.image && !prod.image.startsWith("/og/")) {
     if (prod.image.startsWith("data:")) {
       absoluteImageUrl = `${hostOrigin}/api/product-image/${encodeURIComponent(prod.id)}`;
     } else if (prod.image.startsWith("http")) {
@@ -585,7 +589,7 @@ async function handleProductShare(req: Request, res: Response) {
   const description = `${formattedPrice} · ${prod.category || "Luxury Apparel"}. ${prod.description || "Crafted by BTNX Atelier with express delivery across Nigeria."}`;
 
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" prefix="og: https://ogp.me/ns#">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -593,16 +597,19 @@ async function handleProductShare(req: Request, res: Response) {
   <meta name="description" content="${escapeHtml(description)}" />
 
   <!-- OpenGraph Metadata for WhatsApp, iMessage, Facebook, Telegram -->
-  <meta property="og:type" content="product" />
   <meta property="og:site_name" content="BTNX Store" />
-  <meta property="og:url" content="${escapeHtml(pageUrl)}" />
+  <meta property="og:type" content="product" />
   <meta property="og:title" content="${escapeHtml(title)}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
+  <meta property="og:url" content="${escapeHtml(pageUrl)}" />
   <meta property="og:image" content="${escapeHtml(absoluteImageUrl)}" />
+  <meta property="og:image:url" content="${escapeHtml(absoluteImageUrl)}" />
   <meta property="og:image:secure_url" content="${escapeHtml(absoluteImageUrl)}" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="800" />
   <meta property="og:image:alt" content="${escapeHtml(prod.name)}" />
+  <link rel="image_src" href="${escapeHtml(absoluteImageUrl)}" />
 
   <!-- Twitter Card Metadata -->
   <meta name="twitter:card" content="summary_large_image" />
@@ -611,16 +618,17 @@ async function handleProductShare(req: Request, res: Response) {
   <meta name="twitter:image" content="${escapeHtml(absoluteImageUrl)}" />
   <meta name="twitter:image:alt" content="${escapeHtml(prod.name)}" />
 
-  <!-- Instant Browser Redirect for Real Users -->
+  <!-- Instant Browser Redirect for Real Users (Skip bots like WhatsApp / Facebook / Twitter) -->
   <script>
-    if (!window.location.search.includes('noredirect=1')) {
+    var isBot = /WhatsApp|facebookexternalhit|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Pinterest|Googlebot/i.test(navigator.userAgent);
+    if (!isBot && !window.location.search.includes('noredirect=1')) {
       window.location.replace('${pageUrl}');
     }
   </script>
 </head>
 <body style="margin: 0; background-color: #FAF9F7; color: #141413; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px;">
   <div style="max-width: 440px; width: 100%; background: #ffffff; border: 1px solid #E6E2DA; padding: 28px; text-align: center; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.06);">
-    <img src="${escapeHtml(absoluteImageUrl)}" alt="${escapeHtml(prod.name)}" style="width: 100%; aspect-ratio: 3/4; object-fit: cover; margin-bottom: 20px; border-radius: 2px;" />
+    <img src="${escapeHtml(absoluteImageUrl)}" alt="${escapeHtml(prod.name)}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; margin-bottom: 20px; border-radius: 2px;" />
     <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 600; margin-bottom: 6px;">${escapeHtml(prod.category)}</div>
     <h1 style="font-size: 22px; margin: 0 0 8px 0; font-weight: 600; line-height: 1.2;">${escapeHtml(prod.name)}</h1>
     <p style="font-size: 18px; font-weight: 700; color: #141413; margin: 0 0 20px 0; font-family: monospace;">${escapeHtml(formattedPrice)}</p>
@@ -632,6 +640,7 @@ async function handleProductShare(req: Request, res: Response) {
 </html>`;
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
   res.send(html);
 }
 
