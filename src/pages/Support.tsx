@@ -702,9 +702,9 @@ export default function Support({
     return (
       <section
         id="customer-service-chat-page"
-        className="w-full max-w-[1680px] mx-auto px-0 sm:px-4 lg:px-6 flex-1 flex flex-col py-0 sm:py-6"
+        className="w-full max-w-[1680px] mx-auto px-0 sm:px-4 lg:px-6 flex-1 flex flex-col py-0 sm:py-3 h-dvh max-h-dvh overflow-hidden"
       >
-        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border-0 sm:border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-3.5rem)] sm:min-h-[calc(100dvh-4rem)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-3.5rem)] sm:max-h-[calc(100dvh-4rem)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
+        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border-0 sm:border border-[#E6E2DA] dark:border-[#2C2A26] h-full max-h-full overflow-hidden">
           {/* Clean Single-Row Editorial Chat Header */}
           <div className="px-3.5 sm:px-6 py-3 sm:py-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">

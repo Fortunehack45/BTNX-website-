@@ -49,6 +49,14 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // The chat page (/support?chat=...) should not show the main nav bar or bottom nav,
+  // but the customer service hub screen (/support) MUST show them.
+  const isChatPage =
+    location.pathname.startsWith("/support") &&
+    Boolean(searchParams.get("chat"));
+  const isSupportStaff = location.pathname.startsWith("/support-staff");
+  const isAdmin = location.pathname.startsWith("/admin");
   const {
     notifications,
     unreadCount,
@@ -604,29 +612,31 @@ export default function App() {
     >
       <Notification toasts={toasts} onClose={handleRemoveToast} />
 
-      <Header
-        cart={cart}
-        onOpenCart={handleOpenCart}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onCategoryFilter={setCategoryFilter}
-        onOpenProfile={(tab) => {
-          if (tab === "favorites") {
-            navigate("/saved");
-            return;
-          }
-          handleOpenProfileModal(tab || "profile");
-        }}
-        onOpenProduct={setActiveProduct}
-        notifications={notifications}
-        unreadCount={unreadCount}
-        isNotificationsLoading={isNotificationsLoading}
-        onMarkAsRead={markAsRead}
-        onMarkAllAsRead={markAllAsRead}
-        onOpenSupport={() => handleOpenSupport()}
-        products={products}
-      />
+      {!isChatPage && !isSupportStaff && !isAdmin && (
+        <Header
+          cart={cart}
+          onOpenCart={handleOpenCart}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onCategoryFilter={setCategoryFilter}
+          onOpenProfile={(tab) => {
+            if (tab === "favorites") {
+              navigate("/saved");
+              return;
+            }
+            handleOpenProfileModal(tab || "profile");
+          }}
+          onOpenProduct={setActiveProduct}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          isNotificationsLoading={isNotificationsLoading}
+          onMarkAsRead={markAsRead}
+          onMarkAllAsRead={markAllAsRead}
+          onOpenSupport={() => handleOpenSupport()}
+          products={products}
+        />
+      )}
 
       <main className="flex-grow">
         {loading ? (
@@ -826,9 +836,9 @@ export default function App() {
         )}
       </main>
 
-      {!location.pathname.startsWith("/support") &&
-        !location.pathname.startsWith("/support-staff") &&
-        !location.pathname.startsWith("/admin") && (
+      {!isChatPage &&
+        !isSupportStaff &&
+        !isAdmin && (
           <Footer
             onAddToast={handleAddToast}
             onNavigateHome={() => {
@@ -884,9 +894,9 @@ export default function App() {
 
       {!isAuthOpen &&
         !invoiceOrder &&
-        !location.pathname.startsWith("/support") &&
-        !location.pathname.startsWith("/support-staff") &&
-        !location.pathname.startsWith("/admin") && (
+        !isChatPage &&
+        !isSupportStaff &&
+        !isAdmin && (
           <MobileBottomNav
             cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
             wishlistCount={wishlist.length}
