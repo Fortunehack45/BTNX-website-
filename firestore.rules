@@ -44,6 +44,15 @@ service cloud.firestore {
       );
     }
 
+    function isSupport() {
+      return isSignedIn() && (
+        isAdmin() || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
+        )
+      );
+    }
+
     // Validation Helpers
     function isValidUser(data, userId) {
       return data.keys().hasAll(['id', 'email', 'role']) &&
@@ -53,7 +62,7 @@ service cloud.firestore {
         ]) &&
         data.id is string && data.id == userId &&
         data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
-        data.role is string && data.role in ['customer', 'admin'] &&
+        data.role is string && data.role in ['customer', 'admin', 'support'] &&
         (!('name' in data) || (data.name is string && data.name.size() <= 120)) &&
         (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp) &&
         (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
@@ -226,7 +235,7 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'id', 'userId', 'userEmail', 'userName', 'subject', 'topic', 'orderId', 'status', 'mode',
-          'assignedAgent', 'messages', 'createdAt', 'updatedAt', 'unreadByAdmin'
+          'assignedAgent', 'messages', 'createdAt', 'updatedAt', 'unreadByAdmin', 'unreadByCustomer'
         ]) &&
         data.id is string && data.id == ticketId &&
         data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
@@ -234,14 +243,15 @@ service cloud.firestore {
         data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120 &&
         data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 200 &&
         data.topic is string && data.topic.size() >= 1 && data.topic.size() <= 120 &&
-        (!('orderId' in data) || (data.orderId is string && data.orderId.size() <= 128)) &&
-        data.status is string && data.status in ['open', 'escalated', 'resolved'] &&
+        (!('orderId' in data) || data.orderId == null || (data.orderId is string && data.orderId.size() <= 128)) &&
+        data.status is string && data.status in ['open', 'escalated', 'resolved', 'pending_human', 'human_active'] &&
         data.mode is string && data.mode in ['bot', 'human'] &&
-        (!('assignedAgent' in data) || (data.assignedAgent is string && data.assignedAgent.size() <= 120)) &&
+        (!('assignedAgent' in data) || data.assignedAgent == null || (data.assignedAgent is string && data.assignedAgent.size() <= 120)) &&
         data.messages is list && data.messages.size() >= 1 && data.messages.size() <= 250 &&
         data.createdAt is string && data.createdAt.size() <= 64 &&
         data.updatedAt is string && data.updatedAt.size() <= 64 &&
-        (!('unreadByAdmin' in data) || data.unreadByAdmin is bool);
+        (!('unreadByAdmin' in data) || data.unreadByAdmin is bool) &&
+        (!('unreadByCustomer' in data) || data.unreadByCustomer is bool);
     }
 
     // Collection Rules
@@ -369,10 +379,10 @@ service cloud.firestore {
     match /supportTickets/{ticketId} {
       allow get, list: if isSignedIn();
       allow create: if isValidId(ticketId) && isSignedIn() && isValidSupportTicket(incoming(), ticketId) && (
-        incoming().userId == request.auth.uid || isAdmin()
+        incoming().userId == request.auth.uid || isAdmin() || isSupport()
       );
       allow update: if isValidId(ticketId) && isSignedIn() && isValidSupportTicket(incoming(), ticketId) && (
-        existing().userId == request.auth.uid || isAdmin()
+        existing().userId == request.auth.uid || isAdmin() || isSupport()
       );
       allow delete: if isValidId(ticketId) && isAdmin();
     }

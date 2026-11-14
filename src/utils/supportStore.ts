@@ -188,36 +188,44 @@ export async function persistTicket(ticket: SupportTicket, syncFirestore = true)
 
   if (syncFirestore && auth.currentUser) {
     try {
-      const cleanMessages = ticket.messages.slice(-100).map((m) => ({
-        id: m.id,
-        sender: m.sender,
-        senderName: m.senderName,
-        senderRole: m.senderRole || "",
-        text: m.text,
-        createdAt: m.createdAt,
-        images: m.images || [],
-        attachedOrder: m.attachedOrder || null,
-        attachedProduct: m.attachedProduct || null,
-        attachedAction: m.attachedAction || null,
-        suggestHumanTransfer: Boolean(m.suggestHumanTransfer),
-        quickReplies: m.quickReplies || [],
-      }));
+      const cleanMessages = (ticket.messages || []).slice(-100).map((m) => {
+        const msg: any = {
+          id: m.id,
+          sender: m.sender,
+          senderName: m.senderName || "Client",
+          text: m.text || "",
+          createdAt: m.createdAt,
+        };
+        if (m.senderRole) msg.senderRole = m.senderRole;
+        if (m.images && m.images.length > 0) msg.images = m.images;
+        if (m.attachedOrder) msg.attachedOrder = m.attachedOrder;
+        if (m.attachedProduct) msg.attachedProduct = m.attachedProduct;
+        if (m.attachedAction) msg.attachedAction = m.attachedAction;
+        if (m.suggestHumanTransfer != null) msg.suggestHumanTransfer = Boolean(m.suggestHumanTransfer);
+        if (m.quickReplies && m.quickReplies.length > 0) msg.quickReplies = m.quickReplies;
+        return msg;
+      });
 
-      await setDoc(doc(db, "supportTickets", ticket.id), {
+      const docData: any = {
         id: ticket.id,
         userId: auth.currentUser.uid,
         userEmail: (ticket.userEmail || auth.currentUser.email || "guest@btnx.store").slice(0, 250),
         userName: (ticket.userName || "BTNX Client").slice(0, 115),
         subject: (ticket.subject || "Client Care Inquiry").slice(0, 195),
         topic: (ticket.topic || "General Store Inquiry").slice(0, 115),
-        orderId: (ticket.orderId || "").slice(0, 120),
         status: ticket.status,
         mode: ticket.mode,
-        assignedAgent: (ticket.assignedAgent || "").slice(0, 115),
         messages: cleanMessages,
         createdAt: ticket.createdAt,
         updatedAt: ticket.updatedAt,
-      });
+        unreadByAdmin: Boolean(ticket.unreadByAdmin),
+      };
+
+      if (ticket.orderId) docData.orderId = ticket.orderId.slice(0, 120);
+      if (ticket.assignedAgent) docData.assignedAgent = ticket.assignedAgent.slice(0, 115);
+      if (ticket.unreadByCustomer != null) docData.unreadByCustomer = Boolean(ticket.unreadByCustomer);
+
+      await setDoc(doc(db, "supportTickets", ticket.id), docData, { merge: true });
     } catch {
       // Fallback to localStorage seamlessly if guest or rule restricted
     }
@@ -258,18 +266,31 @@ export function subscribeToSupportTickets(
   let bc: BroadcastChannel | null = null;
   if (typeof BroadcastChannel !== "undefined") {
     bc = new BroadcastChannel(CHANNEL_NAME);
-    bc.onmessage = () => {
-      emitSorted(loadLocalTickets());
+    bc.onmessage = (event) => {
+      if (event.data?.ticket) {
+        const incomingTicket = event.data.ticket as SupportTicket;
+        const currentList = loadLocalTickets();
+        const mergedMap = new Map<string, SupportTicket>();
+        currentList.forEach((t) => mergedMap.set(t.id, t));
+        mergedMap.set(incomingTicket.id, incomingTicket);
+        const merged = Array.from(mergedMap.values());
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        } catch {}
+        emitSorted(merged);
+      } else {
+        emitSorted(loadLocalTickets());
+      }
     };
   }
 
   let unsubFirestore: (() => void) | null = null;
-  const unsubAuth = onAuthStateChanged(auth, (user) => {
+
+  const startFirestoreListener = () => {
     if (unsubFirestore) {
       unsubFirestore();
       unsubFirestore = null;
     }
-    if (!user) return;
     try {
       const q = query(collection(db, "supportTickets"));
       unsubFirestore = onSnapshot(
@@ -290,7 +311,9 @@ export function subscribeToSupportTickets(
             }
           });
           const merged = Array.from(mergedMap.values());
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
           emitSorted(merged);
         },
         () => {
@@ -300,6 +323,13 @@ export function subscribeToSupportTickets(
     } catch {
       // ignore
     }
+  };
+
+  // Attempt initial subscription immediately
+  startFirestoreListener();
+
+  const unsubAuth = onAuthStateChanged(auth, () => {
+    startFirestoreListener();
   });
 
   return () => {

@@ -1,38 +1,36 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Headphones,
   Search,
   Send,
-  CheckCircle2,
-  AlertCircle,
-  User,
-  ShoppingBag,
   Package,
-  Clock,
   RefreshCw,
   Tag,
   Paperclip,
-  Check,
-  ChevronRight,
   ExternalLink,
   MessageSquare,
-  Shield,
   Bot,
   UserCheck,
   ArrowLeft,
-  X,
-  FileText,
+  LogOut,
 } from "lucide-react";
 import BrandLogo from "../../src/components/BrandLogo";
 import { db, auth } from "../../src/lib/firebase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  User as FirebaseUser,
+} from "firebase/auth";
 import {
   collection,
   doc,
   onSnapshot,
   setDoc,
+  getDoc,
   query,
-  updateDoc,
 } from "firebase/firestore";
 import {
   SupportTicket,
@@ -42,7 +40,7 @@ import {
   compressImageFile,
 } from "../../src/utils/supportStore";
 import { formatNaira } from "../../src/utils/currency";
-import { Order, Product } from "../../src/types";
+import { Product } from "../../src/types";
 import { NEW_YEAR_PRODUCTS } from "../../src/data";
 
 const CANNED_REPLIES = [
@@ -68,24 +66,27 @@ export default function SupportStaffPortal() {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetTicketId = searchParams.get("ticket") || searchParams.get("order");
 
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
+
+  // Tickets & Chat State
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<"all" | "human" | "open" | "resolved">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [replyText, setReplyText] = useState("");
-  const [agentName, setAgentName] = useState(() => {
-    try {
-      return localStorage.getItem("btnx_agent_name") || "Adaobi N. (Care Desk)";
-    } catch {
-      return "Adaobi N. (Care Desk)";
-    }
-  });
   const [isSending, setIsSending] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // Attachment Drawers
-  const [drawerType, setDrawerType] = useState<"none" | "order" | "product" | "photo">("none");
-  const [orderInputId, setOrderInputId] = useState("");
+  // Attachment & Chat State
   const [availableProducts, setAvailableProducts] = useState<Product[]>(NEW_YEAR_PRODUCTS);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -95,8 +96,43 @@ export default function SupportStaffPortal() {
     setTimeout(() => setToastMsg(null), 3200);
   };
 
-  // Real-time Firestore tickets subscription
+  // Auth state listener
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        try {
+          const userDocSnap = await getDoc(doc(db, "users", user.uid));
+          const role = userDocSnap.exists() ? userDocSnap.data()?.role : null;
+          const isBootstrapAdmin =
+            user.email?.toLowerCase() === "fortunedomination@gmail.com" ||
+            user.email?.toLowerCase() === "btnx@btnx.com";
+          const effectiveRole = role || (isBootstrapAdmin ? "admin" : "support");
+          setUserRole(effectiveRole);
+        } catch {
+          const isBootstrapAdmin =
+            user.email?.toLowerCase() === "fortunedomination@gmail.com" ||
+            user.email?.toLowerCase() === "btnx@btnx.com";
+          setUserRole(isBootstrapAdmin ? "admin" : "support");
+        }
+      } else {
+        setUserRole(null);
+      }
+      setAuthChecking(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const agentName =
+    currentUser?.displayName ||
+    authName ||
+    currentUser?.email?.split("@")[0] ||
+    "Adaobi N. (Care Desk)";
+
+  // Real-time Firestore tickets subscription & local sync
+  useEffect(() => {
+    if (!currentUser) return;
+
     try {
       const q = query(collection(db, "supportTickets"));
       const unsubscribe = onSnapshot(
@@ -106,8 +142,10 @@ export default function SupportStaffPortal() {
             const fetched = snapshot.docs.map((d) => d.data() as SupportTicket);
             fetched.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
             setTickets(fetched);
+            try {
+              localStorage.setItem("btnx_support_tickets_v1", JSON.stringify(fetched));
+            } catch {}
           } else {
-            // Check localStorage fallback
             try {
               const local = localStorage.getItem("btnx_support_tickets_v1");
               if (local) setTickets(JSON.parse(local));
@@ -115,7 +153,6 @@ export default function SupportStaffPortal() {
           }
         },
         () => {
-          // Offline/fallback
           try {
             const local = localStorage.getItem("btnx_support_tickets_v1");
             if (local) setTickets(JSON.parse(local));
@@ -126,6 +163,22 @@ export default function SupportStaffPortal() {
     } catch {
       // ignore
     }
+  }, [currentUser]);
+
+  // Listen to BroadcastChannel for instant zero-latency cross-tab sync with customer chat
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const bc = new BroadcastChannel("btnx_support_channel");
+    bc.onmessage = (event) => {
+      if (event.data?.ticket) {
+        const updated = event.data.ticket as SupportTicket;
+        setTickets((prev) => {
+          const exists = prev.some((t) => t.id === updated.id);
+          return exists ? prev.map((t) => (t.id === updated.id ? updated : t)) : [updated, ...prev];
+        });
+      }
+    };
+    return () => bc.close();
   }, []);
 
   // Fetch products for recommendations
@@ -155,41 +208,138 @@ export default function SupportStaffPortal() {
         setSelectedTicketId(tickets[0].id);
       }
     }
-  }, [tickets, targetTicketId]);
+  }, [targetTicketId, tickets, selectedTicketId]);
 
-  // Scroll to bottom when conversation changes
+  // Scroll chat to bottom when messages update
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedTicketId, tickets]);
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0] || null;
 
-  // Filtered ticket queue
+  // Clean ticket document for Firestore (strictly removes undefined values)
+  const cleanTicketDoc = (ticket: SupportTicket): any => {
+    const cleanMessages = (ticket.messages || []).slice(-100).map((m) => {
+      const msg: any = {
+        id: m.id,
+        sender: m.sender,
+        senderName: m.senderName || "Support Specialist",
+        text: m.text || "",
+        createdAt: m.createdAt,
+      };
+      if (m.senderRole) msg.senderRole = m.senderRole;
+      if (m.images && m.images.length > 0) msg.images = m.images;
+      if (m.attachedOrder) msg.attachedOrder = m.attachedOrder;
+      if (m.attachedProduct) msg.attachedProduct = m.attachedProduct;
+      if (m.attachedAction) msg.attachedAction = m.attachedAction;
+      if (m.suggestHumanTransfer != null) msg.suggestHumanTransfer = Boolean(m.suggestHumanTransfer);
+      if (m.quickReplies && m.quickReplies.length > 0) msg.quickReplies = m.quickReplies;
+      return msg;
+    });
+
+    const docData: any = {
+      id: ticket.id,
+      userId: ticket.userId || "guest",
+      userEmail: (ticket.userEmail || "guest@btnx.store").slice(0, 250),
+      userName: (ticket.userName || "BTNX Client").slice(0, 115),
+      subject: (ticket.subject || "Client Care Inquiry").slice(0, 195),
+      topic: (ticket.topic || "General Store Inquiry").slice(0, 115),
+      status: ticket.status,
+      mode: ticket.mode,
+      messages: cleanMessages,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      unreadByAdmin: Boolean(ticket.unreadByAdmin),
+    };
+
+    if (ticket.orderId) docData.orderId = ticket.orderId.slice(0, 120);
+    if (ticket.assignedAgent) docData.assignedAgent = ticket.assignedAgent.slice(0, 115);
+    if (ticket.unreadByCustomer != null) docData.unreadByCustomer = Boolean(ticket.unreadByCustomer);
+
+    return docData;
+  };
+
+  // Broadcast helper
+  const broadcastTicketUpdate = (ticket: SupportTicket) => {
+    try {
+      const localRaw = localStorage.getItem("btnx_support_tickets_v1");
+      const list = localRaw ? JSON.parse(localRaw) : [];
+      const nextList = list.some((t: any) => t.id === ticket.id)
+        ? list.map((t: any) => (t.id === ticket.id ? ticket : t))
+        : [ticket, ...list];
+      localStorage.setItem("btnx_support_tickets_v1", JSON.stringify(nextList));
+      window.dispatchEvent(new CustomEvent("btnx-support-updated"));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("btnx_support_channel");
+        bc.postMessage({ type: "ticket_update", ticket });
+        bc.close();
+      }
+    } catch {}
+  };
+
+  // Staff Authentication Handlers
+  const handleSupportAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword) return;
+    setIsSubmittingAuth(true);
+    setAuthError("");
+
+    try {
+      if (authMode === "register") {
+        const cred = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const nameToUse = authName.trim() || authEmail.split("@")[0];
+        await setDoc(doc(db, "users", cred.user.uid), {
+          id: cred.user.uid,
+          email: authEmail.trim(),
+          name: nameToUse,
+          role: "support",
+          createdAt: new Date().toISOString(),
+        });
+        setUserRole("support");
+        showToast("Support staff account created successfully.");
+      } else {
+        const cred = await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const snap = await getDoc(doc(db, "users", cred.user.uid));
+        const role = snap.exists() ? snap.data()?.role : null;
+        if (role === "customer") {
+          setAuthError("Access Denied: Customer accounts cannot access the Support Staff desk. Customers should use /support.");
+          await signOut(auth);
+          return;
+        }
+        setUserRole(role || "support");
+        showToast("Signed in to Support Desk.");
+      }
+    } catch (err: any) {
+      setAuthError(err.message || "Authentication failed. Check your credentials.");
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  };
+
+  // Filtered queue items
   const filteredTickets = tickets.filter((t) => {
-    if (filterMode === "human") {
-      if (t.status === "resolved" || (t.mode !== "human" && t.status !== "pending_human")) return false;
-    } else if (filterMode === "open") {
-      if (t.status === "resolved") return false;
-    } else if (filterMode === "resolved") {
-      if (t.status !== "resolved") return false;
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = (t.userName || "").toLowerCase().includes(q);
-      const matchEmail = (t.userEmail || "").toLowerCase().includes(q);
-      const matchId = (t.id || "").toLowerCase().includes(q);
-      const matchOrder = (t.orderId || "").toLowerCase().includes(q);
-      return matchName || matchEmail || matchId || matchOrder;
-    }
-
+    if (filterMode === "human") return t.mode === "human" || t.status === "pending_human";
+    if (filterMode === "open") return t.status === "open" || t.status === "pending_human";
+    if (filterMode === "resolved") return t.status === "resolved";
     return true;
+  }).filter((t) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      t.userName?.toLowerCase().includes(q) ||
+      t.userEmail?.toLowerCase().includes(q) ||
+      t.orderId?.toLowerCase().includes(q) ||
+      t.subject?.toLowerCase().includes(q) ||
+      t.topic?.toLowerCase().includes(q) ||
+      t.id.toLowerCase().includes(q)
+    );
   });
 
   const humanPendingCount = tickets.filter(
-    (t) => t.status !== "resolved" && (t.mode === "human" || t.status === "pending_human")
+    (t) => (t.mode === "human" || t.status === "pending_human") && t.status !== "resolved"
   ).length;
 
+  // Dispatch agent reply into customer thread
   const handleSendAgentReply = async (
     customText?: string,
     attachment?: {
@@ -198,13 +348,14 @@ export default function SupportStaffPortal() {
       images?: string[];
     }
   ) => {
-    if (!selectedTicket) return;
-    const textToSend = customText || replyText.trim();
+    const textToSend = (customText !== undefined ? customText : replyText).trim();
     if (!textToSend && !attachment) return;
+    if (!selectedTicket) return;
 
     setIsSending(true);
+
     const newMsg: SupportMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-agent`,
       sender: "agent",
       senderName: agentName,
       senderRole: "Client Care Specialist",
@@ -227,16 +378,18 @@ export default function SupportStaffPortal() {
     };
 
     // Update local state immediately
+    setSelectedTicketId(updatedTicket.id);
     setTickets((prev) => prev.map((t) => (t.id === updatedTicket.id ? updatedTicket : t)));
     setReplyText("");
-    setDrawerType("none");
+
+    broadcastTicketUpdate(updatedTicket);
 
     // Sync to Firestore
     try {
-      await setDoc(doc(db, "supportTickets", updatedTicket.id), updatedTicket);
-      showToast("Reply delivered to client.");
+      await setDoc(doc(db, "supportTickets", updatedTicket.id), cleanTicketDoc(updatedTicket), { merge: true });
+      showToast("Reply delivered to client thread.");
     } catch {
-      showToast("Saved locally.");
+      showToast("Saved locally and broadcasted to shopper.");
     } finally {
       setIsSending(false);
     }
@@ -244,40 +397,67 @@ export default function SupportStaffPortal() {
 
   const handleToggleStatus = async (newStatus: "open" | "human_active" | "resolved") => {
     if (!selectedTicket) return;
+    const nowIso = new Date().toISOString();
+    const sysMsg: SupportMessage = {
+      id: `msg-${Date.now()}-sys`,
+      sender: "system",
+      senderName: "System",
+      text: newStatus === "resolved"
+        ? `Ticket #${selectedTicket.id} marked as resolved by ${agentName}.`
+        : `Ticket #${selectedTicket.id} reopened by ${agentName}.`,
+      createdAt: nowIso,
+    };
     const updated: SupportTicket = {
       ...selectedTicket,
       status: newStatus,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
+      messages: [...selectedTicket.messages, sysMsg],
     };
+    setSelectedTicketId(updated.id);
     setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    broadcastTicketUpdate(updated);
+
     try {
-      await updateDoc(doc(db, "supportTickets", updated.id), {
-        status: newStatus,
-        updatedAt: updated.updatedAt,
-      });
+      await setDoc(doc(db, "supportTickets", updated.id), cleanTicketDoc(updated), { merge: true });
       showToast(`Ticket #${updated.id} marked as ${newStatus}.`);
     } catch {}
   };
 
+  // Rock-solid TAKE OVER from bot
   const handleToggleMode = async (newMode: "human" | "bot") => {
     if (!selectedTicket) return;
+    const nowIso = new Date().toISOString();
+    const isTakingOver = newMode === "human";
+
+    const sysMsg: SupportMessage = {
+      id: `msg-${Date.now()}-sys`,
+      sender: "system",
+      senderName: "System",
+      text: isTakingOver
+        ? `${agentName} (Human Support Specialist) has taken over this conversation. The automated bot is now paused.`
+        : "Conversation transferred back to Virtual Support Assistant.",
+      createdAt: nowIso,
+    };
+
     const updated: SupportTicket = {
       ...selectedTicket,
       mode: newMode,
-      status: newMode === "human" ? "human_active" : "open",
-      assignedAgent: newMode === "human" ? agentName : undefined,
-      updatedAt: new Date().toISOString(),
+      status: isTakingOver ? "human_active" : "open",
+      assignedAgent: isTakingOver ? agentName : undefined,
+      updatedAt: nowIso,
+      messages: [...selectedTicket.messages, sysMsg],
     };
+
+    setSelectedTicketId(updated.id);
     setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    broadcastTicketUpdate(updated);
+
     try {
-      await updateDoc(doc(db, "supportTickets", updated.id), {
-        mode: newMode,
-        status: updated.status,
-        assignedAgent: updated.assignedAgent || null,
-        updatedAt: updated.updatedAt,
-      });
-      showToast(`Conversation switched to ${newMode === "human" ? "Human Agent" : "Automated Bot"} mode.`);
-    } catch {}
+      await setDoc(doc(db, "supportTickets", updated.id), cleanTicketDoc(updated), { merge: true });
+      showToast(isTakingOver ? "You have taken over. Bot is paused." : "Transferred to bot.");
+    } catch (err: any) {
+      showToast("Updated locally.");
+    }
   };
 
   const handleAttachImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -291,6 +471,125 @@ export default function SupportStaffPortal() {
     }
   };
 
+  // Loading Screen
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] flex flex-col items-center justify-center p-6">
+        <RefreshCw className="w-5 h-5 animate-spin text-[#966830] dark:text-[#C89B62] mb-3" />
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#66625B] dark:text-[#A7A299]">
+          Verifying Support Staff Credentials...
+        </p>
+      </div>
+    );
+  }
+
+  // Support Staff Authentication Gate
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-7 sm:p-9 space-y-6 shadow-[0_24px_60px_-15px_rgba(20,20,19,0.18)]">
+          <div className="space-y-2 text-center border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-5">
+            <div className="flex justify-center text-[#141413] dark:text-[#F3F1EC]">
+              <BrandLogo className="h-8 w-auto" />
+            </div>
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62]">
+              Osogbo Desk · Client Care Console
+            </p>
+            <h1 className="font-display text-2xl sm:text-3xl font-medium">
+              {authMode === "login" ? "Support Staff Sign In" : "Register Support Staff"}
+            </h1>
+            <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+              Authorized access for BTNX Customer Service Specialists to triage live shopper threads, process order updates, and manage customer tickets.
+            </p>
+          </div>
+
+          {authError && (
+            <div className="p-3.5 border border-[#E5484D] bg-[#FDF2F2] dark:bg-[#2A1616] text-[#E5484D] text-xs">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleSupportAuth} className="space-y-4">
+            {authMode === "register" && (
+              <div>
+                <label className="block text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] mb-1.5">
+                  Full Name / Agent Alias
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={authName}
+                  onChange={(e) => setAuthName(e.target.value)}
+                  placeholder="e.g. Adaobi N."
+                  className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] outline-none"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] mb-1.5">
+                Staff Email Address
+              </label>
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="support@btnx.store"
+                className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] mb-1.5">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmittingAuth}
+              className="w-full h-10 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              {isSubmittingAuth
+                ? "Verifying..."
+                : authMode === "login"
+                ? "Sign In to Support Console"
+                : "Create Staff Account"}
+            </button>
+          </form>
+
+          <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "register" : "login");
+                setAuthError("");
+              }}
+              className="text-[#966830] dark:text-[#C89B62] underline cursor-pointer text-[11px]"
+            >
+              {authMode === "login"
+                ? "New support specialist? Register here"
+                : "Already registered? Sign in"}
+            </button>
+            <a href="/" className="text-[#66625B] dark:text-[#A7A299] hover:underline text-[11px]">
+              Back to Storefront
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main Support Staff Desk Console
   return (
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] font-sans antialiased flex flex-col">
       {/* Toast Notification */}
@@ -317,38 +616,29 @@ export default function SupportStaffPortal() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-2 text-xs">
-            <span className="text-[#66625B] dark:text-[#A7A299] text-[11px] hidden sm:inline">
-              Support Agent:
+          <div className="hidden sm:flex items-center gap-2 text-xs">
+            <span className="text-[#66625B] dark:text-[#A7A299] text-[11px]">Specialist:</span>
+            <span className="font-mono text-xs font-medium bg-[#FAF9F7] dark:bg-[#141413] px-2 py-1 border border-[#E6E2DA] dark:border-[#2C2A26]">
+              {agentName} {userRole ? `(${userRole.toUpperCase()})` : ""}
             </span>
-            <input
-              type="text"
-              value={agentName}
-              onChange={(e) => {
-                setAgentName(e.target.value);
-                try {
-                  localStorage.setItem("btnx_agent_name", e.target.value);
-                } catch {}
-              }}
-              title="Edit your agent display name"
-              className="h-8 px-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none"
-            />
           </div>
 
           <a
-            href="/admin"
-            className="h-8 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
-          >
-            <span>Admin Studio</span>
-          </a>
-
-          <a
             href="/"
-            className="h-8 px-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] inline-flex items-center gap-1.5 transition-opacity whitespace-nowrap"
+            className="h-8 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Storefront</span>
           </a>
+
+          <button
+            type="button"
+            onClick={() => signOut(auth)}
+            className="h-8 px-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] inline-flex items-center gap-1.5 transition-opacity whitespace-nowrap cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
         </div>
       </header>
 
@@ -448,35 +738,44 @@ export default function SupportStaffPortal() {
                   >
                     <div className="flex items-center justify-between text-[10px] font-mono">
                       <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
-                        #{t.id}
+                        {t.userName}
                       </span>
-                      {needsHuman && t.status !== "resolved" ? (
-                        <span className="px-1.5 py-0.5 bg-[#FDF2F2] dark:bg-[#2A1414] text-[#E5484D] font-medium uppercase tracking-wider rounded-xs flex items-center gap-1">
-                          <AlertCircle className="w-2.5 h-2.5" />
-                          Needs Human
-                        </span>
-                      ) : t.status === "resolved" ? (
-                        <span className="px-1.5 py-0.5 bg-[#EBF5EE] dark:bg-[#132A1C] text-[#1D7A46] font-medium uppercase tracking-wider rounded-xs">
-                          Resolved
-                        </span>
-                      ) : (
-                        <span className="text-[#66625B] uppercase">{t.mode}</span>
-                      )}
+                      <span className="text-[#66625B] dark:text-[#A7A299]">
+                        {new Date(t.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
                     </div>
 
                     <p className="text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
-                      {t.userName || "Customer"} · <span className="font-normal text-[#66625B]">{t.userEmail}</span>
-                    </p>
-
-                    <p className="text-[11px] text-[#66625B] truncate">
                       {t.subject || t.topic}
                     </p>
 
-                    {lastMsg && (
-                      <p className="text-[11px] text-[#8C877D] truncate italic">
-                        "{lastMsg.text}"
-                      </p>
-                    )}
+                    <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] line-clamp-1">
+                      {lastMsg ? lastMsg.text : "No messages yet"}
+                    </p>
+
+                    <div className="flex items-center justify-between pt-1 text-[10px] font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded-xs uppercase tracking-wider text-[9px] ${
+                            needsHuman
+                              ? "bg-[#FDF2F2] text-[#E5484D] dark:bg-[#2A1616]"
+                              : "bg-[#F4EFE6] text-[#966830] dark:bg-[#2A241A] dark:text-[#C89B62]"
+                          }`}
+                        >
+                          {needsHuman ? "Human Agent Handling" : "Bot Active"}
+                        </span>
+                        {t.status === "resolved" && (
+                          <span className="px-1.5 py-0.5 bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E] rounded-xs uppercase tracking-wider text-[9px]">
+                            Resolved
+                          </span>
+                        )}
+                      </div>
+                      {t.orderId && (
+                        <span className="text-[#66625B] dark:text-[#A7A299]">
+                          #{t.orderId}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -484,19 +783,19 @@ export default function SupportStaffPortal() {
           </div>
         </div>
 
-        {/* COLUMN 2: LIVE CHAT & CONCIERGE THREAD (5 Cols) */}
+        {/* COLUMN 2: LIVE CHAT & CONVERSATION THREAD (5 Cols) */}
         <div className="lg:col-span-5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] flex flex-col h-[calc(100vh-100px)] overflow-hidden">
           {selectedTicket ? (
             <>
-              {/* Conversation Header */}
-              <div className="p-3.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] flex items-center justify-between gap-3">
+              {/* Active Ticket Header */}
+              <div className="p-3.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-3 bg-[#FAF9F7] dark:bg-[#141413]">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-semibold truncate text-[#141413] dark:text-[#F3F1EC]">
+                    <h2 className="font-medium text-xs text-[#141413] dark:text-[#F3F1EC] truncate">
                       {selectedTicket.userName}
                     </h2>
                     <span className="text-[10px] font-mono text-[#66625B]">
-                      (Ticket #{selectedTicket.id})
+                      (#{selectedTicket.id})
                     </span>
                   </div>
                   <p className="text-[11px] text-[#966830] dark:text-[#C89B62] truncate">
@@ -509,7 +808,7 @@ export default function SupportStaffPortal() {
                     <button
                       type="button"
                       onClick={() => handleToggleMode("human")}
-                      className="h-7 px-2.5 bg-[#966830] text-white text-[10px] font-mono uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                      className="h-7 px-2.5 bg-[#966830] text-white text-[10px] font-mono uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer hover:opacity-90"
                     >
                       <UserCheck className="w-3 h-3" />
                       <span>Take Over</span>
@@ -518,7 +817,7 @@ export default function SupportStaffPortal() {
                     <button
                       type="button"
                       onClick={() => handleToggleMode("bot")}
-                      className="h-7 px-2 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                      className="h-7 px-2 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer hover:border-[#141413] dark:hover:border-[#F3F1EC]"
                     >
                       <Bot className="w-3 h-3" />
                       <span>Pass to Bot</span>
@@ -550,70 +849,82 @@ export default function SupportStaffPortal() {
                 {selectedTicket.messages.map((m) => {
                   const isAgent = m.sender === "agent";
                   const isCustomer = m.sender === "customer";
-                  const isBot = m.sender === "bot";
+                  const isSystem = m.sender === "system";
+
+                  if (isSystem) {
+                    return (
+                      <div key={m.id} className="text-center my-2">
+                        <span className="px-2.5 py-1 bg-[#E6E2DA]/50 dark:bg-[#2C2A26]/50 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] rounded-xs">
+                          {m.text}
+                        </span>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
                       key={m.id}
                       className={`flex flex-col ${isAgent ? "items-end" : "items-start"}`}
                     >
-                      <div className="flex items-center gap-1.5 mb-1 text-[10px] font-mono text-[#66625B]">
-                        <span>{isAgent ? `Staff · ${m.senderName}` : isCustomer ? m.senderName : "BTNX Support Assistant"}</span>
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] mb-1">
+                        <span>
+                          {isAgent ? `Staff · ${m.senderName}` : isCustomer ? m.senderName : "Virtual Assistant"}
+                        </span>
                         <span>·</span>
                         <span>
-                          {m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                          {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
 
                       <div
-                        className={`p-3 max-w-[85%] text-xs leading-relaxed rounded-xs ${
+                        className={`max-w-[85%] p-3 text-xs leading-relaxed space-y-2 ${
                           isAgent
                             ? "bg-[#141413] text-[#FAF9F7] dark:bg-[#F3F1EC] dark:text-[#141413]"
-                            : isCustomer
-                            ? "bg-white dark:bg-[#1E1D1A] border border-[#E6E2DA] dark:border-[#2C2A26] text-[#141413] dark:text-[#F3F1EC]"
-                            : "bg-[#F4EFE6] dark:bg-[#252019] border border-[#E6D9C5] dark:border-[#382E22] text-[#141413] dark:text-[#F3F1EC]"
+                            : "bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-[#141413] dark:text-[#F3F1EC]"
                         }`}
                       >
-                        <p className="whitespace-pre-line">{m.text}</p>
+                        <p className="whitespace-pre-wrap">{m.text}</p>
 
-                        {/* Attached Order Box */}
+                        {/* Attached Images */}
+                        {m.images && m.images.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {m.images.map((img, idx) => (
+                              <img
+                                key={idx}
+                                src={img}
+                                alt="Attachment"
+                                className="w-20 h-20 object-cover border border-[#E6E2DA] dark:border-[#2C2A26] cursor-pointer"
+                                onClick={() => window.open(img, "_blank")}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Attached Order Card */}
                         {m.attachedOrder && (
-                          <div className="mt-2.5 p-2 bg-white/10 dark:bg-black/10 border border-current/20 text-[11px] space-y-1">
-                            <span className="font-mono font-semibold block">
-                              Order #{m.attachedOrder.id} · {m.attachedOrder.status}
-                            </span>
-                            <span className="block text-[10px] opacity-80">
-                              Total: {formatNaira(m.attachedOrder.total)} · {m.attachedOrder.firstItemName}
-                            </span>
+                          <div className="p-2 border border-current/20 bg-black/5 dark:bg-white/5 space-y-1 text-[11px] font-mono">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">Order #{m.attachedOrder.id}</span>
+                              <span>{formatNaira(m.attachedOrder.total)}</span>
+                            </div>
+                            <p className="text-[10px] opacity-80">{m.attachedOrder.firstItemName}</p>
                           </div>
                         )}
 
                         {/* Attached Product Card */}
                         {m.attachedProduct && (
-                          <div className="mt-2.5 p-2 bg-white/10 dark:bg-black/10 border border-current/20 text-[11px] flex gap-2 items-center">
+                          <div className="p-2 border border-current/20 bg-black/5 dark:bg-white/5 flex items-center gap-2">
                             <img
                               src={m.attachedProduct.image}
                               alt={m.attachedProduct.name}
-                              className="w-8 h-10 object-cover shrink-0"
+                              className="w-10 h-10 object-cover shrink-0"
                             />
-                            <div>
-                              <span className="font-medium block">{m.attachedProduct.name}</span>
-                              <span className="font-mono text-[10px] block opacity-80">
-                                {formatNaira(m.attachedProduct.price)}
-                              </span>
+                            <div className="min-w-0 text-[11px]">
+                              <p className="font-medium truncate">{m.attachedProduct.name}</p>
+                              <p className="font-mono text-[10px]">{formatNaira(m.attachedProduct.price)}</p>
                             </div>
                           </div>
                         )}
-
-                        {/* Attached Images */}
-                        {m.images?.map((img, idx) => (
-                          <img
-                            key={idx}
-                            src={img}
-                            alt="Attachment"
-                            className="mt-2 max-h-48 rounded-xs object-cover border border-current/20"
-                          />
-                        ))}
                       </div>
                     </div>
                   );
@@ -621,34 +932,91 @@ export default function SupportStaffPortal() {
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Canned Quick Replies Strip */}
-              <div className="px-3 py-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] flex gap-1.5 overflow-x-auto no-scrollbar">
-                {CANNED_REPLIES.map((c, i) => (
+              {/* Fast Canned Replies */}
+              <div className="p-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                {CANNED_REPLIES.map((cr, idx) => (
                   <button
-                    key={i}
+                    key={idx}
                     type="button"
-                    onClick={() => setReplyText(c.text)}
-                    className="h-6 px-2.5 text-[10px] font-mono uppercase bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] whitespace-nowrap cursor-pointer"
+                    onClick={() => handleSendAgentReply(cr.text)}
+                    className="h-6 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#966830] text-[10px] whitespace-nowrap cursor-pointer text-[#141413] dark:text-[#F3F1EC]"
                   >
-                    {c.label}
+                    {cr.label}
                   </button>
                 ))}
               </div>
 
-              {/* Reply Composer Box */}
+              {/* Agent Reply Composer */}
               <div className="p-3 border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAttachImage}
-                  className="hidden"
-                />
+                <div className="flex items-center justify-between text-[11px] text-[#66625B]">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-1 hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                      title="Attach photo"
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                    </button>
+                    {selectedTicket.orderId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orderAttachment: SupportAttachmentOrder = {
+                            id: selectedTicket.orderId || "",
+                            status: "In Transit",
+                            total: 120000,
+                            date: "Recent Order",
+                            itemCount: 1,
+                            firstItemName: "BTNX Contemporary Piece",
+                          };
+                          handleSendAgentReply(
+                            `Verified Order #${selectedTicket.orderId}. Logistics status is active on dispatch board.`,
+                            { order: orderAttachment }
+                          );
+                        }}
+                        className="p-1 hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                        title="Attach order card"
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prod = availableProducts[0] || NEW_YEAR_PRODUCTS[0];
+                        if (!prod) return;
+                        const productAttachment: SupportAttachmentProduct = {
+                          id: prod.id,
+                          name: prod.name,
+                          price: prod.price,
+                          image: prod.image,
+                          category: prod.category,
+                        };
+                        handleSendAgentReply(
+                          `Here is a recommended piece from our collection: ${prod.name} (${formatNaira(prod.price)}).`,
+                          { product: productAttachment }
+                        );
+                      }}
+                      className="p-1 hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                      title="Recommend signature garment piece"
+                    >
+                      <Tag className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleAttachImage}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono">Replying as {agentName}</span>
+                </div>
 
                 <div className="flex gap-2">
                   <textarea
                     rows={2}
-                    placeholder={`Reply to ${selectedTicket.userName} as support specialist...`}
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     onKeyDown={(e) => {
@@ -657,149 +1025,118 @@ export default function SupportStaffPortal() {
                         handleSendAgentReply();
                       }
                     }}
+                    placeholder={`Reply to ${selectedTicket.userName} as support specialist...`}
                     className="flex-1 p-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none resize-none"
                   />
                   <button
                     type="button"
                     disabled={isSending || !replyText.trim()}
                     onClick={() => handleSendAgentReply()}
-                    className="w-12 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] flex items-center justify-center cursor-pointer disabled:opacity-40"
+                    className="w-12 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] flex items-center justify-center disabled:opacity-40 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
-
-                <div className="flex items-center justify-between text-[11px] text-[#66625B]">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="hover:text-[#141413] dark:hover:text-[#F3F1EC] inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <Paperclip className="w-3.5 h-3.5" />
-                      <span>Photo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDrawerType(drawerType === "product" ? "none" : "product")}
-                      className="hover:text-[#141413] dark:hover:text-[#F3F1EC] inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>Piece</span>
-                    </button>
-                  </div>
-                  <span className="text-[10px] font-mono">Press Enter to send</span>
-                </div>
-
-                {/* Product Attachment Drawer */}
-                {drawerType === "product" && (
-                  <div className="p-2 border border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] max-h-36 overflow-y-auto space-y-1">
-                    <p className="text-[10px] font-mono uppercase text-[#966830] mb-1">
-                      Click to recommend piece in chat:
-                    </p>
-                    {availableProducts.slice(0, 5).map((p) => (
-                      <div
-                        key={p.id}
-                        onClick={() =>
-                          handleSendAgentReply(`I recommend our ${p.name} (${formatNaira(p.price)}):`, {
-                            product: {
-                              id: p.id,
-                              name: p.name,
-                              category: p.category,
-                              price: p.price,
-                              image: p.image,
-                            },
-                          })
-                        }
-                        className="flex items-center justify-between p-1.5 hover:bg-white dark:hover:bg-[#201F1D] cursor-pointer text-xs"
-                      >
-                        <span className="truncate">{p.name}</span>
-                        <span className="font-mono text-[10px] text-[#966830]">{formatNaira(p.price)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-[#66625B] space-y-2">
-              <Headphones className="w-8 h-8 opacity-40" />
-              <p>Select a customer ticket to begin live support.</p>
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-[#66625B]">
+              <MessageSquare className="w-8 h-8 mb-2 opacity-40" />
+              <p>Select a customer support thread from the queue.</p>
             </div>
           )}
         </div>
 
-        {/* COLUMN 3: CUSTOMER DOSSIER & CONTEXT (3 Cols) */}
-        <div className="lg:col-span-3 space-y-4">
+        {/* COLUMN 3: CUSTOMER & ORDER DOSSIER (3 Cols) */}
+        <div className="lg:col-span-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-4 h-[calc(100vh-100px)] overflow-y-auto space-y-5">
           {selectedTicket ? (
-            <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-4 space-y-4 text-xs">
-              <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
-                <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] block">
-                  Customer Profile Dossier
+            <>
+              {/* Client Profile Card */}
+              <div className="space-y-2 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
+                  Client Profile
                 </span>
-                <h3 className="font-display text-lg font-medium mt-0.5">
-                  {selectedTicket.userName}
-                </h3>
-                <p className="font-mono text-[11px] text-[#66625B]">
-                  {selectedTicket.userEmail}
-                </p>
+                <div className="space-y-1">
+                  <h3 className="font-medium text-sm text-[#141413] dark:text-[#F3F1EC]">
+                    {selectedTicket.userName}
+                  </h3>
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] font-mono">
+                    {selectedTicket.userEmail}
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-2.5">
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-[#66625B] block">
-                    Ticket Reference
-                  </span>
-                  <span className="font-mono font-medium">#{selectedTicket.id}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-[#66625B] block">
-                    Current Mode
-                  </span>
-                  <span className="font-medium capitalize">
-                    {selectedTicket.mode === "human" ? "Human Agent Handling" : "Automated AI Bot"}
-                  </span>
-                </div>
-
-                {selectedTicket.orderId && (
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-[#66625B] block">
-                      Associated Order
+              {/* Ticket Details */}
+              <div className="space-y-2.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4 text-xs">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
+                  Ticket Dossier
+                </span>
+                <div className="space-y-1.5 font-mono text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-[#66625B]">Reference:</span>
+                    <span className="font-mono font-medium">#{selectedTicket.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#66625B]">Handling:</span>
+                    <span>
+                      {selectedTicket.mode === "human" ? "Human Agent Handling" : "Automated Virtual Assistant"}
                     </span>
+                  </div>
+                  {selectedTicket.orderId && (
+                    <div className="flex justify-between">
+                      <span className="text-[#66625B]">Order ID:</span>
+                      <a
+                        href={`/track?order=${encodeURIComponent(selectedTicket.orderId)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#966830] dark:text-[#C89B62] underline inline-flex items-center gap-1"
+                      >
+                        <span>#{selectedTicket.orderId}</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-[#66625B]">Created:</span>
+                    <span>
+                      {new Date(selectedTicket.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions for Staff */}
+              <div className="space-y-2.5">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
+                  Quick Actions
+                </span>
+                <div className="space-y-2 text-xs">
+                  <a
+                    href={`/render/support/${selectedTicket.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full h-8 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider flex items-center justify-center gap-1.5"
+                  >
+                    <span>View Visual Card</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+
+                  {selectedTicket.orderId && (
                     <a
-                      href={`/admin`}
-                      className="font-mono text-[#966830] hover:underline inline-flex items-center gap-1"
+                      href={`/render/track/${selectedTicket.orderId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full h-8 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider flex items-center justify-center gap-1.5"
                     >
-                      <span>#{selectedTicket.orderId}</span>
+                      <span>Track Shipment</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
-                  </div>
-                )}
-
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-[#66625B] block">
-                    Opened On
-                  </span>
-                  <span className="text-[#66625B]">
-                    {new Date(selectedTicket.createdAt).toLocaleString()}
-                  </span>
+                  )}
                 </div>
               </div>
-
-              <div className="p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-[11px] space-y-1">
-                <span className="font-medium block text-[#141413] dark:text-[#F3F1EC]">
-                  Support SLA Protocol:
-                </span>
-                <p className="text-[#66625B]">
-                  All human requests should be acknowledged within 15 minutes. Exchanges and address changes update logistics immediately.
-                </p>
-              </div>
-            </div>
+            </>
           ) : (
-            <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 text-center text-xs text-[#66625B]">
-              No ticket selected
-            </div>
+            <p className="text-xs text-[#66625B] text-center pt-8">No ticket selected.</p>
           )}
         </div>
       </div>

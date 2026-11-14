@@ -177,11 +177,12 @@ export default function AdminPortal() {
   // Auth & Quick Studio Unlock State
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [isFirebaseAdmin, setIsFirebaseAdmin] = useState<boolean>(false);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [studioUnlocked, setStudioUnlocked] = useState<boolean>(() => {
     try {
       return localStorage.getItem("btnx_admin_unlocked") === "true";
     } catch {
-      return true;
+      return false;
     }
   });
   const [authChecking, setAuthChecking] = useState(true);
@@ -337,12 +338,18 @@ export default function AdminPortal() {
         try {
           const snap = await getDoc(doc(db, "users", u.uid));
           const role = snap.exists() ? snap.data()?.role : null;
-          setIsFirebaseAdmin(role === "admin" || Boolean(isBootstrap));
+          setCurrentUserRole(role);
+          if (role === "support") {
+            setIsFirebaseAdmin(false);
+          } else {
+            setIsFirebaseAdmin(role === "admin" || Boolean(isBootstrap));
+          }
         } catch {
           setIsFirebaseAdmin(Boolean(isBootstrap));
         }
       } else {
         setIsFirebaseAdmin(false);
+        setCurrentUserRole(null);
       }
       setAuthChecking(false);
     });
@@ -616,7 +623,14 @@ export default function AdminPortal() {
     setIsSubmittingAuth(true);
     setLoginError("");
     try {
-      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      const cred = await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      const snap = await getDoc(doc(db, "users", cred.user.uid));
+      const role = snap.exists() ? snap.data()?.role : null;
+      if (role === "support") {
+        setLoginError("Access Denied: Support Staff accounts cannot access the Admin Panel. Please use the Support Team Desk at /support-staff.");
+        await signOut(auth);
+        return;
+      }
       handleUnlockStudio();
     } catch (err: any) {
       setLoginError(
@@ -632,7 +646,14 @@ export default function AdminPortal() {
     setLoginError("");
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const snap = await getDoc(doc(db, "users", result.user.uid));
+      const role = snap.exists() ? snap.data()?.role : null;
+      if (role === "support") {
+        setLoginError("Access Denied: Support Staff accounts cannot access the Admin Panel. Please use the Support Team Desk at /support-staff.");
+        await signOut(auth);
+        return;
+      }
       handleUnlockStudio();
     } catch (err: any) {
       setLoginError(err.message || "Google sign-in was cancelled.");
@@ -1131,7 +1152,7 @@ export default function AdminPortal() {
     showToast("Broadcast notification dispatched to all client accounts.");
   };
 
-  const hasAccess = isFirebaseAdmin || studioUnlocked;
+  const hasAccess = (isFirebaseAdmin || studioUnlocked) && currentUserRole !== "support";
 
   if (authChecking) {
     return (
@@ -1140,6 +1161,40 @@ export default function AdminPortal() {
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#66625B] dark:text-[#A7A299]">
           Loading BTNX Admin Studio...
         </p>
+      </div>
+    );
+  }
+
+  if (firebaseUser && currentUserRole === "support") {
+    return (
+      <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-7 sm:p-9 space-y-6 text-center shadow-[0_24px_60px_-15px_rgba(20,20,19,0.18)]">
+          <div className="w-12 h-12 mx-auto rounded-full bg-[#FAF9F7] dark:bg-[#201F1D] border border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-center text-[#966830]">
+            <Shield className="w-6 h-6" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-display text-2xl font-medium">Access Restricted</h1>
+            <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+              Signed in as <strong>{firebaseUser.email}</strong> (Support Staff). Customer service specialists do not have access to the Admin Portal, inventory controls, or financial records.
+            </p>
+          </div>
+          <div className="pt-2 space-y-3">
+            <a
+              href="/support-staff"
+              className="w-full h-10 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Headphones className="w-4 h-4" />
+              <span>Go to Support Team Desk</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => signOut(auth)}
+              className="w-full h-10 border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-medium uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

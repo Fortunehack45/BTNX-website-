@@ -1,5 +1,3 @@
-import React from "react";
-
 interface BrandLogoProps {
   className?: string;
   label?: string;

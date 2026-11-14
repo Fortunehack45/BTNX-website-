@@ -617,7 +617,7 @@ export default function Support({
             id: `msg-${Date.now()}-handoff`,
             sender: "system",
             senderName: "System",
-            text: "Transferred to Human Customer Care · Adaobi N. (Osogbo Hub)",
+            text: "Transferred to Human Customer Care · Specialist assigned",
             createdAt: replyIso,
           });
         }
@@ -635,36 +635,9 @@ export default function Support({
         setTypingResponder(null);
       }, 650);
     } else {
-      setTypingResponder("Adaobi N.");
-      setTimeout(async () => {
-        const replyIso = new Date().toISOString();
-        const humanText = generateSimulatedHumanAgentReply({
-          customerName: clientDisplayName,
-          userText: fallbackText,
-          attachedOrder: currentOrderAttachment,
-          attachedProduct: currentProductAttachment,
-          attachedAction: currentActionAttachment,
-          images: currentImages,
-        });
-
-        const humanMsg: SupportMessage = {
-          id: `msg-${Date.now()}-human`,
-          sender: "agent",
-          senderName: "Adaobi N.",
-          senderRole: "Human Care · Osun",
-          text: humanText,
-          createdAt: replyIso,
-        };
-
-        const afterHumanTicket: SupportTicket = {
-          ...updatedTicket,
-          status: "human_active",
-          updatedAt: replyIso,
-          messages: [...updatedTicket.messages, humanMsg],
-        };
-        await persistTicket(afterHumanTicket);
-        setTypingResponder(null);
-      }, 1150);
+      // In human agent mode: The bot is paused and does not auto-reply.
+      // The real human support specialist in /support-staff is alerted with unreadByAdmin: true.
+      setTypingResponder(null);
     }
   };
 
