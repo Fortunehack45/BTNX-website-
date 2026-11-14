@@ -28,7 +28,7 @@ export default function MobileBottomNav({
   return (
     <nav
       aria-label="Mobile page navigation"
-      className="lg:hidden fixed bottom-0 inset-x-0 z-50 m3-haze-bar border-t border-[#E6E2DA]/85 dark:border-[#2C2A26]/85 pb-[env(safe-area-inset-bottom)] transition-colors duration-200"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-[48] m3-haze-bar border-t border-[#E6E2DA]/85 dark:border-[#2C2A26]/85 pb-[env(safe-area-inset-bottom)] transition-colors duration-200"
     >
       <div className="grid grid-cols-5 h-[60px]">
         <button

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { HERO_SLIDES, NEW_YEAR_PRODUCTS, GALLERY_INDEX_ITEMS } from "../data";
@@ -107,18 +107,16 @@ export default function Hero({ onOpenProduct }: HeroProps) {
                 <button
                   onClick={handleScrollToCollection}
                   id="hero-explore-btn"
-                  className="w-full sm:w-auto min-h-[48px] px-8 py-3.5 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.15em] transition-colors flex items-center justify-center gap-2.5 whitespace-nowrap shrink-0 cursor-pointer rounded-sm"
+                  className="w-full sm:w-auto min-h-[48px] px-8 py-3.5 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.15em] transition-colors flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer rounded-sm"
                 >
                   <span>Explore Collection</span>
-                  <ArrowDown className="w-3.5 h-3.5" />
                 </button>
 
                 <Link
                   to="/shop"
-                  className="min-h-[44px] inline-flex items-center justify-center sm:justify-start gap-1.5 text-xs font-medium uppercase tracking-[0.15em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] sm:border-b sm:border-[#141413] dark:sm:border-[#F3F1EC] sm:hover:border-[#966830] dark:sm:hover:border-[#C89B62] sm:pb-1 transition-colors whitespace-nowrap shrink-0"
+                  className="min-h-[44px] inline-flex items-center justify-center sm:justify-start text-xs font-medium uppercase tracking-[0.15em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] sm:border-b sm:border-[#141413] dark:sm:border-[#F3F1EC] sm:hover:border-[#966830] dark:sm:hover:border-[#C89B62] sm:pb-1 transition-colors whitespace-nowrap shrink-0"
                 >
                   <span>Browse Catalog</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>

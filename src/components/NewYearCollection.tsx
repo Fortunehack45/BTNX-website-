@@ -105,9 +105,9 @@ export default function NewYearCollection({
             </h2>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-4 w-full lg:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-3 sm:gap-4 w-full lg:w-auto">
             <div
-              className="flex items-center gap-1 p-1 bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm overflow-x-auto no-scrollbar max-w-full border border-[#E6E2DA]/70 dark:border-[#2C2A26]"
+              className="grid grid-cols-2 sm:inline-flex sm:items-center gap-1 p-1 bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm w-full sm:w-auto border border-[#E6E2DA]/70 dark:border-[#2C2A26]"
               role="tablist"
               aria-label="Collection Category Filter"
             >
@@ -124,7 +124,7 @@ export default function NewYearCollection({
                         onCategoryFilter(tab.key);
                       }
                     }}
-                    className={`min-h-[38px] px-4 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition-all rounded-sm cursor-pointer ${
+                    className={`min-h-[38px] px-3 sm:px-4 py-1.5 text-xs font-medium text-center whitespace-nowrap transition-all rounded-sm cursor-pointer ${
                       active
                         ? "bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] shadow-xs"
                         : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"

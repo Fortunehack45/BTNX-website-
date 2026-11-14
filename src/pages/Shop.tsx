@@ -426,7 +426,7 @@ export default function Shop({
       <div className="max-w-[1360px] mx-auto px-3.5 sm:px-8 lg:px-12 py-6 sm:py-12 lg:py-14">
         {/* Mobile Quick Category Strip & Compact Filter/Sort Toolbar */}
         <div className="lg:hidden space-y-2.5 mb-7">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
             {CATEGORIES.map((cat) => {
               const active = categoryFilter === cat;
               return (
@@ -434,7 +434,7 @@ export default function Shop({
                   key={cat}
                   type="button"
                   onClick={() => setCategoryFilter(cat)}
-                  className={`min-h-[38px] px-3.5 py-1.5 text-xs font-medium rounded-sm border whitespace-nowrap transition-colors cursor-pointer ${
+                  className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-sm border text-center truncate transition-colors cursor-pointer ${
                     active
                       ? "bg-[#141413] dark:bg-[#F3F1EC] border-[#141413] dark:border-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413]"
                       : "bg-white dark:bg-[#191816] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] dark:text-[#A7A299]"
@@ -542,7 +542,7 @@ export default function Shop({
       {/* Mobile Slide-Up Bottom Sheet Filter Drawer */}
       <AnimatePresence>
         {isMobileFiltersOpen && (
-          <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -555,7 +555,7 @@ export default function Shop({
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="m3-haze-surface relative z-10 rounded-t-2xl max-h-[82vh] flex flex-col border-t border-[#E6E2DA] dark:border-[#2C2A26] overflow-hidden"
+              className="m3-haze-surface relative z-10 rounded-t-2xl max-h-[85dvh] flex flex-col border-t border-[#E6E2DA] dark:border-[#2C2A26] overflow-hidden"
             >
               <div className="pt-3 pb-3.5 px-5 border-b border-[#E6E2DA] dark:border-[#2C2A26] shrink-0">
                 <div className="w-10 h-1 bg-[#E6E2DA] dark:bg-[#3A3731] rounded-full mx-auto mb-2.5" />

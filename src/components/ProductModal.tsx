@@ -946,7 +946,7 @@ export default function ProductModal({
             animate="visible"
             exit="exit"
             onClick={() => setIsSizeGuideOpen(false)}
-            className="fixed inset-0 z-50 bg-[#141413]/45 dark:bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+            className="fixed inset-0 z-[60] bg-[#141413]/45 dark:bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
           >
             <motion.div
               variants={modalPanelVariants}
@@ -1019,7 +1019,7 @@ export default function ProductModal({
             animate="visible"
             exit="exit"
             onClick={() => setIsZoomOpen(false)}
-            className="fixed inset-0 z-50 bg-[#141413]/85 dark:bg-black/90 backdrop-blur-lg flex items-center justify-center p-4 sm:p-10 cursor-zoom-out"
+            className="fixed inset-0 z-[60] bg-[#141413]/85 dark:bg-black/90 backdrop-blur-lg flex items-center justify-center p-4 sm:p-10 cursor-zoom-out"
           >
             <button
               onClick={() => setIsZoomOpen(false)}

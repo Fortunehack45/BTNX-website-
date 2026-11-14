@@ -229,41 +229,41 @@ export default function UserProfileModal({
               </p>
             </div>
 
-            <nav className="flex lg:flex-col gap-1.5 overflow-x-auto no-scrollbar">
+            <nav className="grid grid-cols-3 lg:flex lg:flex-col gap-1.5">
               <button
                 onClick={() => setActiveTab("profile")}
-                className={`min-h-[44px] flex items-center gap-2.5 sm:gap-3 px-4 py-3 text-xs font-medium uppercase tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[44px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "profile"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26]"
                 }`}
               >
-                <User className="w-4 h-4 shrink-0" />
+                <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>Profile</span>
               </button>
 
               <button
                 onClick={() => setActiveTab("orders")}
                 id="orders-tab-trigger"
-                className={`min-h-[44px] flex items-center gap-2.5 sm:gap-3 px-4 py-3 text-xs font-medium uppercase tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[44px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "orders"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26]"
                 }`}
               >
-                <Package className="w-4 h-4 shrink-0" />
+                <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>Orders ({orders.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab("favorites")}
-                className={`min-h-[44px] flex items-center gap-2.5 sm:gap-3 px-4 py-3 text-xs font-medium uppercase tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[44px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "favorites"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26]"
                 }`}
               >
-                <Heart className="w-4 h-4 shrink-0" />
+                <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>Saved ({wishlist.length})</span>
               </button>
             </nav>
@@ -497,12 +497,12 @@ export default function UserProfileModal({
                     />
                   </div>
 
-                  <div className="flex border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm bg-[#FAF9F7] dark:bg-[#22211E] p-1 gap-1 overflow-x-auto no-scrollbar">
+                  <div className="grid grid-cols-2 sm:flex border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm bg-[#FAF9F7] dark:bg-[#22211E] p-1 gap-1">
                     {(["All", "Processing", "In Transit", "Delivered"] as const).map((status) => (
                       <button
                         key={status}
                         onClick={() => setStatusFilter(status)}
-                        className={`min-h-[38px] px-4 py-1.5 text-xs font-medium rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                        className={`min-h-[38px] px-3 sm:px-4 py-1.5 text-xs font-medium rounded-sm text-center whitespace-nowrap transition-colors cursor-pointer ${
                           statusFilter === status
                             ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                             : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"

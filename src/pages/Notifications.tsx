@@ -500,7 +500,7 @@ export default function Notifications({
         ) : (
           <div className="space-y-6">
             {/* Slim Category Filter Strip */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               {FILTER_TABS.map((tab) => {
                 const isActive = activeFilter === tab.key;
                 return (
