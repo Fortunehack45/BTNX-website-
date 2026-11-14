@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/api/whatsapp/(.*)",
+      "destination": "/api/whatsapp"
+    },
+    {
+      "source": "/render/(.*)",
+      "destination": "/api/whatsapp"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/whatsapp"
+    }
+  ]
+}
