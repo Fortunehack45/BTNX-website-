@@ -895,14 +895,14 @@ export default function ProductModal({
             initial="hidden"
             whileInView="visible"
             viewport={EDITORIAL_VIEWPORT}
-            className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 lg:gap-8"
           >
             {complementaryPieces.map((item) => (
               <motion.article
                 key={item.id}
                 variants={galleryCardVariants}
                 onClick={() => onSelectProduct && onSelectProduct(item)}
-                className="group cursor-pointer flex flex-col justify-between gap-3"
+                className="group cursor-pointer flex flex-col justify-between gap-2.5 sm:gap-3"
               >
                 <div className="aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
                   <GalleryImage
@@ -911,12 +911,12 @@ export default function ProductModal({
                     className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
                   />
                 </div>
-                <div className="flex items-baseline justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
                       {item.category}
                     </p>
-                    <h3 className="text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate mt-0.5">
+                    <h3 className="text-[13px] sm:text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate mt-0.5">
                       {item.name}
                     </h3>
                   </div>
@@ -926,7 +926,7 @@ export default function ProductModal({
                         {formatNaira(item.originalPrice)}
                       </span>
                     )}
-                    <span className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                    <span className="font-mono text-[12px] sm:text-xs font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                       {formatNaira(item.price)}
                     </span>
                   </div>

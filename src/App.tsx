@@ -456,6 +456,7 @@ export default function App() {
                     onOpenProduct={setActiveProduct}
                     onAddToBag={handleAddToBag}
                     onUpdateQuantity={handleUpdateQuantity}
+                    onOpenCart={handleOpenCart}
                     onAddToast={handleAddToast}
                     searchQuery={searchQuery}
                     wishlist={wishlist}

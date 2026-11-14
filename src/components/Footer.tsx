@@ -166,7 +166,7 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
           <div
             role="radiogroup"
             aria-label="Color appearance mode"
-            className="order-1 sm:order-2 inline-flex items-center p-1 rounded-full m3-haze-chip border border-[#E6E2DA] dark:border-[#2C2A26] shadow-xs"
+            className="order-1 sm:order-2 inline-flex items-center p-1 rounded-sm m3-haze-chip border border-[#E6E2DA] dark:border-[#2C2A26] shadow-xs"
           >
             {THEME_OPTIONS.map((option) => {
               const Icon = option.icon;
@@ -180,7 +180,7 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
                   aria-label={`${option.label} appearance`}
                   title={`${option.label} theme`}
                   onClick={() => setTheme(option.value)}
-                  className={`relative w-9 h-8 rounded-full flex items-center justify-center transition-colors duration-150 cursor-pointer ${
+                  className={`relative w-9 h-8 rounded-sm flex items-center justify-center transition-colors duration-150 cursor-pointer ${
                     isSelected
                       ? "text-[#141413] dark:text-[#F3F1EC]"
                       : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
@@ -189,8 +189,8 @@ export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
                   {isSelected && (
                     <motion.span
                       layoutId="footer-theme-active-pill"
-                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-full bg-white dark:bg-[#2A2824] border border-[#E6E2DA]/90 dark:border-[#3A3731] shadow-xs"
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-0 rounded-sm bg-white dark:bg-[#2A2824] border border-[#E6E2DA]/90 dark:border-[#3A3731] shadow-xs"
                     />
                   )}
                   <Icon className="relative z-10 w-3.5 h-3.5 stroke-[1.75]" />

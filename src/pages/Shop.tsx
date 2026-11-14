@@ -9,16 +9,12 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  ShoppingBag,
   RotateCcw,
-  Eye,
-  Heart,
   SlidersHorizontal,
   X,
-  Minus,
-  Plus,
 } from "lucide-react";
 import GalleryImage from "../components/GalleryImage";
+import ProductCard from "../components/ProductCard";
 import CustomSelect from "../components/CustomSelect";
 import RecentSearchDropdown from "../components/RecentSearchDropdown";
 import { useSearchHistory } from "../hooks/useSearchHistory";
@@ -427,7 +423,7 @@ export default function Shop({
       </div>
 
       {/* Main Boutique Layout */}
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-14">
+      <div className="max-w-[1360px] mx-auto px-3.5 sm:px-8 lg:px-12 py-6 sm:py-12 lg:py-14">
         {/* Mobile Quick Category Strip & Compact Filter/Sort Toolbar */}
         <div className="lg:hidden space-y-2.5 mb-7">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
@@ -509,219 +505,31 @@ export default function Shop({
                 variants={galleryContainerVariants}
                 initial="hidden"
                 animate="visible"
-                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-7 gap-y-8 sm:gap-y-10"
+                className="grid grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6 lg:gap-7"
               >
-                {sortedProducts.map((product) => {
-                  const isSaved = wishlist.some((p) => p.id === product.id);
-                  const secondaryImage =
-                    product.images && product.images.length > 1 && product.images[1] !== product.image
-                      ? product.images[1]
-                      : null;
-                  const defaultSize = product.sizes?.[0] || "M";
-                  const defaultColor = product.colors?.[0] || "Default";
-                  const matchingItems = cart.filter((item) => item.product.id === product.id);
-                  const totalInBag = matchingItems.reduce((sum, item) => sum + item.quantity, 0);
-                  const primaryItem =
-                    matchingItems.find(
-                      (item) =>
-                        (item.selectedSize || "M") === defaultSize &&
-                        (item.selectedColor || "Default") === defaultColor
-                    ) || matchingItems[0];
-                  const discountPct = getDiscountPercent(product.price, product.originalPrice);
-
-                  return (
-                    <motion.article
-                      key={product.id}
-                      variants={galleryCardVariants}
-                      onClick={() => onOpenProduct(product)}
-                      className="group cursor-pointer flex flex-col justify-between bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-4 hover:border-[#141413]/35 dark:hover:border-[#3A3731] transition-colors duration-300"
-                    >
-                      <div>
-                        <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm mb-4">
-                          <GalleryImage
-                            src={product.image}
-                            alt={product.name}
-                            className={`w-full h-full object-cover object-center transition-all duration-700 ease-out ${
-                              secondaryImage ? "group-hover:opacity-0" : "group-hover:scale-[1.03]"
-                            }`}
-                          />
-                          {secondaryImage && (
-                            <GalleryImage
-                              src={secondaryImage}
-                              alt={`${product.name} alternate view`}
-                              className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-700 ease-out"
-                            />
-                          )}
-
-                          {discountPct && (
-                            <span className="m3-haze-photo absolute top-3 left-3 px-2.5 py-1 text-[#FAF9F7] font-mono text-[10px] font-medium uppercase tracking-[0.12em] rounded-sm">
-                              -{discountPct}%
-                            </span>
-                          )}
-
-                          {onToggleWishlist && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleWishlist(product);
-                              }}
-                              aria-label={isSaved ? "Remove from saved" : "Save piece"}
-                              className={`m3-haze-chip absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-sm ${
-                                isSaved
-                                  ? "text-[#966830] dark:text-[#C89B62] opacity-100"
-                                  : "text-[#141413] dark:text-[#F3F1EC] opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
-                              }`}
-                            >
-                              <Heart className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenProduct(product);
-                            }}
-                            className="m3-haze-photo hidden lg:flex absolute bottom-3 right-3 px-3 py-1.5 rounded-sm text-[10px] font-medium uppercase tracking-[0.12em] text-[#FAF9F7] opacity-0 group-hover:opacity-100 transition-opacity items-center gap-1.5 cursor-pointer"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Inspect</span>
-                          </button>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
-                            <span className="truncate">{product.category}</span>
-                            {product.badge && (
-                              <>
-                                <span aria-hidden="true">·</span>
-                                <span className="text-[#966830] dark:text-[#C89B62] shrink-0">{product.badge}</span>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex items-baseline justify-between gap-2">
-                            <h3 className="text-[15px] font-semibold text-[#141413] dark:text-[#F3F1EC] truncate">
-                              {product.name}
-                            </h3>
-                            <div className="flex items-baseline gap-1.5 shrink-0">
-                              {product.originalPrice && product.originalPrice > product.price && (
-                                <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
-                                  {formatNaira(product.originalPrice)}
-                                </span>
-                              )}
-                              <span className="font-mono text-sm font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
-                                {formatNaira(product.price)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {product.description && (
-                            <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed line-clamp-2">
-                              {product.description}
-                            </p>
-                          )}
-
-                          {product.colors && product.colors.length > 0 && (
-                            <div className="flex items-center gap-1.5 pt-1">
-                              {product.colors.map((c) => (
-                                <span
-                                  key={c}
-                                  title={c}
-                                  className="w-2.5 h-2.5 rounded-full border border-black/15 dark:border-white/25"
-                                  style={{ backgroundColor: getSwatchHex(c) }}
-                                />
-                              ))}
-                              <span className="text-[11px] text-[#66625B] dark:text-[#A7A299] ml-1 truncate">
-                                {product.colors[0]}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-4 mt-4 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-                        {totalInBag > 0 && primaryItem ? (
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            className="min-h-[44px] border border-[#141413] dark:border-[#F3F1EC]/75 bg-[#FAF9F7] dark:bg-[#22211E] rounded-sm grid grid-cols-3 items-center overflow-hidden"
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onUpdateQuantity(
-                                  product.id,
-                                  primaryItem.selectedSize || defaultSize,
-                                  primaryItem.selectedColor || defaultColor,
-                                  primaryItem.quantity - 1
-                                );
-                              }}
-                              aria-label={`Remove one ${product.name} from bag`}
-                              className="h-full flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] hover:bg-[#E6E2DA]/60 dark:hover:bg-[#2E2C28] transition-colors cursor-pointer"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC] text-center tabular-nums select-none">
-                              {totalInBag}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onAddToBag(
-                                  product,
-                                  primaryItem.selectedSize || defaultSize,
-                                  primaryItem.selectedColor || defaultColor
-                                );
-                              }}
-                              aria-label={`Add one more ${product.name} to bag`}
-                              className="h-full flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] hover:bg-[#E6E2DA]/60 dark:hover:bg-[#2E2C28] transition-colors cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAddToBag(product, defaultSize, defaultColor);
-                            }}
-                            className="min-h-[44px] px-2.5 py-2.5 border border-[#141413] dark:border-[#F3F1EC]/75 text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413] dark:hover:bg-[#F3F1EC] hover:text-white dark:hover:text-[#141413] text-[11px] font-medium uppercase tracking-[0.1em] rounded-sm transition-colors cursor-pointer whitespace-nowrap"
-                          >
-                            Add to Bag
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (totalInBag === 0) {
-                              onAddToBag(product, defaultSize, defaultColor);
-                            }
-                            onOpenCart();
-                          }}
-                          className="min-h-[44px] px-2.5 py-2.5 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-[11px] font-medium uppercase tracking-[0.1em] rounded-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                        >
-                          <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
-                          <span>Buy Now</span>
-                        </button>
-                      </div>
-                    </motion.article>
-                  );
-                })}
+                {sortedProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    cart={cart}
+                    isSaved={wishlist.some((p) => p.id === product.id)}
+                    onOpenProduct={onOpenProduct}
+                    onAddToBag={onAddToBag}
+                    onUpdateQuantity={onUpdateQuantity}
+                    onOpenCart={onOpenCart}
+                    onToggleWishlist={onToggleWishlist}
+                  />
+                ))}
               </motion.div>
             ) : (
-              <div className="py-20 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-2xl">
+              <div className="py-20 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
                 <p className="font-display text-3xl text-[#141413] dark:text-[#F3F1EC] mb-2">No matching pieces</p>
                 <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-sm mx-auto mb-6">
                   Adjust your price range or category filter to view available studio garments.
                 </p>
                 <button
                   onClick={handleResetFilters}
-                  className="min-h-[46px] px-6 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-full transition-colors cursor-pointer"
+                  className="min-h-[46px] px-6 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-sm transition-colors cursor-pointer"
                 >
                   Reset All Filters
                 </button>
@@ -841,7 +649,7 @@ export default function Shop({
             initial="hidden"
             whileInView="visible"
             viewport={EDITORIAL_VIEWPORT}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 lg:gap-8"
           >
             {visibleRecommendations.map((product) => {
               const discountPct = getDiscountPercent(product.price, product.originalPrice);
@@ -850,7 +658,7 @@ export default function Shop({
                   key={`rec-${product.id}`}
                   variants={galleryCardVariants}
                   onClick={() => onOpenProduct(product)}
-                  className="group cursor-pointer flex flex-col gap-3"
+                  className="group cursor-pointer flex flex-col gap-2.5 sm:gap-3"
                 >
                   <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
                     <GalleryImage
@@ -859,35 +667,35 @@ export default function Shop({
                       className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
                     />
                     {discountPct && (
-                      <span className="m3-haze-photo absolute top-3 left-3 px-2.5 py-1 text-[#FAF9F7] font-mono text-[10px] font-medium uppercase tracking-[0.12em] rounded-sm">
+                      <span className="m3-haze-photo absolute top-2 left-2 sm:top-3 sm:left-3 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[#FAF9F7] font-mono text-[9px] sm:text-[10px] font-medium uppercase tracking-[0.1em] sm:tracking-[0.12em] rounded-sm">
                         -{discountPct}%
                       </span>
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-baseline justify-between gap-2">
+                  <div className="space-y-1 sm:space-y-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
                       <div className="min-w-0">
-                        <p className="text-[11px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
+                        <p className="text-[9px] sm:text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
                           {product.category}
                         </p>
-                        <h3 className="text-sm font-semibold text-[#141413] dark:text-[#F3F1EC] mt-0.5 truncate">
+                        <h3 className="text-[13px] sm:text-sm font-semibold text-[#141413] dark:text-[#F3F1EC] mt-0.5 truncate">
                           {product.name}
                         </h3>
                       </div>
                       <div className="flex items-baseline gap-1.5 shrink-0">
                         {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
+                          <span className="font-mono text-[10px] sm:text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
                             {formatNaira(product.originalPrice)}
                           </span>
                         )}
-                        <span className="font-mono text-sm font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                        <span className="font-mono text-[12px] sm:text-sm font-semibold sm:font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                           {formatNaira(product.price)}
                         </span>
                       </div>
                     </div>
                     {product.description && (
-                      <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed line-clamp-2">
+                      <p className="text-[11px] sm:text-xs text-[#66625B] dark:text-[#A7A299] leading-snug sm:leading-relaxed line-clamp-2">
                         {product.description}
                       </p>
                     )}

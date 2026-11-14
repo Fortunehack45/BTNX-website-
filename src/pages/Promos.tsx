@@ -373,7 +373,7 @@ export default function Promos({
             initial="hidden"
             whileInView="visible"
             viewport={EDITORIAL_VIEWPORT}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8"
+            className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 lg:gap-8"
           >
             {featuredPieces.map((product) => {
               const discountPct = getDiscountPercent(product.price, product.originalPrice);
@@ -382,7 +382,7 @@ export default function Promos({
                   key={product.id}
                   variants={galleryCardVariants}
                   onClick={() => onOpenProduct(product)}
-                  className="group cursor-pointer flex flex-col gap-3"
+                  className="group cursor-pointer flex flex-col gap-2.5 sm:gap-3"
                 >
                   <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
                     <GalleryImage
@@ -391,28 +391,28 @@ export default function Promos({
                       className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
                     />
                     {discountPct && (
-                      <span className="m3-haze-photo absolute top-3 left-3 px-2.5 py-1 text-[#FAF9F7] font-mono text-[10px] font-medium uppercase tracking-[0.12em] rounded-sm">
+                      <span className="m3-haze-photo absolute top-2 left-2 sm:top-3 sm:left-3 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[#FAF9F7] font-mono text-[9px] sm:text-[10px] font-medium uppercase tracking-[0.1em] sm:tracking-[0.12em] rounded-sm">
                         -{discountPct}%
                       </span>
                     )}
                   </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <h3 className="text-[15px] font-semibold text-[#141413] dark:text-[#F3F1EC] truncate">
+                  <div className="space-y-1 sm:space-y-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
+                      <h3 className="text-[13px] sm:text-[15px] font-semibold text-[#141413] dark:text-[#F3F1EC] truncate">
                         {product.name}
                       </h3>
                       <div className="flex items-baseline gap-1.5 shrink-0">
                         {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
+                          <span className="font-mono text-[10px] sm:text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
                             {formatNaira(product.originalPrice)}
                           </span>
                         )}
-                        <span className="font-mono text-sm font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                        <span className="font-mono text-[12px] sm:text-sm font-semibold sm:font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                           {formatNaira(product.price)}
                         </span>
                       </div>
                     </div>
-                    <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed line-clamp-2">
+                    <p className="text-[11px] sm:text-xs text-[#66625B] dark:text-[#A7A299] leading-snug sm:leading-relaxed line-clamp-2">
                       {product.description}
                     </p>
                   </div>

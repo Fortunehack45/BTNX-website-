@@ -1,16 +1,12 @@
 import React, { useState } from "react";
 import { Product, CartItem } from "../types";
 import { NEW_YEAR_PRODUCTS } from "../data";
-import { formatNaira } from "../utils/currency";
-import { getSwatchHex } from "../utils/colors";
-import { getDiscountPercent } from "../utils/invoice";
-import { Eye, ShoppingBag, Check, Copy, Heart, Minus, Plus, ArrowRight } from "lucide-react";
+import { Check, Copy, ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
-import GalleryImage from "./GalleryImage";
+import ProductCard from "./ProductCard";
 import {
   galleryContainerVariants,
-  galleryCardVariants,
   EDITORIAL_VIEWPORT,
 } from "../utils/motion";
 
@@ -22,6 +18,7 @@ interface NewYearCollectionProps {
   onOpenProduct: (product: Product) => void;
   onAddToBag: (product: Product, size?: string, color?: string) => void;
   onUpdateQuantity: (productId: string, size: string, color: string, quantity: number) => void;
+  onOpenCart?: () => void;
   onAddToast: (message: string, type: "success" | "error" | "info") => void;
   searchQuery?: string;
   wishlist?: Product[];
@@ -43,6 +40,7 @@ export default function NewYearCollection({
   onOpenProduct,
   onAddToBag,
   onUpdateQuantity,
+  onOpenCart,
   onAddToast,
   searchQuery = "",
   wishlist = [],
@@ -90,221 +88,9 @@ export default function NewYearCollection({
     return matchesCategory(product);
   });
 
-  const renderProductCard = (product: Product) => {
-    const isSaved = wishlist.some((p) => p.id === product.id);
-    const secondaryImage =
-      product.images && product.images.length > 1 && product.images[1] !== product.image
-        ? product.images[1]
-        : null;
-    const defaultSize = product.sizes?.[0] || "M";
-    const defaultColor = product.colors?.[0] || "Default";
-    const matchingItems = cart.filter((item) => item.product.id === product.id);
-    const totalInBag = matchingItems.reduce((sum, item) => sum + item.quantity, 0);
-    const primaryItem =
-      matchingItems.find(
-        (item) =>
-          (item.selectedSize || "M") === defaultSize &&
-          (item.selectedColor || "Default") === defaultColor
-      ) || matchingItems[0];
-    const discountPct = getDiscountPercent(product.price, product.originalPrice);
-
-    const renderStepper = (compact = false) =>
-      totalInBag > 0 && primaryItem ? (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className={`${
-            compact ? "min-h-[38px] min-w-[104px]" : "flex-1 min-h-[40px]"
-          } border border-[#141413] dark:border-[#F3F1EC]/75 bg-[#FAF9F7] dark:bg-[#22211E] rounded-sm grid grid-cols-3 items-center overflow-hidden shadow-xs`}
-        >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUpdateQuantity(
-                product.id,
-                primaryItem.selectedSize || defaultSize,
-                primaryItem.selectedColor || defaultColor,
-                primaryItem.quantity - 1
-              );
-            }}
-            aria-label={`Remove one ${product.name} from bag`}
-            className="h-full flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] hover:bg-[#E6E2DA]/70 dark:hover:bg-[#2E2C28] transition-colors cursor-pointer"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC] text-center tabular-nums select-none">
-            {totalInBag}
-          </span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddToBag(
-                product,
-                primaryItem.selectedSize || defaultSize,
-                primaryItem.selectedColor || defaultColor
-              );
-            }}
-            aria-label={`Add one more ${product.name} to bag`}
-            className="h-full flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] hover:bg-[#E6E2DA]/70 dark:hover:bg-[#2E2C28] transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ) : null;
-
-    return (
-      <motion.article
-        key={product.id}
-        id={`collection-card-${product.id}`}
-        variants={galleryCardVariants}
-        onClick={() => onOpenProduct(product)}
-        className="group cursor-pointer flex flex-col"
-      >
-        <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm mb-4">
-          <GalleryImage
-            src={product.image}
-            alt={product.name}
-            className={`w-full h-full object-cover object-center transition-all duration-700 ease-out ${
-              secondaryImage ? "group-hover:opacity-0" : "group-hover:scale-[1.03]"
-            }`}
-          />
-
-          {secondaryImage && (
-            <GalleryImage
-              src={secondaryImage}
-              alt={`${product.name} editorial view`}
-              className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-700 ease-out"
-            />
-          )}
-
-          {discountPct && (
-            <span className="absolute top-3 left-3 px-2.5 py-1 m3-haze-photo text-[#FAF9F7] font-mono text-[10px] font-medium uppercase tracking-[0.12em] rounded-sm">
-              -{discountPct}%
-            </span>
-          )}
-
-          {onToggleWishlist && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleWishlist(product);
-              }}
-              aria-label={isSaved ? `Remove ${product.name} from saved` : `Save ${product.name}`}
-              className={`absolute top-3 right-3 w-10 h-10 rounded-full m3-haze-chip flex items-center justify-center transition-all duration-200 cursor-pointer shadow-sm ${
-                isSaved
-                  ? "text-[#966830] dark:text-[#C89B62] opacity-100"
-                  : "text-[#141413] dark:text-[#F3F1EC] opacity-100 lg:opacity-0 lg:group-hover:opacity-100 hover:bg-white dark:hover:bg-[#191816]"
-              }`}
-            >
-              <Heart className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
-            </button>
-          )}
-
-          <div className="hidden lg:flex absolute inset-x-3 bottom-3 p-1.5 m3-haze-surface border border-white/40 dark:border-white/12 rounded-sm opacity-0 translate-y-1.5 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenProduct(product);
-              }}
-              className="flex-1 py-2 text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.06] dark:hover:bg-white/[0.08] text-[11px] font-medium uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 rounded-sm transition-colors cursor-pointer"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Inspect</span>
-            </button>
-            {totalInBag > 0 ? (
-              renderStepper(false)
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToBag(product, defaultSize, defaultColor);
-                }}
-                className="flex-1 py-2 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-[11px] font-medium uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 rounded-sm transition-colors cursor-pointer"
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span>Add</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
-            <span className="truncate">{product.category}</span>
-            {product.badge && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="text-[#966830] dark:text-[#C89B62] shrink-0">{product.badge}</span>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-[16px] font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.01em] truncate">
-              {product.name}
-            </h3>
-            <div className="flex items-baseline gap-1.5 shrink-0">
-              {product.originalPrice && product.originalPrice > product.price && (
-                <span className="font-mono text-xs text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
-                  {formatNaira(product.originalPrice)}
-                </span>
-              )}
-              <span className="font-mono text-sm font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
-                {formatNaira(product.price)}
-              </span>
-            </div>
-          </div>
-
-          {product.description && (
-            <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed line-clamp-2">
-              {product.description}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-2 pt-1 min-h-[38px]">
-            {product.colors && product.colors.length > 0 ? (
-              <div className="flex items-center gap-1.5" aria-label="Available colorways">
-                {product.colors.map((color) => (
-                  <span
-                    key={color}
-                    title={color}
-                    className="w-3 h-3 rounded-full border border-black/15 dark:border-white/25"
-                    style={{ backgroundColor: getSwatchHex(color) }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <span />
-            )}
-
-            {totalInBag > 0 ? (
-              renderStepper(true)
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToBag(product, defaultSize, defaultColor);
-                }}
-                className="lg:hidden min-h-[38px] inline-flex items-center gap-1.5 px-4 py-2 bg-[#141413] text-[#FAF9F7] dark:bg-[#F3F1EC] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.1em] rounded-sm cursor-pointer"
-              >
-                <ShoppingBag className="w-3 h-3" />
-                <span>Add</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </motion.article>
-    );
-  };
-
   return (
     <section id="collection" className="w-full bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
-      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22 space-y-10 sm:space-y-12">
+      <div className="max-w-[1360px] mx-auto px-3.5 sm:px-8 lg:px-12 py-14 sm:py-22 space-y-8 sm:space-y-12">
         {/* Header + Interactive Filter Controls */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
           <div>
@@ -379,9 +165,22 @@ export default function NewYearCollection({
             initial="hidden"
             whileInView="visible"
             viewport={EDITORIAL_VIEWPORT}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12"
+            className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 lg:gap-8"
           >
-            {displayedProducts.map(renderProductCard)}
+            {displayedProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                cardId={`collection-card-${product.id}`}
+                product={product}
+                cart={cart}
+                isSaved={wishlist.some((p) => p.id === product.id)}
+                onOpenProduct={onOpenProduct}
+                onAddToBag={onAddToBag}
+                onUpdateQuantity={onUpdateQuantity}
+                onOpenCart={onOpenCart}
+                onToggleWishlist={onToggleWishlist}
+              />
+            ))}
           </motion.div>
         ) : (
           <div id="empty-collection-state" className="py-20 px-6 text-center bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">

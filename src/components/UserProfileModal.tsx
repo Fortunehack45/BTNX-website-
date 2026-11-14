@@ -706,17 +706,17 @@ export default function UserProfileModal({
                     variants={galleryContainerVariants}
                     initial="hidden"
                     animate="visible"
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+                    className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6"
                   >
                     {wishlist.map((product) => (
                       <motion.div
                         key={product.id}
                         variants={galleryCardVariants}
-                        className="border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-4 flex flex-col justify-between gap-4 bg-white dark:bg-[#191816]"
+                        className="border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-2.5 sm:p-4 flex flex-col justify-between gap-3 sm:gap-4 bg-white dark:bg-[#191816]"
                       >
                         <div
                           onClick={() => onOpenProduct && onOpenProduct(product)}
-                          className="cursor-pointer space-y-3"
+                          className="cursor-pointer space-y-2 sm:space-y-3"
                         >
                           <div className="aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm overflow-hidden">
                             <GalleryImage
@@ -725,31 +725,31 @@ export default function UserProfileModal({
                               className="w-full h-full object-cover"
                             />
                           </div>
-                          <div className="flex items-baseline justify-between gap-2">
-                            <h3 className="text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
+                            <h3 className="text-[13px] sm:text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
                               {product.name}
                             </h3>
-                            <span className="font-mono text-xs tabular-nums text-[#141413] dark:text-[#F3F1EC]">
+                            <span className="font-mono text-[12px] sm:text-xs tabular-nums text-[#141413] dark:text-[#F3F1EC] shrink-0">
                               {formatNaira(product.price)}
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5 sm:gap-2">
                           <button
                             onClick={() => onAddToBag(product)}
-                            className="flex-1 py-2.5 bg-[#141413] dark:bg-[#F3F1EC] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] rounded-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            className="flex-1 py-2 sm:py-2.5 bg-[#141413] dark:bg-[#F3F1EC] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-white dark:text-[#141413] text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm flex items-center justify-center gap-1 sm:gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
                           >
-                            <ShoppingBag className="w-3.5 h-3.5" />
-                            <span>Add to Bag</span>
+                            <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                            <span>Add</span>
                           </button>
                           {onToggleWishlist && (
                             <button
                               onClick={() => onToggleWishlist(product)}
-                              className="p-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer"
+                              className="p-2 sm:p-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer"
                               aria-label="Remove from saved pieces"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </button>
                           )}
                         </div>
