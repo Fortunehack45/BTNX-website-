@@ -232,7 +232,7 @@ export default function UserProfileModal({
             <nav className="grid grid-cols-3 lg:flex lg:flex-col gap-1.5">
               <button
                 onClick={() => setActiveTab("profile")}
-                className={`min-h-[44px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[42px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.04em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "profile"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26]"
@@ -245,7 +245,7 @@ export default function UserProfileModal({
               <button
                 onClick={() => setActiveTab("orders")}
                 id="orders-tab-trigger"
-                className={`min-h-[44px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[42px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.04em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "orders"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26]"
@@ -257,7 +257,7 @@ export default function UserProfileModal({
 
               <button
                 onClick={() => setActiveTab("favorites")}
-                className={`min-h-[44px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2.5 sm:px-4 py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.08em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[42px] flex items-center justify-center lg:justify-start gap-1.5 sm:gap-3 px-2 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs font-medium uppercase tracking-[0.04em] sm:tracking-[0.12em] rounded-sm whitespace-nowrap transition-colors cursor-pointer ${
                   activeTab === "favorites"
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                     : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] hover:bg-white dark:hover:bg-[#191816] border border-transparent hover:border-[#E6E2DA] dark:hover:border-[#2C2A26]"
@@ -497,12 +497,12 @@ export default function UserProfileModal({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 sm:flex border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm bg-[#FAF9F7] dark:bg-[#22211E] p-1 gap-1">
+                  <div className="flex items-center border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm bg-[#FAF9F7] dark:bg-[#22211E] p-1 gap-1">
                     {(["All", "Processing", "In Transit", "Delivered"] as const).map((status) => (
                       <button
                         key={status}
                         onClick={() => setStatusFilter(status)}
-                        className={`min-h-[38px] px-3 sm:px-4 py-1.5 text-xs font-medium rounded-sm text-center whitespace-nowrap transition-colors cursor-pointer ${
+                        className={`flex-1 sm:flex-initial min-h-[36px] px-2 sm:px-4 py-1.5 text-[11px] sm:text-xs font-medium rounded-sm text-center whitespace-nowrap transition-colors cursor-pointer ${
                           statusFilter === status
                             ? "bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413]"
                             : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"

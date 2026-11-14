@@ -45,6 +45,15 @@ const CATEGORIES = [
   "On Sale",
 ];
 
+const MOBILE_CATEGORY_SHORT: Record<string, string> = {
+  "All Pieces": "All",
+  Outerwear: "Outerwear",
+  "Tops & Knitwear": "Knitwear",
+  "Jersey & Fleece": "Fleece",
+  Unisex: "Unisex",
+  "On Sale": "On Sale",
+};
+
 const PRICE_PRESETS = [
   { label: "All", min: 0, max: 150 },
   { label: "< ₦120k", min: 0, max: 80 },
@@ -196,14 +205,14 @@ export default function Shop({
                 key={cat}
                 type="button"
                 onClick={() => setCategoryFilter(cat)}
-                className={`w-full min-h-[38px] flex items-center justify-between px-3 py-1.5 text-left text-xs rounded-sm transition-colors cursor-pointer ${
+                className={`w-full min-h-[38px] flex items-center justify-between px-2.5 sm:px-3 py-1.5 text-left text-[11px] sm:text-xs rounded-sm transition-colors cursor-pointer ${
                   isActive
                     ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] font-medium"
                     : "text-[#141413] dark:text-[#F3F1EC] hover:bg-[#F4F1EC] dark:hover:bg-[#22211E] border border-transparent"
                 } ${isMobile && !isActive ? "border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#22211E]" : ""}`}
               >
                 <span className="truncate">{cat}</span>
-                <span className="font-mono text-[10px] tabular-nums opacity-70 ml-2 shrink-0">
+                <span className="font-mono text-[10px] tabular-nums opacity-70 ml-1.5 shrink-0">
                   {catCount}
                 </span>
               </button>
@@ -426,7 +435,7 @@ export default function Shop({
       <div className="max-w-[1360px] mx-auto px-3.5 sm:px-8 lg:px-12 py-6 sm:py-12 lg:py-14">
         {/* Mobile Quick Category Strip & Compact Filter/Sort Toolbar */}
         <div className="lg:hidden space-y-2.5 mb-7">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
             {CATEGORIES.map((cat) => {
               const active = categoryFilter === cat;
               return (
@@ -434,13 +443,13 @@ export default function Shop({
                   key={cat}
                   type="button"
                   onClick={() => setCategoryFilter(cat)}
-                  className={`min-h-[38px] px-3 py-1.5 text-xs font-medium rounded-sm border text-center truncate transition-colors cursor-pointer ${
+                  className={`min-h-[36px] px-2 py-1.5 text-[11px] sm:text-xs font-medium rounded-sm border text-center whitespace-nowrap transition-colors cursor-pointer ${
                     active
                       ? "bg-[#141413] dark:bg-[#F3F1EC] border-[#141413] dark:border-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413]"
                       : "bg-white dark:bg-[#191816] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] dark:text-[#A7A299]"
                   }`}
                 >
-                  {cat}
+                  {MOBILE_CATEGORY_SHORT[cat] || cat}
                 </button>
               );
             })}

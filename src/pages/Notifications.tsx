@@ -40,12 +40,12 @@ interface NotificationsProps {
 
 type FilterKey = "all" | "unread" | "order_status" | "promo" | "new_arrival";
 
-const FILTER_TABS: { key: FilterKey; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "unread", label: "Unread" },
-  { key: "order_status", label: "Orders" },
-  { key: "promo", label: "Privileges" },
-  { key: "new_arrival", label: "Releases" },
+const FILTER_TABS: { key: FilterKey; label: string; mobileLabel: string }[] = [
+  { key: "all", label: "All", mobileLabel: "All" },
+  { key: "unread", label: "Unread", mobileLabel: "Unread" },
+  { key: "order_status", label: "Orders", mobileLabel: "Orders" },
+  { key: "promo", label: "Privileges", mobileLabel: "Promos" },
+  { key: "new_arrival", label: "Releases", mobileLabel: "New" },
 ];
 
 export default function Notifications({
@@ -500,7 +500,7 @@ export default function Notifications({
         ) : (
           <div className="space-y-6">
             {/* Slim Category Filter Strip */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="grid grid-cols-5 sm:inline-flex sm:items-center gap-1 p-1 bg-[#F4F1EC] dark:bg-[#22211E] border border-[#E6E2DA]/70 dark:border-[#2C2A26] rounded-sm w-full sm:w-auto">
               {FILTER_TABS.map((tab) => {
                 const isActive = activeFilter === tab.key;
                 return (
@@ -511,13 +511,14 @@ export default function Notifications({
                       setActiveFilter(tab.key);
                       setMobileDetailOpen(false);
                     }}
-                    className={`min-h-[38px] px-4 py-2 text-xs font-medium rounded-sm border whitespace-nowrap transition-colors cursor-pointer ${
+                    className={`min-h-[36px] px-1 sm:px-4 py-1.5 text-[11px] sm:text-xs font-medium rounded-sm whitespace-nowrap flex items-center justify-center transition-all cursor-pointer ${
                       isActive
-                        ? "bg-[#141413] dark:bg-[#F3F1EC] border-[#141413] dark:border-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413]"
-                        : "bg-white dark:bg-[#191816] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
+                        ? "bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] shadow-xs"
+                        : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
                     }`}
                   >
-                    {tab.label}
+                    <span className="sm:hidden">{tab.mobileLabel}</span>
+                    <span className="hidden sm:inline">{tab.label}</span>
                   </button>
                 );
               })}

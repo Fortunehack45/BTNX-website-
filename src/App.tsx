@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { AnimatePresence, MotionConfig } from "motion/react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import NewArrivals from "./components/NewArrivals";
@@ -581,6 +581,7 @@ export default function App() {
               )
             }
           />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 

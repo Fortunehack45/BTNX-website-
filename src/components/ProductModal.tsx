@@ -375,12 +375,12 @@ export default function ProductModal({
             <motion.div variants={galleryContainerVariants} className="lg:col-span-5 lg:sticky lg:top-24 space-y-7">
               <motion.div variants={modalItemVariants} className="space-y-3 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-6">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
-                    <span>{product.category}</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-[10px] sm:text-[11px] uppercase tracking-[0.1em] sm:tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
+                    <span className="truncate">{product.category}</span>
                     {product.badge && (
                       <>
-                        <span aria-hidden="true">·</span>
-                        <span className="text-[#966830] dark:text-[#C89B62] font-medium">{product.badge}</span>
+                        <span aria-hidden="true" className="shrink-0">·</span>
+                        <span className="text-[#966830] dark:text-[#C89B62] font-medium whitespace-nowrap shrink-0">{product.badge}</span>
                       </>
                     )}
                   </div>
@@ -390,9 +390,9 @@ export default function ProductModal({
                     onClick={() =>
                       document.getElementById("garment-experience")?.scrollIntoView({ behavior: "smooth" })
                     }
-                    className="flex items-center gap-1.5 text-xs text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                    className="flex items-center gap-1.5 text-xs text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer whitespace-nowrap shrink-0"
                   >
-                    <Star className="w-3.5 h-3.5 fill-[#966830] dark:fill-[#C89B62] text-[#966830] dark:text-[#C89B62]" />
+                    <Star className="w-3.5 h-3.5 fill-[#966830] dark:fill-[#C89B62] text-[#966830] dark:text-[#C89B62] shrink-0" />
                     <span className="font-mono font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
                       {averageRating}
                     </span>
@@ -408,16 +408,16 @@ export default function ProductModal({
                 </h1>
 
                 <div className="flex flex-wrap items-baseline justify-between gap-2 pt-1">
-                  <div className="flex items-baseline gap-2.5">
-                    <span className="font-mono text-2xl font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                  <div className="flex items-baseline gap-2.5 flex-wrap">
+                    <span className="font-mono text-2xl font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums whitespace-nowrap">
                       {formatNaira(product.price)}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
                       <>
-                        <span className="font-mono text-sm text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
+                        <span className="font-mono text-sm text-[#66625B] dark:text-[#A7A299] line-through tabular-nums whitespace-nowrap">
                           {formatNaira(product.originalPrice)}
                         </span>
-                        <span className="px-2 py-0.5 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#966830]/40 dark:border-[#C89B62]/40 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#966830] dark:text-[#C89B62] rounded-sm">
+                        <span className="px-2 py-0.5 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#966830]/40 dark:border-[#C89B62]/40 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#966830] dark:text-[#C89B62] rounded-sm whitespace-nowrap shrink-0">
                           Save {getDiscountPercent(product.price, product.originalPrice)}%
                         </span>
                       </>
@@ -808,20 +808,37 @@ export default function ProductModal({
                   .toUpperCase();
 
                 return (
-                  <article key={rev.id} className="p-6 sm:p-8 space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 bg-[#F4F1EC] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm flex items-center justify-center font-mono text-xs text-[#141413] dark:text-[#F3F1EC]">
-                          {initials}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-medium text-[#141413] dark:text-[#F3F1EC]">{rev.name}</h4>
-                            <span className="text-[10px] uppercase tracking-[0.1em] text-[#966830] dark:text-[#C89B62]">
-                              · Verified Client
+                  <article key={rev.id} className="p-5 sm:p-8 space-y-3.5 sm:space-y-4">
+                    <div className="flex items-start gap-3 sm:gap-3.5">
+                      <div className="w-10 h-10 bg-[#F4F1EC] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm flex items-center justify-center font-mono text-xs text-[#141413] dark:text-[#F3F1EC] shrink-0">
+                        {initials}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <h4 className="text-sm font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                            {rev.name}
+                          </h4>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299] whitespace-nowrap tabular-nums">
+                              {rev.date}
                             </span>
+                            {(userData?.role === "admin" ||
+                              (currentUser && currentUser.uid === rev.userId)) &&
+                              !rev.isStatic && (
+                                <button
+                                  onClick={() => handleDeleteReview(rev.id)}
+                                  className="p-1 text-[#66625B] dark:text-[#A7A299] hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                                  title="Delete Review"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                           </div>
-                          <div className="flex items-center gap-0.5 mt-1">
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1 flex-nowrap">
+                          <div className="flex items-center gap-0.5 shrink-0">
                             {[1, 2, 3, 4, 5].map((s) => (
                               <Star
                                 key={s}
@@ -833,26 +850,17 @@ export default function ProductModal({
                               />
                             ))}
                           </div>
+                          <span aria-hidden="true" className="text-[10px] text-[#66625B]/50 dark:text-[#A7A299]/50 shrink-0">
+                            ·
+                          </span>
+                          <span className="text-[10px] uppercase tracking-[0.1em] text-[#966830] dark:text-[#C89B62] font-medium whitespace-nowrap">
+                            Verified Client
+                          </span>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299]">{rev.date}</span>
-                        {(userData?.role === "admin" ||
-                          (currentUser && currentUser.uid === rev.userId)) &&
-                          !rev.isStatic && (
-                            <button
-                              onClick={() => handleDeleteReview(rev.id)}
-                              className="p-1 text-[#66625B] dark:text-[#A7A299] hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-                              title="Delete Review"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
                       </div>
                     </div>
 
-                    <p className="font-display text-xl sm:text-[22px] text-[#141413] dark:text-[#F3F1EC] leading-relaxed">
+                    <p className="font-display text-lg sm:text-[22px] text-[#141413] dark:text-[#F3F1EC] leading-relaxed">
                       &ldquo;{rev.comment}&rdquo;
                     </p>
                   </article>

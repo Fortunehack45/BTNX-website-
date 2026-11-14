@@ -26,10 +26,10 @@ interface NewYearCollectionProps {
 }
 
 const FILTER_TABS = [
-  { key: "", label: "All Pieces" },
-  { key: "Women", label: "Womenswear" },
-  { key: "Men", label: "Menswear" },
-  { key: "under-100", label: "Under ₦150,000" },
+  { key: "", label: "All Pieces", mobileLabel: "All" },
+  { key: "Women", label: "Womenswear", mobileLabel: "Women" },
+  { key: "Men", label: "Menswear", mobileLabel: "Men" },
+  { key: "under-100", label: "Under ₦150,000", mobileLabel: "< ₦150k" },
 ];
 
 export default function NewYearCollection({
@@ -107,7 +107,7 @@ export default function NewYearCollection({
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-3 sm:gap-4 w-full lg:w-auto">
             <div
-              className="grid grid-cols-2 sm:inline-flex sm:items-center gap-1 p-1 bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm w-full sm:w-auto border border-[#E6E2DA]/70 dark:border-[#2C2A26]"
+              className="grid grid-cols-4 sm:inline-flex sm:items-center gap-1 p-1 bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm w-full sm:w-auto border border-[#E6E2DA]/70 dark:border-[#2C2A26]"
               role="tablist"
               aria-label="Collection Category Filter"
             >
@@ -124,13 +124,14 @@ export default function NewYearCollection({
                         onCategoryFilter(tab.key);
                       }
                     }}
-                    className={`min-h-[38px] px-3 sm:px-4 py-1.5 text-xs font-medium text-center whitespace-nowrap transition-all rounded-sm cursor-pointer ${
+                    className={`min-h-[38px] px-1.5 sm:px-4 py-1.5 text-[11px] sm:text-xs font-medium text-center whitespace-nowrap flex items-center justify-center transition-all rounded-sm cursor-pointer ${
                       active
                         ? "bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] shadow-xs"
                         : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
                     }`}
                   >
-                    {tab.label}
+                    <span className="sm:hidden">{tab.mobileLabel}</span>
+                    <span className="hidden sm:inline">{tab.label}</span>
                   </button>
                 );
               })}
