@@ -3,7 +3,7 @@
 
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 
   --color-canvas: #FAF9F7;
@@ -32,6 +32,8 @@
 
   body {
     font-family: var(--font-sans);
+    font-weight: 500;
+    letter-spacing: -0.01em;
     background-color: #FAF9F7;
     color: #141413;
     overflow-x: clip;
@@ -42,6 +44,23 @@
   html.dark body {
     background-color: #111110;
     color: #F3F1EC;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 800 !important;
+    letter-spacing: -0.025em;
+  }
+
+  .font-display.font-medium,
+  .font-display.font-normal {
+    font-weight: 800 !important;
   }
 }
 

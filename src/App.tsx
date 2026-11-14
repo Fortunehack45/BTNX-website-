@@ -128,12 +128,18 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const cached = localStorage.getItem("btnx_cloud_products");
+      const delCached = localStorage.getItem("btnx_deleted_product_ids");
+      const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const map = new Map<string, Product>();
-          NEW_YEAR_PRODUCTS.forEach((p) => map.set(p.id, p));
-          parsed.forEach((p: Product) => map.set(p.id, { ...map.get(p.id), ...p }));
+          NEW_YEAR_PRODUCTS.forEach((p) => {
+            if (!deletedIds.includes(p.id)) map.set(p.id, p);
+          });
+          parsed.forEach((p: Product) => {
+            if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
+          });
           return Array.from(map.values());
         }
       }
@@ -142,6 +148,37 @@ export default function App() {
     }
     return NEW_YEAR_PRODUCTS;
   });
+
+  // Listen to instantaneous product updates from Admin Portal
+  useEffect(() => {
+    const syncProducts = () => {
+      try {
+        const cached = localStorage.getItem("btnx_cloud_products");
+        const delCached = localStorage.getItem("btnx_deleted_product_ids");
+        const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
+        const map = new Map<string, Product>();
+        NEW_YEAR_PRODUCTS.forEach((p) => {
+          if (!deletedIds.includes(p.id)) map.set(p.id, p);
+        });
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((p: Product) => {
+              if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
+            });
+          }
+        }
+        setProducts(Array.from(map.values()));
+      } catch {}
+    };
+
+    window.addEventListener("storage", syncProducts);
+    window.addEventListener("btnx_products_updated", syncProducts);
+    return () => {
+      window.removeEventListener("storage", syncProducts);
+      window.removeEventListener("btnx_products_updated", syncProducts);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -153,9 +190,27 @@ export default function App() {
               id: d.id,
               ...d.data(),
             })) as Product[];
+            const delCached = localStorage.getItem("btnx_deleted_product_ids");
+            const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
             const map = new Map<string, Product>();
-            NEW_YEAR_PRODUCTS.forEach((p) => map.set(p.id, p));
-            fetched.forEach((p) => map.set(p.id, { ...map.get(p.id), ...p }));
+            NEW_YEAR_PRODUCTS.forEach((p) => {
+              if (!deletedIds.includes(p.id)) map.set(p.id, p);
+            });
+            // Also merge localStorage cached products
+            try {
+              const cached = localStorage.getItem("btnx_cloud_products");
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((p: Product) => {
+                    if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
+                  });
+                }
+              }
+            } catch {}
+            fetched.forEach((p) => {
+              if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
+            });
             const merged = Array.from(map.values());
             setProducts(merged);
             try {

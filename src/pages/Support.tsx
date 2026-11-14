@@ -837,25 +837,26 @@ export default function Support({
                     isCustomer ? "items-end" : "items-start"
                   } space-y-1.5`}
                 >
-                  {/* Quiet Metadata Line (single-line protected with whitespace-nowrap against awkward mobile breaks) */}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299]">
-                    <span className="font-medium text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
-                      {isCustomer ? "You" : msg.senderName}
-                    </span>
-                    {msg.senderRole && (
-                      <>
-                        <span className="text-[#8C877D] select-none">·</span>
-                        <span
-                          className={`whitespace-nowrap truncate max-w-[220px] sm:max-w-none ${
-                            isHumanAgent ? "text-[#966830] dark:text-[#C89B62]" : ""
-                          }`}
-                        >
-                          {msg.senderRole}
-                        </span>
-                      </>
-                    )}
-                    <span className="text-[#8C877D] select-none">·</span>
-                    <span className="tabular-nums whitespace-nowrap">
+                  {/* Quiet Metadata Line (crisp single row with left sender info & right timestamp) */}
+                  <div className="flex items-center justify-between w-full max-w-[90%] sm:max-w-lg text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299] px-0.5 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                      <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
+                        {isCustomer ? "You" : msg.senderName}
+                      </span>
+                      {msg.senderRole && (
+                        <>
+                          <span className="text-[#8C877D] select-none shrink-0">·</span>
+                          <span
+                            className={`truncate whitespace-nowrap ${
+                              isHumanAgent ? "text-[#966830] dark:text-[#C89B62] font-semibold" : ""
+                            }`}
+                          >
+                            {msg.senderRole}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <span className="tabular-nums whitespace-nowrap shrink-0 text-[#8C877D]">
                       {new Date(msg.createdAt).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",

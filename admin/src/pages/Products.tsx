@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, onSnapshot, query, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
-import { Plus, Trash2, Edit, X, Save, AlertCircle } from 'lucide-react';
+import { collection, onSnapshot, query, deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { Plus, Trash2, Edit, Save, ArrowLeft } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -31,13 +31,23 @@ const IMAGE_PLACEHOLDERS = [
 ];
 
 export default function Products() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const cached = localStorage.getItem("btnx_cloud_products");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Modal State
+  // Dedicated Full-Page Editor State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const formSubmitRef = useRef<HTMLButtonElement>(null);
 
   // Form Fields
   const [formData, setFormData] = useState({
@@ -54,12 +64,41 @@ export default function Products() {
   });
 
   useEffect(() => {
+    // Load local cached products first
+    try {
+      const cached = localStorage.getItem("btnx_cloud_products");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProducts(parsed);
+          setLoading(false);
+        }
+      }
+    } catch {}
+
     const unsub = onSnapshot(query(collection(db, 'products')), (snap) => {
       const prods = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Product[];
-      setProducts(prods);
+      setProducts(prev => {
+        const map = new Map<string, Product>();
+        try {
+          const cached = localStorage.getItem("btnx_cloud_products");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((p: Product) => map.set(p.id, p));
+            }
+          }
+        } catch {}
+        prev.forEach(p => map.set(p.id, p));
+        prods.forEach(p => map.set(p.id, { ...map.get(p.id), ...p }));
+        const merged = Array.from(map.values());
+        try {
+          localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
       setLoading(false);
     }, (err) => {
-      setError("Failed to load products from database.");
       setLoading(false);
       handleFirestoreError(err, OperationType.LIST, 'products');
     });
@@ -74,7 +113,7 @@ export default function Products() {
       category: CATEGORIES[0],
       price: '',
       originalPrice: '',
-      image: IMAGE_PLACEHOLDERS[0].url, // default placeholder
+      image: IMAGE_PLACEHOLDERS[0].url,
       badge: '',
       description: '',
       sizes: ['S', 'M', 'L'],
@@ -115,6 +154,15 @@ export default function Products() {
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this product?")) {
+      setProducts(prev => {
+        const next = prev.filter(p => p.id !== id);
+        try {
+          localStorage.setItem("btnx_cloud_products", JSON.stringify(next));
+          window.dispatchEvent(new Event("storage"));
+          window.dispatchEvent(new CustomEvent("btnx_products_updated"));
+        } catch {}
+        return next;
+      });
       try {
         await deleteDoc(doc(db, 'products', id));
       } catch (err) {
@@ -142,37 +190,364 @@ export default function Products() {
       return;
     }
 
-    const payload = {
+    const prodId = editingProduct ? editingProduct.id : `prod-${Date.now()}`;
+    const payload: Product = {
+      id: prodId,
       name: formData.name.trim(),
       category: formData.category,
       price: parsedPrice,
-      originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
+      originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
       image: formData.image.trim(),
-      badge: formData.badge.trim() || null,
+      badge: formData.badge.trim() || undefined,
       description: formData.description.trim(),
       sizes: formData.sizes,
       colors: formData.colors,
       stock: parseInt(formData.stock) || 0
     };
 
+    setProducts(prev => {
+      const exists = prev.some(p => p.id === prodId);
+      const next = exists ? prev.map(p => p.id === prodId ? payload : p) : [payload, ...prev];
+      try {
+        localStorage.setItem("btnx_cloud_products", JSON.stringify(next));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("btnx_products_updated"));
+      } catch {}
+      return next;
+    });
+
     try {
       if (editingProduct) {
-        // Update
-        await updateDoc(doc(db, 'products', editingProduct.id), payload as any);
+        await updateDoc(doc(db, 'products', prodId), payload as any);
       } else {
-        // Create
-        await addDoc(collection(db, 'products'), payload);
+        await setDoc(doc(db, 'products', prodId), payload as any);
       }
       setIsModalOpen(false);
-    } catch (err: any) {
-      setError(`Database Error: ${err.message || 'Failed to save product.'}`);
-      handleFirestoreError(
-        err,
-        editingProduct ? OperationType.UPDATE : OperationType.CREATE,
-        editingProduct ? `products/${editingProduct.id}` : 'products'
-      );
+      setEditingProduct(null);
+    } catch {
+      setIsModalOpen(false);
+      setEditingProduct(null);
     }
   };
+
+  if (isModalOpen) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn">
+        {/* Top Header */}
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 gap-4">
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingProduct(null);
+              }}
+              className="group inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-950 mb-2 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+              <span>Back to Products Catalog</span>
+            </button>
+            <h1 className="text-3xl font-display font-extrabold tracking-wider text-slate-950 uppercase">
+              {editingProduct ? `Edit Piece: ${editingProduct.name}` : 'Add New Garment Piece'}
+            </h1>
+            <p className="text-slate-500 text-xs font-mono tracking-wide uppercase mt-1">
+              {editingProduct ? `SKU / Document ID: ${editingProduct.id}` : 'Configure specifications, sizing, imagery and stock levels'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingProduct(null);
+              }}
+              className="px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase text-slate-600 hover:text-slate-950 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={() => formSubmitRef.current?.click()}
+              className="flex items-center gap-2 bg-slate-950 text-white px-5 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider hover:bg-slate-900 shadow transition-colors cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>{editingProduct ? 'Save Changes' : 'Publish Product'}</span>
+            </button>
+          </div>
+        </header>
+
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-mono rounded-xl">
+            {error}
+          </div>
+        )}
+
+        {/* Dedicated Full-Page Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <button ref={formSubmitRef} type="submit" className="hidden" aria-hidden="true" />
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-900">
+                01. Core Product Identity &amp; Pricing
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                  Product Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Purple Brooklyn Heavyweight Fleece Hoodie"
+                  className="w-full text-sm font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                  Collection Category
+                </label>
+                <select
+                  value={formData.category}
+                  onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-950 transition-colors"
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                  Stock Units Available
+                </label>
+                <input
+                  type="number"
+                  value={formData.stock}
+                  onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                  placeholder="45"
+                  className="w-full text-xs font-mono font-bold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                  Price ($ USD / ₦ Equivalent) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.price}
+                  onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full text-xs font-mono font-bold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                  Compare Price (Original / Slash Price)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.originalPrice}
+                  onChange={e => setFormData(prev => ({ ...prev, originalPrice: e.target.value }))}
+                  placeholder="Optional"
+                  className="w-full text-xs font-mono font-bold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                  Editorial Badge Tag
+                </label>
+                <input
+                  type="text"
+                  value={formData.badge}
+                  onChange={e => setFormData(prev => ({ ...prev, badge: e.target.value }))}
+                  placeholder="e.g. NEW RELEASE, LIMITED, 20% OFF"
+                  className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-900">
+                02. Lookbook Image &amp; Presets
+              </h2>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                Main Image URL *
+              </label>
+              <input
+                type="url"
+                value={formData.image}
+                onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
+                placeholder="https://images.unsplash.com/..."
+                className="w-full text-xs font-mono px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors"
+              />
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase mr-1">PRESET PALETTE:</span>
+                {IMAGE_PLACEHOLDERS.map((preset, idx) => (
+                  <button
+                    type="button"
+                    key={idx}
+                    onClick={() => setFormData(prev => ({ ...prev, image: preset.url }))}
+                    className={`text-[10px] font-mono px-2.5 py-1 rounded-lg border cursor-pointer ${
+                      formData.image === preset.url
+                        ? 'bg-slate-950 border-slate-950 text-white font-bold'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'
+                    } transition-colors`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {formData.image && (
+                <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-4">
+                  <img
+                    src={formData.image}
+                    alt="Preview"
+                    className="w-16 h-20 object-cover rounded-lg border border-slate-200"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1544022613-e87ca75a784a?q=80&w=100&auto=format&fit=crop";
+                    }}
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900">Live Image Preview</span>
+                    <p className="text-[10px] font-mono text-slate-400 truncate max-w-md">{formData.image}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-900">
+                03. Available Sizes &amp; Colorways
+              </h2>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Sizes ({formData.sizes.length} Selected)
+                </label>
+                <div className="flex flex-wrap gap-2.5">
+                  {SIZES_OPTIONS.map(sz => {
+                    const active = formData.sizes.includes(sz);
+                    return (
+                      <button
+                        type="button"
+                        key={sz}
+                        onClick={() => handleCheckboxChange('sizes', sz)}
+                        className={`text-xs font-mono font-bold w-11 h-11 border rounded-xl transition-all cursor-pointer ${
+                          active 
+                            ? 'bg-slate-950 border-slate-950 text-white shadow-sm' 
+                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'
+                        }`}
+                      >
+                        {sz}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100">
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Colorways ({formData.colors.length} Selected)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {COLORS_OPTIONS.map(col => {
+                    const active = formData.colors.includes(col);
+                    return (
+                      <button
+                        type="button"
+                        key={col}
+                        onClick={() => handleCheckboxChange('colors', col)}
+                        className={`text-xs font-mono font-semibold px-3.5 py-2 border rounded-xl transition-all cursor-pointer ${
+                          active 
+                            ? 'bg-slate-950 border-slate-950 text-white font-bold shadow-sm' 
+                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'
+                        }`}
+                      >
+                        {col}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-900">
+                04. Description &amp; Story
+              </h2>
+            </div>
+            <textarea
+              value={formData.description}
+              onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Tell clients about this item's material, silhouette, fit, and origin..."
+              rows={4}
+              className="w-full text-xs px-3.5 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-slate-950 transition-colors leading-relaxed"
+            />
+          </div>
+
+          {/* Bottom Persistent Bar */}
+          <footer className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-t border-slate-200 pt-6 gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingProduct(null);
+              }}
+              className="group inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-950 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+              <span>Return to Products Catalog</span>
+            </button>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingProduct(null);
+                }}
+                className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase text-slate-600 hover:text-slate-950 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex items-center gap-2 bg-slate-950 text-white px-6 py-3 rounded-xl text-xs font-mono font-bold uppercase tracking-wider hover:bg-slate-900 shadow transition-colors cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>{editingProduct ? 'Save Changes' : 'Create Product'}</span>
+              </button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -299,227 +674,6 @@ export default function Products() {
           </table>
         </div>
       </div>
-
-      {/* Modal Dialog */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm transition-all">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            {/* Modal Header */}
-            <header className="flex items-center justify-between border-b border-slate-150 px-6 py-4 bg-slate-50">
-              <div>
-                <h2 className="text-xl font-display font-bold tracking-widest text-slate-950 uppercase">
-                  {editingProduct ? 'Edit Product Details' : 'Add New Product'}
-                </h2>
-                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-                  {editingProduct ? `ID: ${editingProduct.id}` : 'Create catalog item'}
-                </p>
-              </div>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-950 hover:bg-slate-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </header>
-
-            {/* Modal Content */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              {error && (
-                <div className="bg-rose-50 text-rose-800 p-3.5 rounded-xl border border-rose-100 flex items-start gap-2.5 text-xs font-mono">
-                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Product Name */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Name</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g. Minimalist Wool Trench"
-                    className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-
-                {/* Category */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Category</label>
-                  <select
-                    value={formData.category}
-                    onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-950 transition-colors"
-                  >
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Price */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Price ($ USD)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full text-xs font-mono font-bold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-
-                {/* Original Price */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Original Price (Discount Compare)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.originalPrice}
-                    onChange={e => setFormData(prev => ({ ...prev, originalPrice: e.target.value }))}
-                    placeholder="Optional (No sale if empty)"
-                    className="w-full text-xs font-mono font-bold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-
-                {/* Image URL */}
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Image URL</label>
-                  <input
-                    type="url"
-                    value={formData.image}
-                    onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full text-xs font-mono px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                  {/* Preset Placeholders */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    <span className="text-[9px] font-mono text-slate-400 uppercase mr-1">PRESETS:</span>
-                    {IMAGE_PLACEHOLDERS.map((preset, idx) => (
-                      <button
-                        type="button"
-                        key={idx}
-                        onClick={() => setFormData(prev => ({ ...prev, image: preset.url }))}
-                        className={`text-[9px] font-mono px-2 py-0.5 rounded border ${
-                          formData.image === preset.url
-                            ? 'bg-slate-950 border-slate-950 text-white font-bold'
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'
-                        } transition-colors`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Badge */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Badge</label>
-                  <input
-                    type="text"
-                    value={formData.badge}
-                    onChange={e => setFormData(prev => ({ ...prev, badge: e.target.value }))}
-                    placeholder="e.g. NEW, SALE, LIMITED"
-                    className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-
-                {/* Stock */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Stock Quantity</label>
-                  <input
-                    type="number"
-                    value={formData.stock}
-                    onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))}
-                    placeholder="100"
-                    className="w-full text-xs font-mono px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Sizes Selection */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Available Sizes</label>
-                <div className="flex flex-wrap gap-2.5">
-                  {SIZES_OPTIONS.map(sz => {
-                    const active = formData.sizes.includes(sz);
-                    return (
-                      <button
-                        type="button"
-                        key={sz}
-                        onClick={() => handleCheckboxChange('sizes', sz)}
-                        className={`text-xs font-mono font-bold w-10 h-10 border rounded-lg transition-all ${
-                          active 
-                            ? 'bg-slate-950 border-slate-950 text-white shadow-sm scale-95' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'
-                        }`}
-                      >
-                        {sz}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Colors Selection */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Available Colors</label>
-                <div className="flex flex-wrap gap-2">
-                  {COLORS_OPTIONS.map(col => {
-                    const active = formData.colors.includes(col);
-                    return (
-                      <button
-                        type="button"
-                        key={col}
-                        onClick={() => handleCheckboxChange('colors', col)}
-                        className={`text-xs font-mono font-semibold px-3 py-1.5 border rounded-lg transition-all ${
-                          active 
-                            ? 'bg-slate-950 border-slate-950 text-white font-bold' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'
-                        }`}
-                      >
-                        {col}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Product Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Tell clients about this item's material, silhouette, fit, and origin..."
-                  rows={3}
-                  className="w-full text-xs px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-950 transition-colors"
-                />
-              </div>
-
-              {/* Form Buttons */}
-              <footer className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase text-slate-600 hover:text-slate-950 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex items-center gap-1.5 bg-slate-950 text-white px-5 py-2.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider hover:bg-slate-900 shadow"
-                >
-                  <Save className="w-4 h-4" />
-                  {editingProduct ? 'Save Changes' : 'Create Product'}
-                </button>
-              </footer>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

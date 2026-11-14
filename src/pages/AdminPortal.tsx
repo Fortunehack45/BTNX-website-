@@ -189,7 +189,28 @@ export default function AdminPortal() {
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
   // Store Data States
-  const [cloudProducts, setCloudProducts] = useState<Product[]>([]);
+  const [cloudProducts, setCloudProducts] = useState<Product[]>(() => {
+    try {
+      const cached = localStorage.getItem("btnx_cloud_products");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return [];
+  });
+  const [deletedProductIds, setDeletedProductIds] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem("btnx_deleted_product_ids");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [orders, setOrders] = useState<Order[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [promos, setPromos] = useState<PromoRecord[]>(DEFAULT_PROMOS);
@@ -258,6 +279,7 @@ export default function AdminPortal() {
   });
   const productFileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
+  const productFormSubmitRef = useRef<HTMLButtonElement>(null);
 
   // Global Shipping & Logistics State
   const [shippingSettings, setShippingSettings] = useState<StoreShippingSettings>({
@@ -392,6 +414,22 @@ export default function AdminPortal() {
       // ignore
     }
 
+    // Load local cached products
+    try {
+      const cached = localStorage.getItem("btnx_cloud_products");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCloudProducts((prev) => {
+            const map = new Map<string, Product>();
+            prev.forEach((p) => map.set(p.id, p));
+            parsed.forEach((p: Product) => map.set(p.id, { ...map.get(p.id), ...p }));
+            return Array.from(map.values());
+          });
+        }
+      }
+    } catch {}
+
     const unsubs: Array<() => void> = [];
 
     try {
@@ -403,7 +441,25 @@ export default function AdminPortal() {
               id: d.id,
               ...d.data(),
             })) as Product[];
-            setCloudProducts(list);
+            setCloudProducts((prev) => {
+              const map = new Map<string, Product>();
+              try {
+                const cached = localStorage.getItem("btnx_cloud_products");
+                if (cached) {
+                  const parsed = JSON.parse(cached);
+                  if (Array.isArray(parsed)) {
+                    parsed.forEach((p: Product) => map.set(p.id, p));
+                  }
+                }
+              } catch {}
+              prev.forEach((p) => map.set(p.id, p));
+              list.forEach((p) => map.set(p.id, { ...map.get(p.id), ...p }));
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           },
           () => {}
         )
@@ -508,10 +564,18 @@ export default function AdminPortal() {
   // Combined Catalog: Cloud products + Storefront products
   const allProducts: Product[] = React.useMemo(() => {
     const map = new Map<string, Product>();
-    NEW_YEAR_PRODUCTS.forEach((p) => map.set(p.id, { ...p, stock: p.stock ?? 45 }));
-    cloudProducts.forEach((p) => map.set(p.id, p));
+    NEW_YEAR_PRODUCTS.forEach((p) => {
+      if (!deletedProductIds.includes(p.id)) {
+        map.set(p.id, { ...p, stock: p.stock ?? 45 });
+      }
+    });
+    cloudProducts.forEach((p) => {
+      if (!deletedProductIds.includes(p.id)) {
+        map.set(p.id, { ...map.get(p.id), ...p });
+      }
+    });
     return Array.from(map.values());
-  }, [cloudProducts]);
+  }, [cloudProducts, deletedProductIds]);
 
   // Combined Orders (with demo fallback if empty so Admin Orders table is immediately rich)
   const allOrders: Order[] = React.useMemo(() => {
@@ -1072,8 +1136,21 @@ export default function AdminPortal() {
         : [newProd, ...prev];
       try {
         localStorage.setItem("btnx_cloud_products", JSON.stringify(next));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("btnx_products_updated"));
       } catch {}
       return next;
+    });
+
+    setDeletedProductIds((prev) => {
+      if (prev.includes(prodId)) {
+        const next = prev.filter((id) => id !== prodId);
+        try {
+          localStorage.setItem("btnx_deleted_product_ids", JSON.stringify(next));
+        } catch {}
+        return next;
+      }
+      return prev;
     });
 
     try {
@@ -1118,13 +1195,28 @@ export default function AdminPortal() {
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
-    setCloudProducts((prev) => prev.filter((p) => p.id !== id));
+    setCloudProducts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem("btnx_cloud_products", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    setDeletedProductIds((prev) => {
+      const next = prev.includes(id) ? prev : [...prev, id];
+      try {
+        localStorage.setItem("btnx_deleted_product_ids", JSON.stringify(next));
+        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new CustomEvent("btnx_products_updated"));
+      } catch {}
+      return next;
+    });
     try {
       await deleteDoc(doc(db, "products", id));
     } catch {
       // ignore
     }
-    showToast(`Removed "${name}" from cloud catalog.`);
+    showToast(`Removed "${name}" from catalog.`);
   };
 
   const handleSeedCatalogToCloud = async () => {
@@ -1581,6 +1673,655 @@ export default function AdminPortal() {
 
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 xl:p-10 max-w-[1440px] w-full mx-auto space-y-8">
+        {isProductModalOpen ? (
+          <div className="space-y-8 animate-fadeIn">
+            {/* Top Navigation & Action Header */}
+            <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProductModalOpen(false);
+                    setEditingProduct(null);
+                  }}
+                  className="group inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] mb-2.5 transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+                  <span>Back to Catalog &amp; Inventory</span>
+                </button>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-semibold">
+                    Garment Archive &middot; {editingProduct ? "Specification Update" : "New Piece Ingestion"}
+                  </span>
+                </div>
+                <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-[#141413] dark:text-[#F3F1EC] mt-1">
+                  {editingProduct ? `Edit Piece: ${editingProduct.name}` : "Create Garment Piece"}
+                </h1>
+                <p className="text-xs text-[#66625B] dark:text-[#A7A299] font-mono mt-1">
+                  {editingProduct
+                    ? `SKU / Database Key: ${editingProduct.id}`
+                    : "Configure identity, multi-image photography, luxury colorway swatches, sizing, and specs"}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProductModalOpen(false);
+                    setEditingProduct(null);
+                  }}
+                  className="h-10 px-5 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] text-xs font-bold uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer"
+                >
+                  Discard Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => productFormSubmitRef.current?.click()}
+                  className="h-10 px-6 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-bold uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:opacity-95 shadow-sm transition-opacity cursor-pointer"
+                >
+                  <Check className="w-4 h-4 text-[#966830] dark:text-[#966830]" />
+                  <span>{editingProduct ? "Save & Update Piece" : "Publish Garment Piece"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Hidden Submit Button triggered by top & bottom bars */}
+            <form onSubmit={handleSaveProduct} className="space-y-8">
+              <button ref={productFormSubmitRef} type="submit" className="hidden" aria-hidden="true" />
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* LEFT 2 COLS: Core Identity, Gallery, Colorways, Sizing & Story */}
+                <div className="lg:col-span-2 space-y-8">
+                  {/* CARD 1: Identity & Pricing */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-5">
+                    <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold">
+                        01. Garment Identity &amp; Pricing
+                      </span>
+                      <span className="text-[10px] font-mono text-[#66625B]">Storefront Display Info</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                          Garment Piece Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={productForm.name}
+                          onChange={(e) => setProductForm((p) => ({ ...p, name: e.target.value }))}
+                          placeholder="e.g. Purple Brooklyn Heavyweight Fleece Hoodie"
+                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-sm text-[#141413] dark:text-[#F3F1EC] font-semibold outline-none focus:border-[#141413] dark:focus:border-[#F3F1EC] transition-colors"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                          Collection / Category *
+                        </label>
+                        <select
+                          value={productForm.category}
+                          onChange={(e) => setProductForm((p) => ({ ...p, category: e.target.value }))}
+                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] font-semibold outline-none"
+                        >
+                          {PRODUCT_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                          Stock Units Available *
+                        </label>
+                        <input
+                          type="number"
+                          value={productForm.stock}
+                          onChange={(e) => setProductForm((p) => ({ ...p, stock: e.target.value }))}
+                          placeholder="45"
+                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-sm text-[#141413] dark:text-[#F3F1EC] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                          Retail Price (₦ Naira) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          value={productForm.price}
+                          onChange={(e) => setProductForm((p) => ({ ...p, price: e.target.value }))}
+                          placeholder="135000"
+                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-sm font-bold text-[#141413] dark:text-[#F3F1EC] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                          Compare / Slash Price (₦ Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={productForm.originalPrice}
+                          onChange={(e) => setProductForm((p) => ({ ...p, originalPrice: e.target.value }))}
+                          placeholder="e.g. 180000"
+                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-sm text-[#66625B] dark:text-[#A7A299] outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                          Editorial Tag / Badge (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={productForm.badge}
+                          onChange={(e) => setProductForm((p) => ({ ...p, badge: e.target.value }))}
+                          placeholder="e.g. NEW RELEASE, EXCLUSIVE, BESTSELLER, 20% OFF"
+                          className="w-full h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] font-semibold outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: Studio Gallery & Photography */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-5">
+                    <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4 text-[#966830] dark:text-[#C89B62]" />
+                        <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold">
+                          02. Studio Gallery &amp; Imagery ({productForm.images.length})
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#66625B]">High-Resolution Multiple Angles</span>
+                    </div>
+
+                    <input
+                      ref={productFileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleProductImageFiles}
+                      className="hidden"
+                    />
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        type="button"
+                        onClick={() => productFileInputRef.current?.click()}
+                        className="h-11 px-5 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-mono uppercase tracking-[0.12em] inline-flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 shrink-0 font-bold"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Photos</span>
+                      </button>
+
+                      <div className="flex flex-1 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Or paste external image URL (https://...)"
+                          value={productForm.customImageUrl}
+                          onChange={(e) => setProductForm((p) => ({ ...p, customImageUrl: e.target.value }))}
+                          className="flex-1 h-11 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddImageUrl}
+                          className="h-11 px-4 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] text-[10px] font-mono uppercase font-bold text-[#141413] dark:text-[#F3F1EC] cursor-pointer hover:border-[#141413] dark:hover:border-[#F3F1EC] shrink-0"
+                        >
+                          Add URL
+                        </button>
+                      </div>
+                    </div>
+
+                    {productForm.images.length === 0 ? (
+                      <div className="p-8 border border-dashed border-[#E6E2DA] dark:border-[#2C2A26] text-center space-y-1">
+                        <p className="text-xs text-[#66625B] dark:text-[#A7A299] font-medium">
+                          No images uploaded yet. Upload high-res lookbook photos or add image links.
+                        </p>
+                        <p className="text-[10px] font-mono text-[#8C877D]">
+                          Supports JPEG, PNG, WEBP with instantaneous compression.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-2">
+                        {productForm.images.map((img, idx) => {
+                          const isMain = productForm.image === img || (idx === 0 && !productForm.image);
+                          return (
+                            <div
+                              key={idx}
+                              className={`relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#2A2824] border overflow-hidden rounded-xs group flex flex-col justify-between p-1.5 ${
+                                isMain
+                                  ? "border-[#966830] ring-2 ring-[#966830]"
+                                  : "border-[#E6E2DA] dark:border-[#2C2A26]"
+                              }`}
+                            >
+                              <img src={img} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                              <div className="absolute top-2 left-2">
+                                {isMain ? (
+                                  <span className="px-2 py-0.5 bg-[#966830] text-white text-[9px] font-mono font-bold tracking-wider uppercase rounded-xs">
+                                    Primary
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetMainImage(idx)}
+                                    className="px-2 py-0.5 bg-black/80 hover:bg-black text-white text-[9px] font-mono uppercase rounded-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer font-bold"
+                                  >
+                                    Set Primary
+                                  </button>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(idx)}
+                                className="absolute top-2 right-2 w-7 h-7 bg-black/80 hover:bg-red-600 text-white flex items-center justify-center rounded-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                title="Remove image"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CARD 3: Colorway Architecture & Live Swatches */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-5">
+                    <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      <div className="flex items-center gap-2">
+                        <Palette className="w-4 h-4 text-[#966830] dark:text-[#C89B62]" />
+                        <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold">
+                          03. Available Colorways ({productForm.colors.length} Active)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#66625B]">Synchronized Swatches</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2.5">
+                      {productForm.colors.map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#141413] dark:border-[#F3F1EC] rounded-xs text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]"
+                        >
+                          <span
+                            className="w-3.5 h-3.5 rounded-full border border-black/20 dark:border-white/30 shrink-0"
+                            style={{ backgroundColor: getSwatchHex(c) }}
+                          />
+                          <span>{c}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveColor(c)}
+                            className="text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] ml-1 cursor-pointer"
+                            title="Remove colorway"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-2 font-bold">
+                        Quick-Add Luxury Preset Palettes
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {PRESET_COLORS.map((preset) => {
+                          const isActive = productForm.colors.includes(preset);
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => handleToggleColor(preset)}
+                              className={`px-3 py-1.5 text-xs font-medium border rounded-xs flex items-center gap-2 cursor-pointer transition-colors ${
+                                isActive
+                                  ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413] dark:border-[#F3F1EC]"
+                                  : "bg-white dark:bg-[#191816] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] dark:text-[#A7A299] hover:border-[#141413]"
+                              }`}
+                            >
+                              <span
+                                className="w-3 h-3 rounded-full border border-black/20 dark:border-white/20 shrink-0"
+                                style={{ backgroundColor: getSwatchHex(preset) }}
+                              />
+                              <span>{preset}</span>
+                              {isActive && <Check className="w-3 h-3 ml-0.5" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Add Bespoke / Custom Colorway Name
+                      </label>
+                      <div className="flex gap-2.5">
+                        <input
+                          type="text"
+                          placeholder="e.g. Cognac Tan, Terracotta, Slate Blue, Bone"
+                          value={productForm.customColorInput}
+                          onChange={(e) => setProductForm((p) => ({ ...p, customColorInput: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddCustomColor();
+                            }
+                          }}
+                          className="flex-1 h-10 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomColor}
+                          className="h-10 px-5 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-mono uppercase font-bold cursor-pointer"
+                        >
+                          Add Custom Shade
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 4: Sizing & Garment Story */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-5">
+                    <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold">
+                        04. Sizing Matrix &amp; Editorial Story
+                      </span>
+                      <span className="text-[10px] font-mono text-[#66625B]">Customer Sizing Specs</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-2 font-bold">
+                        Available Garment Sizes ({productForm.sizes.length} Selected)
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {SIZES_LIST.map((sz) => {
+                          const active = productForm.sizes.includes(sz);
+                          return (
+                            <button
+                              key={sz}
+                              type="button"
+                              onClick={() =>
+                                setProductForm((prev) => ({
+                                  ...prev,
+                                  sizes: active ? prev.sizes.filter((s) => s !== sz) : [...prev.sizes, sz],
+                                }))
+                              }
+                              className={`w-11 h-11 font-mono text-xs font-bold border rounded-xs cursor-pointer transition-all ${
+                                active
+                                  ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
+                                  : "bg-[#FAF9F7] dark:bg-[#141413] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:border-[#141413]"
+                              }`}
+                            >
+                              {sz}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Product Overview &amp; Editorial Description
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={productForm.description}
+                        onChange={(e) => setProductForm((p) => ({ ...p, description: e.target.value }))}
+                        placeholder="Crafted from heavyweight organic cotton with relaxed everyday tailoring..."
+                        className="w-full p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] outline-none resize-none leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT 1 COL: Fabric, Logistics, Shipping & Hero Pinning */}
+                <div className="space-y-8">
+                  {/* CARD 5: Luxury Fabric, Silhouette & Care Specs */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-4">
+                    <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold block border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      05. Fabric &amp; Garment Care
+                    </span>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Fabric &amp; Material Breakdown
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="e.g. Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets."
+                        value={productForm.fabricAndCare}
+                        onChange={(e) => setProductForm((p) => ({ ...p, fabricAndCare: e.target.value }))}
+                        className="w-full p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs text-[#141413] dark:text-[#F3F1EC]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Fit &amp; Washing Instructions
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Relaxed, structured fit. Machine wash cold inside out."
+                        value={productForm.fitDetails}
+                        onChange={(e) => setProductForm((p) => ({ ...p, fitDetails: e.target.value }))}
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs text-[#141413] dark:text-[#F3F1EC]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CARD 6: Delivery, Packaging & Return Policy */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-4">
+                    <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold block border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      06. Delivery, Packaging &amp; Returns
+                    </span>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Delivery Timeline
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 2–4 Business Days"
+                        value={productForm.deliveryTimeline}
+                        onChange={(e) => setProductForm((p) => ({ ...p, deliveryTimeline: e.target.value }))}
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs text-[#141413] dark:text-[#F3F1EC]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Packaging Spec
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Cotton Garment Box"
+                        value={productForm.packagingType}
+                        onChange={(e) => setProductForm((p) => ({ ...p, packagingType: e.target.value }))}
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs text-[#141413] dark:text-[#F3F1EC]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] mb-1.5 font-bold">
+                        Return Policy
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 14-Day Free Exchanges"
+                        value={productForm.returnPolicy}
+                        onChange={(e) => setProductForm((p) => ({ ...p, returnPolicy: e.target.value }))}
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs text-[#141413] dark:text-[#F3F1EC]"
+                      />
+                    </div>
+
+                    <div className="pt-3 border-t border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={productForm.isFreeShipping}
+                          onChange={(e) => setProductForm((p) => ({ ...p, isFreeShipping: e.target.checked }))}
+                          className="w-4 h-4 accent-[#141413] dark:accent-[#F3F1EC]"
+                        />
+                        <span className="text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                          Qualifies for Free Nationwide Shipping
+                        </span>
+                      </label>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono uppercase text-[#66625B]">
+                          Custom Shipping Fee (₦):
+                        </span>
+                        <input
+                          type="number"
+                          placeholder="Standard"
+                          disabled={productForm.isFreeShipping}
+                          value={productForm.shippingFee}
+                          onChange={(e) => setProductForm((p) => ({ ...p, shippingFee: e.target.value }))}
+                          className="w-28 h-8 px-2 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-xs outline-none disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 7: Hero Lookbook Pinning */}
+                  <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                      <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] font-semibold">
+                        07. Storefront Hero Pinning
+                      </span>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={productForm.isPinnedHero}
+                          onChange={(e) => setProductForm((p) => ({ ...p, isPinnedHero: e.target.checked }))}
+                          className="w-4 h-4 accent-[#966830]"
+                        />
+                        <span className="text-xs font-bold text-[#966830] dark:text-[#C89B62]">
+                          Pin to Hero
+                        </span>
+                      </label>
+                    </div>
+
+                    {productForm.isPinnedHero && (
+                      <div className="space-y-3 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1 font-bold">
+                              Look Label
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Look 01"
+                              value={productForm.heroLookNumber}
+                              onChange={(e) => setProductForm((p) => ({ ...p, heroLookNumber: e.target.value }))}
+                              className="w-full h-9 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1 font-bold">
+                              Slide Order
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="20"
+                              value={productForm.heroOrder}
+                              onChange={(e) => setProductForm((p) => ({ ...p, heroOrder: e.target.value }))}
+                              className="w-full h-9 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none text-xs"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1 font-bold">
+                            Hero Headline (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Defaults to garment name"
+                            value={productForm.heroHeadline}
+                            onChange={(e) => setProductForm((p) => ({ ...p, heroHeadline: e.target.value }))}
+                            className="w-full h-9 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1 font-bold">
+                            Hero Banner Image (URL or Upload)
+                          </label>
+                          <input
+                            ref={heroFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleHeroImageFile}
+                            className="hidden"
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Leave blank to use primary photo"
+                              value={productForm.heroImage}
+                              onChange={(e) => setProductForm((p) => ({ ...p, heroImage: e.target.value }))}
+                              className="flex-1 h-9 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-xs outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => heroFileInputRef.current?.click()}
+                              className="h-9 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase font-bold cursor-pointer"
+                            >
+                              Upload
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Persistent Bar */}
+              <div className="border-t border-[#E6E2DA] dark:border-[#2C2A26] pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProductModalOpen(false);
+                    setEditingProduct(null);
+                  }}
+                  className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Return to Catalog &amp; Stock</span>
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProductModalOpen(false);
+                      setEditingProduct(null);
+                    }}
+                    className="h-11 px-5 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] text-xs font-bold uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="h-11 px-7 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-bold uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:opacity-95 shadow-sm transition-opacity cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 text-[#966830] dark:text-[#966830]" />
+                    <span>{editingProduct ? "Save & Update Piece" : "Publish Garment Piece"}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <>
         {/* MODULE 1: OVERVIEW */}
         {activeTab === "overview" && (
           <div className="space-y-8">
@@ -2101,20 +2842,21 @@ export default function AdminPortal() {
                               isAgentOrBot ? "items-end" : "items-start"
                             } space-y-1.5`}
                           >
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299]">
-                              <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] uppercase whitespace-nowrap">
-                                {msg.senderName}
-                              </span>
-                              <span className="text-[#8C877D] select-none">·</span>
-                              <span className="whitespace-nowrap">
-                                {msg.sender === "customer"
-                                  ? "Client"
-                                  : msg.sender === "bot"
-                                  ? "Automated Bot"
-                                  : "Human Specialist"}
-                              </span>
-                              <span className="text-[#8C877D] select-none">·</span>
-                              <span className="tabular-nums whitespace-nowrap">
+                            <div className="flex items-center justify-between w-full max-w-sm text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] px-0.5 gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] uppercase whitespace-nowrap">
+                                  {msg.senderName}
+                                </span>
+                                <span className="text-[#8C877D] select-none shrink-0">·</span>
+                                <span className="whitespace-nowrap truncate text-[9px]">
+                                  {msg.sender === "customer"
+                                    ? "Client"
+                                    : msg.sender === "bot"
+                                    ? "Automated Bot"
+                                    : "Human Specialist"}
+                                </span>
+                              </div>
+                              <span className="tabular-nums whitespace-nowrap shrink-0 text-[#8C877D] text-[9px]">
                                 {new Date(msg.createdAt).toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -3639,658 +4381,9 @@ export default function AdminPortal() {
             </div>
           </div>
         )}
+          </>
+        )}
       </main>
-
-      {/* ADD / EDIT PRODUCT MODAL */}
-      {isProductModalOpen && (
-        <div
-          onClick={() => setIsProductModalOpen(false)}
-          className="fixed inset-0 z-[80] bg-black/75 flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5"
-          >
-            <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
-              <h2 className="font-display text-2xl font-medium">
-                {editingProduct ? "Edit Garment Piece" : "Add New Garment Piece"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsProductModalOpen(false)}
-                className="p-1 text-[#66625B] hover:text-[#141413] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Garment Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={productForm.name}
-                    onChange={(e) =>
-                      setProductForm((p) => ({ ...p, name: e.target.value }))
-                    }
-                    className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={productForm.category}
-                    onChange={(e) =>
-                      setProductForm((p) => ({ ...p, category: e.target.value }))
-                    }
-                    className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none"
-                  >
-                    {PRODUCT_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Price (₦ Naira)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={productForm.price}
-                    onChange={(e) =>
-                      setProductForm((p) => ({ ...p, price: e.target.value }))
-                    }
-                    className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Compare Price (₦ Optional)
-                  </label>
-                  <input
-                    type="number"
-                    value={productForm.originalPrice}
-                    onChange={(e) =>
-                      setProductForm((p) => ({
-                        ...p,
-                        originalPrice: e.target.value,
-                      }))
-                    }
-                    className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Editorial Tag (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={productForm.badge}
-                    onChange={(e) =>
-                      setProductForm((p) => ({ ...p, badge: e.target.value }))
-                    }
-                    placeholder="e.g. NEW or -20%"
-                    className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Stock Units
-                  </label>
-                  <input
-                    type="number"
-                    value={productForm.stock}
-                    onChange={(e) =>
-                      setProductForm((p) => ({ ...p, stock: e.target.value }))
-                    }
-                    className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* STUDIO GALLERY & MULTI-IMAGE UPLOADER */}
-              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
-                    Studio Gallery &amp; Product Images ({productForm.images.length})
-                  </span>
-                  <span className="text-[10px] font-mono text-[#66625B]">
-                    First image is thumbnail &middot; Supports multiple files
-                  </span>
-                </div>
-
-                <input
-                  ref={productFileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleProductImageFiles}
-                  className="hidden"
-                />
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={() => productFileInputRef.current?.click()}
-                    className="h-10 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[10px] font-mono uppercase tracking-[0.1em] inline-flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 shrink-0"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Upload Photo(s)</span>
-                  </button>
-
-                  <div className="flex flex-1 gap-2">
-                    <input
-                      type="text"
-                      placeholder="Or paste external image URL (https://...)"
-                      value={productForm.customImageUrl}
-                      onChange={(e) =>
-                        setProductForm((p) => ({ ...p, customImageUrl: e.target.value }))
-                      }
-                      className="flex-1 h-10 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddImageUrl}
-                      className="h-10 px-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase cursor-pointer hover:border-[#141413] dark:hover:border-[#F3F1EC] shrink-0"
-                    >
-                      Add URL
-                    </button>
-                  </div>
-                </div>
-
-                {/* Uploaded Gallery Thumbnails Strip */}
-                {productForm.images.length === 0 ? (
-                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] italic py-2">
-                    No gallery images added yet. Upload high-res studio photos or add image links.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 pt-2">
-                    {productForm.images.map((img, idx) => {
-                      const isMain = productForm.image === img || (idx === 0 && !productForm.image);
-                      return (
-                        <div
-                          key={idx}
-                          className={`relative aspect-[3/4] bg-white dark:bg-[#191816] border overflow-hidden rounded-xs group flex flex-col justify-between p-1 ${
-                            isMain
-                              ? "border-[#966830] ring-1 ring-[#966830]"
-                              : "border-[#E6E2DA] dark:border-[#2C2A26]"
-                          }`}
-                        >
-                          <img
-                            src={img}
-                            alt={`Piece upload ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute top-1 left-1">
-                            {isMain ? (
-                              <span className="px-1.5 py-0.5 bg-[#966830] text-white text-[9px] font-mono font-bold tracking-wider uppercase rounded-xs">
-                                Main
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleSetMainImage(idx)}
-                                className="px-1.5 py-0.5 bg-black/75 hover:bg-black text-white text-[9px] font-mono uppercase rounded-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                              >
-                                Set Main
-                              </button>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(idx)}
-                            className="absolute top-1 right-1 w-6 h-6 bg-black/75 hover:bg-red-600 text-white flex items-center justify-center rounded-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                            title="Remove image"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* COLORWAY MANAGEMENT & ACTIVE SWATCHES */}
-              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Palette className="w-3.5 h-3.5 text-[#966830] dark:text-[#C89B62]" />
-                    <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
-                      Available Colorways ({productForm.colors.length} Active)
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-mono text-[#66625B]">
-                    Real swatches synced to storefront
-                  </span>
-                </div>
-
-                {/* Active Selected Color Chips */}
-                <div className="flex flex-wrap gap-2">
-                  {productForm.colors.map((c) => (
-                    <span
-                      key={c}
-                      className="inline-flex items-center gap-2 px-2.5 py-1 bg-white dark:bg-[#191816] border border-[#141413] dark:border-[#F3F1EC] rounded-xs text-xs font-medium text-[#141413] dark:text-[#F3F1EC]"
-                    >
-                      <span
-                        className="w-3.5 h-3.5 rounded-full border border-black/15 dark:border-white/25 shrink-0"
-                        style={{ backgroundColor: getSwatchHex(c) }}
-                      />
-                      <span>{c}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveColor(c)}
-                        className="text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
-                        title="Remove colorway"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                  {productForm.colors.length === 0 && (
-                    <span className="text-xs text-[#66625B] dark:text-[#A7A299] italic">
-                      No colors assigned. Click a preset below or enter a custom shade.
-                    </span>
-                  )}
-                </div>
-
-                {/* Preset Palette Quick Toggles */}
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
-                    Quick-Add Preset Luxury Shades
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRESET_COLORS.map((preset) => {
-                      const isActive = productForm.colors.includes(preset);
-                      return (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => handleToggleColor(preset)}
-                          className={`px-2.5 py-1 text-xs border rounded-xs flex items-center gap-1.5 cursor-pointer transition-colors ${
-                            isActive
-                              ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413] dark:border-[#F3F1EC]"
-                              : "bg-white dark:bg-[#191816] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] dark:text-[#A7A299] hover:border-[#141413]"
-                          }`}
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full border border-black/15 dark:border-white/20 shrink-0"
-                            style={{ backgroundColor: getSwatchHex(preset) }}
-                          />
-                          <span>{preset}</span>
-                          {isActive && <Check className="w-3 h-3 ml-0.5" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Custom Colorway Name Input */}
-                <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Bespoke / Custom Colorway Name
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g. Cognac Tan, Terracotta, Slate Blue"
-                      value={productForm.customColorInput}
-                      onChange={(e) =>
-                        setProductForm((p) => ({ ...p, customColorInput: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddCustomColor();
-                        }
-                      }}
-                      className="flex-1 h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddCustomColor}
-                      className="h-9 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[10px] font-mono uppercase cursor-pointer"
-                    >
-                      Add Color
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                  Available Sizes
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {SIZES_LIST.map((sz) => {
-                    const active = productForm.sizes.includes(sz);
-                    return (
-                      <button
-                        key={sz}
-                        type="button"
-                        onClick={() =>
-                          setProductForm((prev) => ({
-                            ...prev,
-                            sizes: active
-                              ? prev.sizes.filter((s) => s !== sz)
-                              : [...prev.sizes, sz],
-                          }))
-                        }
-                        className={`w-9 h-9 font-mono text-xs border cursor-pointer ${
-                          active
-                            ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
-                            : "border-[#E6E2DA] dark:border-[#2C2A26]"
-                        }`}
-                      >
-                        {sz}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                  Product Overview &amp; Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={productForm.description}
-                  onChange={(e) =>
-                    setProductForm((p) => ({
-                      ...p,
-                      description: e.target.value,
-                    }))
-                  }
-                  className="w-full p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none resize-none"
-                />
-              </div>
-
-              {/* FABRIC & CARE & FIT SPECIFICATIONS */}
-              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
-                <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
-                  Fabric, Fit &amp; Garment Care (Customer Modal Specs)
-                </span>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Fabric &amp; Care Details (Multiline)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets."
-                    value={productForm.fabricAndCare}
-                    onChange={(e) =>
-                      setProductForm((p) => ({
-                        ...p,
-                        fabricAndCare: e.target.value,
-                      }))
-                    }
-                    className="w-full p-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                    Fit &amp; Washing Instructions
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean."
-                    value={productForm.fitDetails}
-                    onChange={(e) =>
-                      setProductForm((p) => ({
-                        ...p,
-                        fitDetails: e.target.value,
-                      }))
-                    }
-                    className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* SHIPPING, PACKAGING & RETURNS */}
-              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
-                <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
-                  Shipping, Packaging &amp; Return Terms
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                      Delivery Window
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 2–4 Business Days"
-                      value={productForm.deliveryTimeline}
-                      onChange={(e) =>
-                        setProductForm((p) => ({
-                          ...p,
-                          deliveryTimeline: e.target.value,
-                        }))
-                      }
-                      className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                      Packaging Spec
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Cotton Garment Box"
-                      value={productForm.packagingType}
-                      onChange={(e) =>
-                        setProductForm((p) => ({
-                          ...p,
-                          packagingType: e.target.value,
-                        }))
-                      }
-                      className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                      Return Policy
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 14-Day Free Exchanges"
-                      value={productForm.returnPolicy}
-                      onChange={(e) =>
-                        setProductForm((p) => ({
-                          ...p,
-                          returnPolicy: e.target.value,
-                        }))
-                      }
-                      className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex flex-wrap items-center justify-between gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={productForm.isFreeShipping}
-                      onChange={(e) =>
-                        setProductForm((p) => ({
-                          ...p,
-                          isFreeShipping: e.target.checked,
-                        }))
-                      }
-                      className="w-4 h-4 accent-[#141413] dark:accent-[#F3F1EC]"
-                    />
-                    <span className="text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
-                      Qualifies for Free Shipping
-                    </span>
-                  </label>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase text-[#66625B]">
-                      Custom Fee Override (₦):
-                    </span>
-                    <input
-                      type="number"
-                      placeholder="Default"
-                      disabled={productForm.isFreeShipping}
-                      value={productForm.shippingFee}
-                      onChange={(e) =>
-                        setProductForm((p) => ({
-                          ...p,
-                          shippingFee: e.target.value,
-                        }))
-                      }
-                      className="w-24 h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-xs outline-none disabled:opacity-40"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* HERO SHOWCASE PINNING SECTION */}
-              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
-                    Storefront Hero Carousel Pinning
-                  </span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={productForm.isPinnedHero}
-                      onChange={(e) =>
-                        setProductForm((p) => ({
-                          ...p,
-                          isPinnedHero: e.target.checked,
-                        }))
-                      }
-                      className="w-4 h-4 accent-[#966830]"
-                    />
-                    <span className="text-xs font-medium text-[#966830] dark:text-[#C89B62]">
-                      Pin to Hero Carousel
-                    </span>
-                  </label>
-                </div>
-
-                {productForm.isPinnedHero && (
-                  <div className="space-y-2.5 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                          Look Number
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Look 01"
-                          value={productForm.heroLookNumber}
-                          onChange={(e) =>
-                            setProductForm((p) => ({
-                              ...p,
-                              heroLookNumber: e.target.value,
-                            }))
-                          }
-                          className="w-full h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                          Hero Headline (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Defaults to garment name"
-                          value={productForm.heroHeadline}
-                          onChange={(e) =>
-                            setProductForm((p) => ({
-                              ...p,
-                              heroHeadline: e.target.value,
-                            }))
-                          }
-                          className="w-full h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                          Slide Priority Order
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={productForm.heroOrder}
-                          onChange={(e) =>
-                            setProductForm((p) => ({
-                              ...p,
-                              heroOrder: e.target.value,
-                            }))
-                          }
-                          className="w-full h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none text-xs"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                        Hero Banner Image (URL or Upload)
-                      </label>
-                      <input
-                        ref={heroFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleHeroImageFile}
-                        className="hidden"
-                      />
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Leave blank to use main product photo"
-                          value={productForm.heroImage}
-                          onChange={(e) =>
-                            setProductForm((p) => ({
-                              ...p,
-                              heroImage: e.target.value,
-                            }))
-                          }
-                          className="flex-1 h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-xs outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => heroFileInputRef.current?.click()}
-                          className="h-8 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase cursor-pointer"
-                        >
-                          Upload Banner
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-                <button
-                  type="button"
-                  onClick={() => setIsProductModalOpen(false)}
-                  className="h-10 px-4 border border-[#E6E2DA] dark:border-[#2C2A26] text-[11px] font-medium uppercase cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="h-10 px-6 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] cursor-pointer"
-                >
-                  Save Garment
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ORDER INVOICE INSPECTION MODAL */}
       {inspectedOrder && (

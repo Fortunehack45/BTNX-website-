@@ -16,21 +16,23 @@ function formatNaira(amount: number): string {
 }
 
 const BASE_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
     background: #FAF9F7;
     color: #141413;
     padding: 24px 16px;
     -webkit-font-smoothing: antialiased;
   }
-  .luxury-serif { font-family: 'Cinzel', Georgia, serif; }
-  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .luxury-serif { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
   .btnx-gold { color: #966830; }
   .btnx-gold-bg { background-color: #966830; }
   .btnx-border { border-color: #E6E2DA; }
-  .btnx-dark { background-color: #141413; color: #FAF9F7; }
+  .btnx-dark { background-color: #141413; color: #FAF9F7; font-weight: 700; }
   .btnx-card {
     background: #FFFFFF;
     border: 1px solid #E6E2DA;
