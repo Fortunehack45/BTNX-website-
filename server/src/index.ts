@@ -393,6 +393,19 @@ app.post("/api/ai/advisor", async (req: Request, res: Response) => {
 });
 
 // 9. WHATSAPP WEBHOOK & CHAT ENDPOINT
+// Meta WhatsApp Cloud API verification handshake
+app.get("/api/whatsapp/webhook", (req: Request, res: Response) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "btnx_secret_token";
+
+  if (mode === "subscribe" && token === verifyToken) {
+    return res.status(200).send(challenge);
+  }
+  res.sendStatus(403);
+});
+
 app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
   try {
     // Supports Twilio (From, Body) or Meta Cloud API format or generic JSON

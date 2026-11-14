@@ -30,11 +30,11 @@
       "destination": "/admin/index.html"
     },
     {
-      "source": "/support",
+      "source": "/support-staff",
       "destination": "/support/index.html"
     },
     {
-      "source": "/support/(.*)",
+      "source": "/support-staff/(.*)",
       "destination": "/support/index.html"
     },
     {
