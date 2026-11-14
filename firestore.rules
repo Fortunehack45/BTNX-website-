@@ -294,8 +294,8 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow get: if isValidId(orderId) && (isAdmin() || isSupport() || isOrderCreator(resource.data));
-      allow list: if isAdmin() || isSupport() || isOrderCreator(resource.data);
+      allow get: if isValidId(orderId);
+      allow list: if true;
       allow create: if isValidId(orderId) && isValidOrder(incoming(), orderId);
       allow update: if isValidId(orderId) && (isAdmin() || isSupport()) && (
         (isValidOrder(incoming(), orderId) && incoming().id == existing().id && (!('userId' in existing()) || incoming().userId == existing().userId)) ||

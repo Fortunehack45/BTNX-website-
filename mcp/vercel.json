@@ -5,7 +5,8 @@
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS, HEAD" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, x-btnx-key, mcp-session-id" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, x-btnx-key, mcp-session-id" },
+        { "key": "Access-Control-Expose-Headers", "value": "Content-Type, mcp-session-id" }
       ]
     }
   ],
@@ -20,6 +21,22 @@
     },
     {
       "source": "/sse",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/render/(.*)",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/.well-known/(.*)",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/api/mcp",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/api/index",
       "destination": "/api/mcp"
     }
   ]

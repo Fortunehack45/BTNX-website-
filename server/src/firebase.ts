@@ -34,7 +34,7 @@ const firebaseConfig = {
   authDomain: process.env.FIREBASE_AUTH_DOMAIN || fileConfig.authDomain || "expenses-ai-vfx7o.firebaseapp.com",
   storageBucket: process.env.FIREBASE_STORAGE_BUCKET || fileConfig.storageBucket || "expenses-ai-vfx7o.firebasestorage.app",
   messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || fileConfig.messagingSenderId || "768021477341",
-  firestoreDatabaseId: process.env.FIRESTORE_DATABASE_ID || fileConfig.firestoreDatabaseId || "(default)",
+  firestoreDatabaseId: process.env.FIRESTORE_DATABASE_ID || fileConfig.firestoreDatabaseId || "ai-studio-klamby-efc211be-fa31-444f-8359-2e516e0d2638",
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
