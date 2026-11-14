@@ -12,7 +12,7 @@
     <script>
       (function () {
         try {
-          var pref = localStorage.getItem("btnx_theme_preference");
+          var pref = localStorage.getItem("btnx_theme") || localStorage.getItem("btnx_theme_preference");
           var isDark =
             pref === "dark" ||
             ((!pref || pref === "system") &&
