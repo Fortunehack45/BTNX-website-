@@ -1515,29 +1515,50 @@ export default function AdminPortal() {
 
   if (!hasAccess) {
     return (
-      <div className={`min-h-screen ${isDark ? 'bg-[#111110] text-[#F3F1EC]' : 'bg-[#FAF9F7] text-[#141413]'} flex flex-col items-center justify-center p-4`}>
-        <div className={`w-full max-w-md ${isDark ? 'bg-[#191816] border-[#2C2A26] text-[#F3F1EC]' : 'bg-white border-[#E6E2DA] text-[#141413]'} border p-7 sm:p-9 space-y-6 shadow-2xl`}>
-          <div className={`space-y-2 text-center border-b ${isDark ? 'border-[#2C2A26]' : 'border-[#E6E2DA]'} pb-5`}>
-            <div className={`flex justify-center ${isDark ? 'text-[#F3F1EC]' : 'text-[#141413]'}`}>
-              <BrandLogo className="h-8 w-auto" />
+      <div 
+        style={{ backgroundColor: '#111110', color: '#F3F1EC' }}
+        className="min-h-screen bg-[#111110] text-[#F3F1EC] flex flex-col items-center justify-center p-4"
+      >
+        <div 
+          style={{ backgroundColor: '#191816', color: '#F3F1EC', borderColor: '#2C2A26' }}
+          className="w-full max-w-md bg-[#191816] border-[#2C2A26] text-[#F3F1EC] border p-7 sm:p-9 space-y-6 shadow-2xl"
+        >
+          <div 
+            style={{ borderColor: '#2C2A26' }}
+            className="space-y-2 text-center border-b border-[#2C2A26] pb-5"
+          >
+            <div className="flex justify-center text-[#F3F1EC]">
+              <BrandLogo className="h-8 w-auto text-[#F3F1EC]" />
             </div>
-            <p className={`text-[10px] font-mono uppercase tracking-[0.18em] ${isDark ? 'text-[#C89B62]' : 'text-[#966830]'}`}>
+            <p 
+              style={{ color: '#C89B62' }}
+              className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#C89B62]"
+            >
               Osun Atelier · Management Portal
             </p>
-            <h1 className={`font-display text-3xl font-medium ${isDark ? 'text-[#F3F1EC]' : 'text-[#141413]'}`}>
+            <h1 
+              style={{ color: '#F3F1EC' }}
+              className="font-display text-3xl font-medium text-[#F3F1EC]"
+            >
               Admin Studio Access
             </h1>
           </div>
 
           {loginError && (
-            <div className={`p-3.5 border ${isDark ? 'border-[#C89B62] bg-[#141413] text-[#F3F1EC]' : 'border-[#966830] bg-[#FAF9F7] text-[#141413]'} text-xs font-mono`}>
+            <div 
+              style={{ backgroundColor: '#141413', borderColor: '#C89B62', color: '#F3F1EC' }}
+              className="p-3.5 border border-[#C89B62] bg-[#141413] text-[#F3F1EC] text-xs font-mono"
+            >
               {loginError}
             </div>
           )}
 
           <form onSubmit={handleAdminEmailLogin} className="space-y-4">
             <div>
-              <label className={`block text-[10px] uppercase tracking-[0.14em] ${isDark ? 'text-[#A7A299]' : 'text-[#66625B]'} mb-1.5 font-medium`}>
+              <label 
+                style={{ color: '#A7A299' }}
+                className="block text-[10px] uppercase tracking-[0.14em] text-[#A7A299] mb-1.5 font-medium"
+              >
                 Admin Email or Studio ID
               </label>
               <input
@@ -1545,12 +1566,16 @@ export default function AdminPortal() {
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 placeholder="e.g. btnx or admin@btnx.store"
-                className={`w-full h-10 px-3 ${isDark ? 'bg-[#141413] border-[#2C2A26] text-[#F3F1EC]' : 'bg-[#FAF9F7] border-[#E6E2DA] text-[#141413]'} border text-xs font-mono outline-none focus:border-[#966830]`}
+                style={{ backgroundColor: '#141413', borderColor: '#2C2A26', color: '#F3F1EC' }}
+                className="w-full h-10 px-3 bg-[#141413] border-[#2C2A26] text-[#F3F1EC] border text-xs font-mono outline-none focus:border-[#C89B62]"
               />
             </div>
 
             <div>
-              <label className={`block text-[10px] uppercase tracking-[0.14em] ${isDark ? 'text-[#A7A299]' : 'text-[#66625B]'} mb-1.5 font-medium`}>
+              <label 
+                style={{ color: '#A7A299' }}
+                className="block text-[10px] uppercase tracking-[0.14em] text-[#A7A299] mb-1.5 font-medium"
+              >
                 Passcode
               </label>
               <input
@@ -1558,24 +1583,30 @@ export default function AdminPortal() {
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 placeholder="••••••••"
-                className={`w-full h-10 px-3 ${isDark ? 'bg-[#141413] border-[#2C2A26] text-[#F3F1EC]' : 'bg-[#FAF9F7] border-[#E6E2DA] text-[#141413]'} border text-xs font-mono outline-none focus:border-[#966830]`}
+                style={{ backgroundColor: '#141413', borderColor: '#2C2A26', color: '#F3F1EC' }}
+                className="w-full h-10 px-3 bg-[#141413] border-[#2C2A26] text-[#F3F1EC] border text-xs font-mono outline-none focus:border-[#C89B62]"
               />
             </div>
 
             <button
               type="submit"
               disabled={isSubmittingAuth}
-              className={`w-full h-10 ${isDark ? 'bg-[#F3F1EC] text-[#141413] hover:bg-white' : 'bg-[#141413] text-[#FAF9F7] hover:bg-[#2C2A26]'} text-[11px] font-medium uppercase tracking-[0.14em] cursor-pointer transition-colors`}
+              style={{ backgroundColor: '#C89B62', color: '#111110' }}
+              className="w-full h-10 bg-[#C89B62] text-[#111110] font-semibold text-[11px] uppercase tracking-[0.14em] cursor-pointer transition-colors hover:brightness-110"
             >
               Sign In to Admin Studio
             </button>
           </form>
 
-          <div className={`space-y-2.5 pt-2 border-t ${isDark ? 'border-[#2C2A26]' : 'border-[#E6E2DA]'}`}>
+          <div 
+            style={{ borderColor: '#2C2A26' }}
+            className="space-y-2.5 pt-2 border-t border-[#2C2A26]"
+          >
             <button
               type="button"
               onClick={handleUnlockStudio}
-              className={`w-full h-10 border ${isDark ? 'border-[#C89B62] text-[#C89B62] hover:bg-[#C89B62] hover:text-[#141413]' : 'border-[#966830] text-[#966830] hover:bg-[#966830] hover:text-white'} text-[11px] font-medium uppercase tracking-[0.14em] transition-colors cursor-pointer`}
+              style={{ borderColor: '#C89B62', color: '#C89B62', backgroundColor: 'transparent' }}
+              className="w-full h-10 border border-[#C89B62] text-[#C89B62] text-[11px] font-medium uppercase tracking-[0.14em] transition-colors cursor-pointer hover:bg-[#C89B62] hover:text-[#111110]"
             >
               Quick Unlock Studio (Store Owner Mode)
             </button>
@@ -1583,7 +1614,8 @@ export default function AdminPortal() {
             <button
               type="button"
               onClick={handleGoogleAdminLogin}
-              className={`w-full h-10 border ${isDark ? 'border-[#2C2A26] text-[#F3F1EC] hover:border-[#F3F1EC]' : 'border-[#E6E2DA] text-[#141413] hover:border-[#141413]'} text-xs transition-colors cursor-pointer`}
+              style={{ borderColor: '#2C2A26', color: '#F3F1EC', backgroundColor: 'transparent' }}
+              className="w-full h-10 border border-[#2C2A26] text-[#F3F1EC] text-xs transition-colors cursor-pointer hover:border-[#F3F1EC]"
             >
               Continue with Google
             </button>
@@ -1592,7 +1624,8 @@ export default function AdminPortal() {
           <div className="text-center pt-2">
             <a
               href="/"
-              className={`inline-flex items-center gap-1.5 text-xs ${isDark ? 'text-[#A7A299] hover:text-[#F3F1EC]' : 'text-[#66625B] hover:text-[#141413]'} transition-colors`}
+              style={{ color: '#A7A299' }}
+              className="inline-flex items-center gap-1.5 text-xs text-[#A7A299] hover:text-[#F3F1EC] transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Return to BTNX Storefront</span>

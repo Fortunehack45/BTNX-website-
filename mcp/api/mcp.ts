@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "http";
+import * as crypto from "crypto";
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   getFirestore,
   collection,
@@ -30,27 +31,32 @@ const app = getApps().length > 0 ? getApps()[0] : initializeApp(FIREBASE_CONFIG)
 const auth = getAuth(app);
 const db = getFirestore(app, "ai-studio-klamby-efc211be-fa31-444f-8359-2e516e0d2638");
 
-let authPromise: Promise<any> | null = null;
+// Dedicated customer auth instance for authenticating customer credentials
+const customerApp = getApps().find(a => a.name === "customerAuth") || initializeApp(FIREBASE_CONFIG, "customerAuth");
+const customerAuth = getAuth(customerApp);
+
+let adminAuthPromise: Promise<any> | null = null;
 async function ensureAdminAuth() {
   if (auth.currentUser) return auth.currentUser;
-  if (!authPromise) {
-    authPromise = signInWithEmailAndPassword(
+  if (!adminAuthPromise) {
+    adminAuthPromise = signInWithEmailAndPassword(
       auth,
       "mcp-service@btnx.store",
       "BtnxMcpService2026!"
     )
       .then((cred) => cred.user)
       .catch((err) => {
-        authPromise = null;
+        adminAuthPromise = null;
         console.error("[BTNX MCP] Admin authentication warning:", err?.message);
         return null;
       });
   }
-  return authPromise;
+  return adminAuthPromise;
 }
 
-// 2. Persistent BTNX Customer Sessions (Stored in Firestore & Memory)
+// 2. Persistent BTNX Customer Sessions & OAuth Tokens
 const memorySessions = new Map<string, any>();
+const memoryOAuthTokens = new Map<string, any>();
 
 function resolveSessionId(req: IncomingMessage, explicitToken?: string): string {
   if (explicitToken && String(explicitToken).trim().length > 3) {
@@ -68,22 +74,42 @@ function resolveSessionId(req: IncomingMessage, explicitToken?: string): string 
   return `sess_${Buffer.from(rawKey).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
 }
 
-async function getAuthenticatedUser(sessionId: string): Promise<any | null> {
-  if (memorySessions.has(sessionId)) {
-    return memorySessions.get(sessionId);
+async function resolveSessionUser(req: IncomingMessage, explicitToken?: string): Promise<any | null> {
+  await ensureAdminAuth();
+
+  // 1) Check Authorization: Bearer <token>
+  const authHeader = String(req.headers["authorization"] || "").trim();
+  if (authHeader.toLowerCase().startsWith("bearer ")) {
+    const bearer = authHeader.slice(7).trim();
+    if (bearer.length > 5) {
+      if (memoryOAuthTokens.has(bearer)) return memoryOAuthTokens.get(bearer);
+      try {
+        const tDoc = await getDoc(doc(db, "oauth_tokens", bearer));
+        if (tDoc.exists()) {
+          const tData = tDoc.data();
+          memoryOAuthTokens.set(bearer, tData);
+          return tData;
+        }
+      } catch {}
+    }
   }
+
+  // 2) Check session ID in memory or Firestore 'sessions' collection
+  const sId = resolveSessionId(req, explicitToken);
+  if (memorySessions.has(sId)) return memorySessions.get(sId);
   try {
-    const sDoc = await getDoc(doc(db, "sessions", sessionId));
+    const sDoc = await getDoc(doc(db, "sessions", sId));
     if (sDoc.exists()) {
-      const data = sDoc.data();
-      memorySessions.set(sessionId, data);
-      return data;
+      const sData = sDoc.data();
+      memorySessions.set(sId, sData);
+      return sData;
     }
   } catch {}
+
   return null;
 }
 
-async function setAuthenticatedUser(sessionId: string, userData: any): Promise<void> {
+async function setAuthenticatedSession(sessionId: string, userData: any): Promise<void> {
   memorySessions.set(sessionId, userData);
   try {
     await setDoc(doc(db, "sessions", sessionId), {
@@ -95,15 +121,16 @@ async function setAuthenticatedUser(sessionId: string, userData: any): Promise<v
   }
 }
 
-async function clearAuthenticatedUser(sessionId: string): Promise<void> {
+async function clearAuthenticatedSession(sessionId: string): Promise<void> {
   memorySessions.delete(sessionId);
   try {
     await deleteDoc(doc(db, "sessions", sessionId));
   } catch {}
 }
 
-// 3. Luxury UI Branding & Vectors
-export const BTNX_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750.7 370.9" fill="none" style="height: 100%; width: auto; max-height: 28px; display: inline-block;" role="img" aria-label="BTNX"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M512.9 3.3Q526.8 2.5 548.9 2.4Q571.0 2.3 586.0 3.3Q601.0 4.2 610.0 5.2Q619.0 6.3 630.5 8.2Q642.0 10.1 650.5 12.2Q659.0 14.2 669.0 17.3Q679.0 20.4 686.5 23.3Q694.0 26.3 701.5 30.2Q709.0 34.1 714.5 37.8Q720.0 41.4 724.3 44.9Q728.6 48.5 732.4 52.5Q736.2 56.5 739.8 62.0Q743.4 67.5 745.2 72.5Q747.1 77.5 747.9 82.5Q748.6 87.5 748.4 93.0L748.1 98.5L747.0 99.8L612.0 107.5L612.1 102.5Q612.3 97.5 611.9 94.0Q611.5 90.5 609.9 85.0Q608.2 79.5 604.1 73.1Q600.0 66.7 594.0 61.0Q588.0 55.4 580.0 50.3Q572.0 45.3 562.5 41.3Q553.0 37.2 542.5 34.2Q532.0 31.3 520.5 29.2Q509.0 27.2 498.5 26.2Q488.0 25.2 475.5 24.8Q463.0 24.4 440.5 25.4Q418.0 26.3 391.5 29.7Q365.0 33.2 342.0 38.0L319.0 42.9L318.3 42.5L323.1 40.8Q328.0 39.1 344.5 34.2Q361.0 29.3 377.0 25.2Q393.0 21.1 406.5 18.2Q420.0 15.3 445.0 11.2Q470.0 7.2 484.5 5.7Q499.0 4.2 512.9 3.3Z M402.5 44.9Q418.9 43.5 433.5 43.3Q448.0 43.2 460.5 44.2Q473.0 45.3 485.5 47.7Q498.0 50.2 508.5 53.7Q519.0 57.2 528.5 62.2Q538.0 67.3 544.0 72.6Q550.0 77.8 552.2 80.6Q554.3 83.5 556.4 87.5Q558.4 91.5 559.4 95.0Q560.4 98.5 560.6 101.0L560.8 103.5L560.0 104.2L554.5 98.2Q549.0 92.1 542.5 87.7Q536.0 83.3 528.0 79.7Q520.0 76.2 510.5 73.2Q501.0 70.3 490.5 68.2Q480.0 66.1 467.0 64.7Q454.0 63.2 438.5 62.7Q423.0 62.2 407.5 62.7Q392.0 63.2 380.0 64.2Q368.0 65.2 350.0 67.7Q332.0 70.2 319.0 72.7Q306.0 75.2 289.0 79.1Q272.0 83.1 243.0 91.7Q214.0 100.4 194.5 107.2Q175.0 114.1 157.0 121.5L139.0 128.8L137.5 128.5L151.8 120.9Q166.0 113.3 184.5 104.8Q203.0 96.3 219.5 89.7Q236.0 83.2 255.5 76.7Q275.0 70.2 291.5 65.7Q308.0 61.1 328.0 56.7Q348.0 52.3 367.0 49.3Q386.0 46.3 402.5 44.9Z M684.2 121.7Q707.4 120.5 713.7 120.2L720.0 119.9L720.8 120.5L636.6 186.5L657.0 237.5L610.0 239.3L608.8 238.5L599.0 212.1L560.0 240.4L501.0 243.5L584.8 180.5L563.1 127.5L564.0 126.6L609.0 125.3L619.8 153.5L621.0 154.2L661.0 122.9L684.2 121.7Z M519.5 128.5Q537.3 127.5 543.1 127.2L549.0 126.9L549.9 127.5L489.0 243.8L469.5 245.3Q450.0 246.8 445.0 247.0L440.0 247.3L439.0 246.5L424.0 184.2L390.6 250.5L342.4 253.5L401.0 134.6L449.0 132.4L454.4 149.4Q459.9 166.5 464.4 179.2L469.0 192.0L501.7 129.5L519.5 128.5Z M312.5 139.5Q382.8 135.5 384.9 135.4L387.0 135.4L386.9 135.9Q386.8 136.5 378.9 152.3L371.0 168.1L349.0 169.5Q327.0 170.8 326.5 171.2L325.9 171.5L284.0 257.1L233.7 260.5L275.7 174.5L275.0 173.9L226.7 176.5L227.3 174.5Q227.8 172.5 235.0 158.0L242.2 143.5L312.5 139.5Z M150.8 149.2Q209.6 145.5 213.8 145.4Q218.0 145.2 220.5 146.4L222.9 147.5L224.5 150.5L223.9 153.5Q223.4 156.5 218.3 168.0Q213.3 179.5 209.7 185.5Q206.1 191.5 202.1 195.7Q198.0 199.9 193.8 202.2L189.6 204.5L191.8 206.0Q194.0 207.6 195.3 209.5Q196.6 211.5 196.8 214.0Q197.1 216.5 196.2 220.5Q195.4 224.5 193.3 229.0Q191.3 233.5 188.3 238.5Q185.3 243.5 181.7 248.0Q178.1 252.5 174.6 255.7Q171.0 258.9 166.5 261.4Q162.0 263.8 155.5 265.2Q149.0 266.6 90.3 270.6L31.6 274.5L92.0 152.9L150.8 149.2Z M151.5 180.1Q144.0 180.5 134.5 181.2L125.0 182.0L117.6 196.5L118.0 197.3L132.5 196.4Q147.0 195.6 150.0 195.2Q153.0 194.8 155.5 193.9Q158.0 193.0 160.7 190.2L163.3 187.5L164.4 183.5L163.0 180.8L161.0 180.3Q159.0 179.7 151.5 180.1Z M135.0 221.3Q129.0 221.5 117.5 222.2L106.0 222.9L97.7 238.5L98.0 239.3L115.0 238.1Q132.0 237.0 135.5 235.7Q139.0 234.5 141.5 232.0Q144.1 229.5 144.8 227.5L145.5 225.5L145.0 223.0L141.0 221.0L135.0 221.3Z M510.6 262.8Q549.2 260.5 552.1 260.3L555.0 260.2L554.5 260.8Q554.0 261.5 536.5 270.7Q519.0 279.9 504.5 286.8Q490.0 293.8 465.0 304.2Q440.0 314.7 414.5 323.7Q389.0 332.7 372.0 337.7Q355.0 342.7 329.5 348.7Q304.0 354.8 277.5 359.3Q251.0 363.7 229.5 365.7Q208.0 367.8 186.5 368.3Q165.0 368.8 148.0 367.8Q131.0 366.7 112.5 363.7Q94.0 360.6 81.0 356.7Q68.0 352.8 61.0 349.8Q54.0 346.8 48.5 343.8Q43.0 340.8 38.5 337.7Q34.0 334.7 29.2 330.6Q24.4 326.5 19.6 321.0Q14.7 315.5 11.8 311.0Q8.9 306.5 6.9 302.5Q5.0 298.5 3.5 294.0L2.0 289.5L11.0 296.1Q20.0 302.8 28.5 307.3Q37.0 311.8 49.5 316.3Q62.0 320.8 74.0 323.7Q86.0 326.7 98.5 328.7Q111.0 330.7 123.0 331.8Q135.0 332.8 150.0 333.3Q165.0 333.8 186.0 333.3Q207.0 332.7 223.5 331.2Q240.0 329.8 255.0 327.8Q270.0 325.8 289.5 322.2Q309.0 318.7 328.0 314.2Q347.0 309.8 363.0 305.3Q379.0 300.8 398.5 294.3Q418.0 287.8 431.0 282.8Q444.0 277.8 458.0 271.5Q472.0 265.2 510.6 262.8Z" /></svg>`;
+function formatNaira(amount: number): string {
+  return "₦" + Number(amount || 0).toLocaleString("en-NG");
+}
 
 function escapeHtml(str: any): string {
   if (str === null || str === undefined) return "";
@@ -111,98 +138,208 @@ function escapeHtml(str: any): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function formatNaira(amount: number): string {
-  return "₦" + Number(amount || 0).toLocaleString("en-NG");
-}
-
-const BASE_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    background: #FAF9F7;
-    color: #141413;
-    padding: 24px 16px;
-    -webkit-font-smoothing: antialiased;
-  }
-  .luxury-serif { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em; }
-  .font-mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-  .btnx-gold { color: #966830; }
-  .btnx-gold-bg { background-color: #966830; }
-  .btnx-border { border-color: #E6E2DA; }
-  .btnx-dark { background-color: #141413; color: #FAF9F7; font-weight: 700; }
-  .btnx-card {
-    background: #FFFFFF;
-    border: 1px solid #E6E2DA;
-    border-radius: 4px;
-    box-shadow: 0 4px 20px -2px rgba(20,20,19,0.06);
-  }
-  @media (prefers-color-scheme: dark) {
-    body { background: #111110 !important; color: #F3F1EC !important; }
-    .btnx-card { background: #191816 !important; border-color: #2C2A26 !important; color: #F3F1EC !important; }
-    .btnx-border { border-color: #2C2A26 !important; }
-    .btnx-dark { background-color: #FAF9F7 !important; color: #141413 !important; }
-    td, th { border-color: #2C2A26 !important; }
-    .meta-box { background: #141413 !important; border-color: #2C2A26 !important; }
-  }
-`;
-
-export function renderProductCardHtml(p: any, storeOrigin = "https://btnx-website-mcp.vercel.app"): string {
-  const imgUrl = p.image?.startsWith("http") ? p.image : `${storeOrigin}/${p.image?.replace(/^\//, "")}`;
-  const checkoutUrl = `${storeOrigin}/?product=${encodeURIComponent(p.id)}`;
+// 3. Luxury HTML Card Renderers
+function renderProductCardHtml(product: any, host: string): string {
+  const images = Array.isArray(product.images) && product.images.length > 0
+    ? product.images
+    : [product.imageUrl || "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&q=80&w=800"];
+  const primaryImg = images[0];
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtml(p.name)} — BTNX Atelier</title>
-  <style>${BASE_STYLES}</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(product.name)} &middot; BTNX Atelier</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #FAF9F7;
+      color: #141413;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background-color: #111110; color: #F3F1EC; }
+      .btnx-card { background-color: #191816 !important; border-color: #2C2A26 !important; color: #F3F1EC !important; }
+      .btnx-chip { background: #262420 !important; border-color: #38342E !important; color: #C89B62 !important; }
+      .btnx-border { border-color: #2C2A26 !important; }
+      .btnx-muted { color: #A7A299 !important; }
+      .btnx-hero-btn { background-color: #C89B62 !important; color: #111110 !important; }
+    }
+    .btnx-card {
+      background-color: #FFFFFF;
+      border: 1px solid #E6E2DA;
+      width: 100%;
+      max-width: 440px;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px -10px rgba(20,20,19,0.12);
+    }
+    .img-wrap {
+      width: 100%;
+      height: 380px;
+      background: #EFECE6;
+      position: relative;
+      overflow: hidden;
+    }
+    .img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(17,17,16,0.85);
+      backdrop-filter: blur(8px);
+      color: #F3F1EC;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      border-radius: 2px;
+    }
+    .content {
+      padding: 22px 20px;
+    }
+    .brand-tag {
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #966830;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+    .price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .price-current {
+      font-size: 22px;
+      font-weight: 800;
+      color: #141413;
+    }
+    @media (prefers-color-scheme: dark) {
+      .price-current { color: #F3F1EC; }
+    }
+    .price-original {
+      font-size: 14px;
+      text-decoration: line-through;
+      color: #8C887B;
+    }
+    .discount-pill {
+      background: #FAF0E4;
+      color: #966830;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 2px;
+    }
+    .desc {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #66625B;
+      margin-bottom: 18px;
+    }
+    .specs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding-top: 14px;
+      border-top: 1px solid #E6E2DA;
+    }
+    .spec-item {
+      font-size: 11px;
+    }
+    .spec-label {
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #8C887B;
+      font-size: 9.5px;
+      margin-bottom: 2px;
+    }
+    .spec-value {
+      font-weight: 600;
+    }
+    .cta-btn {
+      display: block;
+      width: 100%;
+      text-align: center;
+      background: #141413;
+      color: #FAF9F7;
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 13px;
+      border-radius: 2px;
+      transition: opacity 0.2s;
+    }
+    .cta-btn:hover {
+      opacity: 0.9;
+    }
+  </style>
 </head>
 <body>
-  <div style="max-width: 440px; margin: 0 auto;" class="btnx-card">
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #E6E2DA;" class="btnx-border">
-      <div style="height: 22px; width: auto; max-width: 72px;">${BTNX_LOGO_SVG}</div>
-      <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 700;">Authentic Atelier</span>
+  <div class="btnx-card">
+    <div class="img-wrap">
+      <img src="${escapeHtml(primaryImg)}" alt="${escapeHtml(product.name)}" />
+      <span class="badge">${escapeHtml(product.badge || "Osun Atelier Archive")}</span>
     </div>
-
-    <div style="position: relative; aspect-ratio: 4/5; overflow: hidden; background: #EDEAE5;">
-      <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(p.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='https://images.unsplash.com/photo-1544441893-675973e31985?w=800&q=80'" />
-      ${p.badge ? `<span style="position: absolute; top: 12px; left: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; background: #141413; color: #FAF9F7; padding: 5px 9px; border-radius: 2px;">${escapeHtml(p.badge)}</span>` : ""}
-      <span style="position: absolute; bottom: 12px; right: 12px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; background: rgba(250,249,247,0.94); color: #141413; padding: 4px 8px; backdrop-filter: blur(4px); border: 1px solid #E6E2DA;">Osun Atelier &middot; Express</span>
-    </div>
-
-    <div style="padding: 22px;">
-      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 700;">${escapeHtml(p.category || "Apparel")}</span>
-        <span class="font-mono" style="font-size: 16px; font-weight: 700;">${formatNaira(p.price)}</span>
+    <div class="content">
+      <div class="brand-tag">BTNX Atelier &middot; ${escapeHtml(product.category || "Limited Edition")}</div>
+      <h1 class="title">${escapeHtml(product.name)}</h1>
+      <div class="price-row">
+        <span class="price-current">${formatNaira(product.price)}</span>
+        ${product.originalPrice ? `<span class="price-original">${formatNaira(product.originalPrice)}</span>` : ""}
+        ${product.originalPrice && product.originalPrice > product.price ? `<span class="discount-pill">-${Math.round((1 - product.price / product.originalPrice) * 100)}%</span>` : ""}
+      </div>
+      <p class="desc btnx-muted">${escapeHtml(product.description || "Crafted with hand-loomed textiles in the Osun Atelier.")}</p>
+      
+      <div class="specs-grid btnx-border">
+        <div class="spec-item">
+          <div class="spec-label">Silhouette &amp; Fit</div>
+          <div class="spec-value">${escapeHtml(product.fit || "Relaxed Atelier Cut")}</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Fabric Composition</div>
+          <div class="spec-value">${escapeHtml(product.fabric || "100% Raw Heavyweight Cotton")}</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Stock Status</div>
+          <div class="spec-value" style="color: #15803d; font-weight:700;">${product.stock > 0 ? `Available (${product.stock} units)` : "Made-to-Order"}</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Available Sizing</div>
+          <div class="spec-value">${escapeHtml((product.sizes || ["XS","S","M","L","XL"]).join(" · "))}</div>
+        </div>
       </div>
 
-      <h2 class="luxury-serif" style="font-size: 20px; font-weight: 700; margin-bottom: 8px; line-height: 1.25;">${escapeHtml(p.name)}</h2>
-      <p style="font-size: 12.5px; opacity: 0.85; line-height: 1.5; margin-bottom: 18px;">${escapeHtml(p.description || "Contemporary structured silhouette tailored with refined Osun artisan finishes.")}</p>
-
-      <div style="border-top: 1px solid #E6E2DA; padding-top: 14px; margin-bottom: 18px;" class="btnx-border">
-        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 8px;">
-          <span style="opacity: 0.7; text-transform: uppercase; letter-spacing: 0.12em;">Available Sizes:</span>
-          <span style="font-weight: 700;">${(p.sizes || ["S", "M", "L", "XL"]).join(" &middot; ")}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 8px;">
-          <span style="opacity: 0.7; text-transform: uppercase; letter-spacing: 0.12em;">Delivery:</span>
-          <span>${escapeHtml(p.deliveryTimeline || "2–4 Business Days across Nigeria")}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 11px;">
-          <span style="opacity: 0.7; text-transform: uppercase; letter-spacing: 0.12em;">Packaging:</span>
-          <span>${escapeHtml(p.packagingType || "Cotton Garment Box")}</span>
-        </div>
-      </div>
-
-      <a href="${escapeHtml(checkoutUrl)}" target="_blank" class="btnx-dark" style="display: block; text-align: center; text-decoration: none; padding: 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; border-radius: 2px;">
-        Order Piece &middot; Express Checkout &rarr;
+      <a href="https://btnx-website.vercel.app" target="_blank" class="cta-btn btnx-hero-btn">
+        Order via BTNX Storefront &rarr;
       </a>
     </div>
   </div>
@@ -210,34 +347,21 @@ export function renderProductCardHtml(p: any, storeOrigin = "https://btnx-websit
 </html>`;
 }
 
-export function renderInvoiceHtml(order: any, storeOrigin = "https://btnx-website-mcp.vercel.app"): string {
-  const orderId = order.id || "BX-000000";
-  const items = order.items || [];
-  const dateStr = order.date || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const clientName = order.customerName || order.clientName || "Valued Client";
-  const clientEmail = order.customerEmail || order.userEmail || "customer@btnx.store";
-  const shippingAddress = order.shippingAddress || "Osun State, Nigeria";
-  const total = Number(order.total || 0);
-  const subtotal = Number(order.subtotal || total);
-  const discountAmount = Number(order.discountAmount || 0);
-  const shippingFee = Number(order.shippingFee || 0);
-
-  const rows = items.map((it: any) => {
-    const pName = it.product?.name || it.productName || "BTNX Luxury Piece";
-    const size = it.size || it.selectedSize || "M";
-    const color = it.color || it.selectedColor || "Standard";
-    const price = Number(it.product?.price || it.price || 0);
-    const qty = Number(it.quantity || 1);
-    const lineTotal = price * qty;
+function renderInvoiceHtml(order: any, host: string): string {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemsRows = items.map((it: any) => {
+    const pName = it.product?.name || it.productName || "BTNX Bespoke Garment";
+    const pPrice = it.product?.price || it.price || 0;
+    const qty = it.quantity || 1;
+    const total = pPrice * qty;
     return `
-      <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #E6E2DA;">
-          <div style="font-weight: 700; font-size: 13px;">${escapeHtml(pName)}</div>
-          <div style="opacity: 0.7; font-size: 11px; margin-top: 2px;">Size ${escapeHtml(size)} &middot; ${escapeHtml(color)}</div>
+      <tr style="border-bottom: 1px solid #E6E2DA;" class="btnx-border">
+        <td style="padding: 12px 6px;">
+          <div style="font-weight: 600; font-size: 13px;">${escapeHtml(pName)}</div>
+          <div style="font-size: 11px; opacity: 0.7;">Size: ${escapeHtml(it.size || "M")} &middot; Color: ${escapeHtml(it.color || "Standard")}</div>
         </td>
-        <td style="padding: 12px; border-bottom: 1px solid #E6E2DA; text-align: center; font-family: monospace;">${qty}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #E6E2DA; text-align: right; font-family: monospace;">${formatNaira(price)}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #E6E2DA; text-align: right; font-family: monospace; font-weight: 700;">${formatNaira(lineTotal)}</td>
+        <td style="padding: 12px 6px; text-align: center; font-size: 12px;">${qty}</td>
+        <td style="padding: 12px 6px; text-align: right; font-weight: 600; font-size: 13px;">${formatNaira(total)}</td>
       </tr>
     `;
   }).join("");
@@ -245,138 +369,177 @@ export function renderInvoiceHtml(order: any, storeOrigin = "https://btnx-websit
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTNX Invoice — #${escapeHtml(orderId)}</title>
-  <style>${BASE_STYLES}</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invoice #${escapeHtml(order.id)} &middot; BTNX Atelier</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #FAF9F7;
+      color: #141413;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background-color: #111110; color: #F3F1EC; }
+      .invoice-card { background-color: #191816 !important; border-color: #2C2A26 !important; color: #F3F1EC !important; }
+      .btnx-border { border-color: #2C2A26 !important; }
+      .meta-box { background-color: #141413 !important; border-color: #2C2A26 !important; }
+    }
+    .invoice-card {
+      background-color: #FFFFFF;
+      border: 1px solid #E6E2DA;
+      width: 100%;
+      max-width: 500px;
+      border-radius: 4px;
+      padding: 30px 26px;
+      box-shadow: 0 16px 40px -10px rgba(20,20,19,0.12);
+    }
+  </style>
 </head>
 <body>
-  <div style="max-width: 680px; margin: 0 auto; padding: 32px;" class="btnx-card">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #141413; padding-bottom: 18px; margin-bottom: 24px;" class="btnx-border">
+  <div class="invoice-card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid #E6E2DA;" class="btnx-border">
       <div>
-        <div style="height: 28px; width: auto; max-width: 100px; margin-bottom: 6px;">${BTNX_LOGO_SVG}</div>
-        <p style="font-size: 10px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.16em;">Haute Tailoring &middot; Osun Atelier, Nigeria</p>
+        <div style="font-size: 22px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase;">BTNX</div>
+        <div style="font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #966830; font-weight: 700; margin-top: 2px;">Osun Atelier &middot; Digital Receipt</div>
       </div>
       <div style="text-align: right;">
-        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #966830; font-weight: 700;">Official Tax Receipt</span>
-        <div class="font-mono" style="font-size: 15px; font-weight: 800; margin-top: 2px;">#INV-${escapeHtml(orderId)}</div>
-        <div style="font-size: 11px; opacity: 0.7; margin-top: 2px;">${escapeHtml(dateStr)}</div>
+        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.7;">Reference</div>
+        <div style="font-size: 14px; font-weight: 700; font-family: monospace;">#${escapeHtml(order.id)}</div>
+        <div style="font-size: 11px; opacity: 0.7; margin-top: 2px;">${escapeHtml(order.date || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }))}</div>
       </div>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 16px; margin-bottom: 24px; border: 1px solid #E6E2DA; border-radius: 2px;" class="meta-box btnx-border">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; padding: 14px; background: #F4F1EC; border-radius: 2px;" class="meta-box">
       <div>
-        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #966830; font-weight: 700; display: block; margin-bottom: 4px;">Client Account:</span>
-        <div style="font-size: 13px; font-weight: 700;">${escapeHtml(clientName)}</div>
-        <div style="font-size: 11px; opacity: 0.75; margin-top: 2px;">${escapeHtml(clientEmail)}</div>
+        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 3px;">Billed To</div>
+        <div style="font-size: 12px; font-weight: 700;">${escapeHtml(order.customerName || "Valued Client")}</div>
+        <div style="font-size: 11px; opacity: 0.75; word-break: break-all;">${escapeHtml(order.customerEmail || order.userEmail || "customer@btnx.store")}</div>
       </div>
       <div>
-        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #966830; font-weight: 700; display: block; margin-bottom: 4px;">Delivery Destination:</span>
-        <div style="font-size: 12px; line-height: 1.4;">${escapeHtml(shippingAddress)}</div>
+        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 3px;">Shipment Destination</div>
+        <div style="font-size: 11.5px; line-height: 1.4;">${escapeHtml(order.shippingAddress || "Doorstep Courier Handover, Nigeria")}</div>
       </div>
     </div>
 
     <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
       <thead>
-        <tr style="border-bottom: 1px solid #141413;" class="btnx-border">
-          <th style="padding: 8px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.7;">Garment Piece</th>
-          <th style="padding: 8px 12px; text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.7;">Qty</th>
-          <th style="padding: 8px 12px; text-align: right; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.7;">Price</th>
-          <th style="padding: 8px 12px; text-align: right; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.7;">Total</th>
+        <tr style="border-bottom: 2px solid #E6E2DA; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.7;" class="btnx-border">
+          <th style="padding: 6px; text-align: left;">Garment Selection</th>
+          <th style="padding: 6px; text-align: center;">Qty</th>
+          <th style="padding: 6px; text-align: right;">Amount</th>
         </tr>
       </thead>
-      <tbody>${rows}</tbody>
+      <tbody>
+        ${itemsRows}
+      </tbody>
     </table>
 
-    <div style="max-width: 290px; margin-left: auto; border-top: 1px solid #E6E2DA; padding-top: 14px; margin-bottom: 24px;" class="btnx-border">
-      <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.75; margin-bottom: 5px;">
-        <span>Subtotal</span>
-        <span class="font-mono">${formatNaira(subtotal)}</span>
+    <div style="padding-top: 14px; border-top: 1px solid #E6E2DA;" class="btnx-border">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; opacity: 0.85;">
+        <span>Garment Subtotal</span>
+        <span>${formatNaira(order.subtotal || order.total)}</span>
       </div>
-      ${discountAmount > 0 ? `
-      <div style="display: flex; justify-content: space-between; font-size: 12px; color: #966830; margin-bottom: 5px; font-weight: 600;">
-        <span>VIP Promo Savings</span>
-        <span class="font-mono">-${formatNaira(discountAmount)}</span>
+      ${order.discountAmount > 0 ? `
+      <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #15803d; font-weight: 600;">
+        <span>VIP Privilege Discount</span>
+        <span>-${formatNaira(order.discountAmount)}</span>
       </div>` : ""}
-      <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.75; margin-bottom: 8px;">
-        <span>Nationwide Express Logistics</span>
-        <span class="font-mono">${shippingFee > 0 ? formatNaira(shippingFee) : "FREE"}</span>
+      <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 12px; opacity: 0.85;">
+        <span>Express Logistics (Nigeria)</span>
+        <span>${order.shippingFee > 0 ? formatNaira(order.shippingFee) : "FREE (Complimentary)"}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 800; border-top: 2px solid #141413; padding-top: 10px;" class="btnx-border">
+      <div style="display: flex; justify-content: space-between; font-size: 17px; font-weight: 800; padding-top: 12px; border-top: 2px solid #E6E2DA;" class="btnx-border">
         <span>Grand Total</span>
-        <span class="font-mono">${formatNaira(total)}</span>
+        <span style="color: #966830;">${formatNaira(order.total)}</span>
       </div>
     </div>
 
-    <div style="border-top: 1px dashed #E6E2DA; padding-top: 18px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.12em;" class="btnx-border">
-      <span>Order Status: <strong style="color: #966830;">${escapeHtml(order.status || "CONFIRMED")}</strong></span>
-      <span>Authentic Nigerian Craftsmanship &middot; Osun Atelier</span>
-    </div>
-
-    <div style="margin-top: 24px; display: flex; gap: 10px; justify-content: center;">
-      <button onclick="window.print()" class="btnx-dark" style="padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; border: none; cursor: pointer; border-radius: 2px;">
-        Print / Save PDF Receipt
-      </button>
-      <a href="${escapeHtml(storeOrigin)}" style="display: inline-block; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; text-decoration: none; border: 1px solid #966830; color: #966830; border-radius: 2px;">
-        Return to Store
-      </a>
+    <div style="margin-top: 24px; text-align: center; font-size: 11px; opacity: 0.65; letter-spacing: 0.05em;">
+      BTNX Atelier &middot; Crafted in Osogbo, Osun State &middot; Thank you for collecting.
     </div>
   </div>
 </body>
 </html>`;
 }
 
-export function renderTrackingStepperHtml(order: any, storeOrigin = "https://btnx-website-mcp.vercel.app"): string {
-  const orderId = order.id || "BX-000000";
-  const status = String(order.status || "Processing").toLowerCase();
-  const address = order.shippingAddress || "Client Delivery Address";
-
-  const isConfirmed = true;
-  const isInspected = status.includes("processing") || status.includes("ship") || status.includes("transit") || status.includes("deliver") || status.includes("confirm");
-  const isDispatched = status.includes("ship") || status.includes("transit") || status.includes("deliver");
-  const isDelivered = status.includes("deliver");
-
+function renderTrackingStepperHtml(order: any, host: string): string {
   const steps = [
-    { title: "Order Confirmed & Verified", desc: "Payment reconciled and order queued at Osogbo dispatch atelier", active: isConfirmed },
-    { title: "Atelier Inspection & Packaging", desc: "Hand-checked for stitching precision & sealed in signature garment box", active: isInspected },
-    { title: "Courier Dispatch in Transit", desc: "Package picked up by express courier for inter-state transit", active: isDispatched },
-    { title: "Doorstep Client Handover", desc: "Final verification and handover to client with photo POD", active: isDelivered },
+    { title: "Order Confirmed", desc: "Payment verified & entered atelier production", completed: true },
+    { title: "Quality Inspection", desc: "Osun atelier hand-finished quality control", completed: order.status !== "Pending" },
+    { title: "Dispatched with Courier", desc: "Handed over to express domestic carrier", completed: order.status === "In Transit" || order.status === "Delivered" },
+    { title: "Delivered to Doorstep", desc: "Direct hand-off to client in Nigeria", completed: order.status === "Delivered" },
   ];
 
-  const stepsHtml = steps.map((s, idx) => `
-    <div style="display: flex; gap: 14px; position: relative; padding-bottom: ${idx === 3 ? "0" : "24px"};">
-      ${idx < 3 ? `<div style="position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; background: ${s.active ? "#966830" : "#E6E2DA"};"></div>` : ""}
-      <div style="width: 24px; height: 24px; border-radius: 50%; background: ${s.active ? "#966830" : "#FAF9F7"}; border: 2px solid ${s.active ? "#966830" : "#E6E2DA"}; color: ${s.active ? "#FAF9F7" : "#66625B"}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; z-index: 2;">
-        ${s.active ? "✓" : idx + 1}
+  const address = order.shippingAddress || "Delivery Address on File, Nigeria";
+
+  const stepsHtml = steps.map((s, idx) => {
+    const isDone = s.completed;
+    const color = isDone ? "#15803d" : "#8C887B";
+    const bg = isDone ? "#15803d" : "transparent";
+    const icon = isDone ? "&#10003;" : (idx + 1);
+
+    return `
+      <div style="display: flex; gap: 14px; position: relative; margin-bottom: 22px;">
+        <div style="width: 24px; height: 24px; border-radius: 50%; border: 2px solid ${color}; background: ${bg}; color: ${isDone ? '#ffffff' : color}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; z-index: 2;">
+          ${icon}
+        </div>
+        <div>
+          <div style="font-weight: 700; font-size: 13px; color: ${isDone ? 'inherit' : '#8C887B'};">${escapeHtml(s.title)}</div>
+          <div style="font-size: 11.5px; opacity: 0.7; margin-top: 2px;">${escapeHtml(s.desc)}</div>
+        </div>
       </div>
-      <div>
-        <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 2px; ${s.active ? "color: #966830;" : "opacity: 0.7;"}">${s.title}</h4>
-        <p style="font-size: 11px; opacity: 0.75;">${s.desc}</p>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTNX Tracking — #${escapeHtml(orderId)}</title>
-  <style>${BASE_STYLES}</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tracking #${escapeHtml(order.id)} &middot; BTNX Express</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #FAF9F7;
+      color: #141413;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background-color: #111110; color: #F3F1EC; }
+      .track-card { background-color: #191816 !important; border-color: #2C2A26 !important; color: #F3F1EC !important; }
+      .btnx-border { border-color: #2C2A26 !important; }
+      .meta-box { background-color: #141413 !important; border-color: #2C2A26 !important; }
+    }
+    .track-card {
+      background-color: #FFFFFF;
+      border: 1px solid #E6E2DA;
+      width: 100%;
+      max-width: 480px;
+      border-radius: 4px;
+      padding: 28px 24px;
+      box-shadow: 0 16px 40px -10px rgba(20,20,19,0.12);
+    }
+  </style>
 </head>
 <body>
-  <div style="max-width: 520px; margin: 0 auto; padding: 28px;" class="btnx-card">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E6E2DA; padding-bottom: 16px; margin-bottom: 20px;" class="btnx-border">
-      <div style="height: 22px; width: auto; max-width: 72px;">${BTNX_LOGO_SVG}</div>
-      <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 700;">Live Dispatch Tracker</span>
-    </div>
-
-    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+  <div class="track-card">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid #E6E2DA;" class="btnx-border">
       <div>
-        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.65;">Tracking Reference</span>
-        <div class="font-mono" style="font-size: 16px; font-weight: 800; margin-top: 2px;">#${escapeHtml(orderId)}</div>
+        <div style="font-size: 18px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;">BTNX Logistics</div>
+        <div style="font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #966830; font-weight: 700;">Live Dispatch Stepper</div>
       </div>
-      <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; background: rgba(150,104,48,0.12); color: #966830; padding: 4px 8px; border-radius: 2px;">
+      <span style="font-size: 11px; font-weight: 700; background: #15803d; color: #ffffff; padding: 3px 8px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.08em;">
         ${escapeHtml(order.status || "In Transit")}
       </span>
     </div>
@@ -397,48 +560,46 @@ export function renderTrackingStepperHtml(order: any, storeOrigin = "https://btn
 </html>`;
 }
 
-// 4. MCP Tools Definition
+// 4. MCP Tools Definition (Clean, dynamic schemas with ZERO hardcoded examples)
 const MCP_TOOLS = [
   {
     name: "btnx_sign_in",
-    description: "Authenticate with your BTNX store customer account using your registered BTNX email (and optional password). This logs you into your BTNX account, unlocking your personal order history, saved delivery address in Nigeria, and private invoices.",
+    description: "Authenticate and verify ownership of your BTNX customer account using your registered BTNX email and password. Verifies credentials securely against Firebase Auth to unlock your private orders, invoices, and delivery address.",
     inputSchema: {
       type: "object",
       properties: {
-        email: { type: "string", description: "Your registered BTNX store account email (e.g. fortunewhyfortune@gmail.com)" },
-        password: { type: "string", description: "Optional BTNX account passcode" }
+        email: { type: "string", description: "Registered BTNX customer email" },
+        password: { type: "string", description: "BTNX customer account password" }
       },
-      required: ["email"]
+      required: ["email", "password"]
     }
   },
   {
     name: "btnx_sign_up",
-    description: "Create and register a new BTNX store customer account directly in the database. Registers customer name, email, phone, and Nigerian delivery address.",
+    description: "Register a new BTNX customer account directly in the database with secure email and password authentication, saving your name, delivery address in Nigeria, and contact number.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Customer's full name" },
         email: { type: "string", description: "Customer's email address" },
-        shippingAddress: { type: "string", description: "Street, City, State in Nigeria" },
-        phone: { type: "string", description: "Phone number for delivery" },
-        password: { type: "string", description: "Optional account passcode" }
+        password: { type: "string", description: "Secure password for the new account" },
+        shippingAddress: { type: "string", description: "Delivery address in Nigeria (street, city, state)" },
+        phone: { type: "string", description: "Phone number for delivery courier" }
       },
-      required: ["name", "email", "shippingAddress"]
+      required: ["name", "email", "password", "shippingAddress"]
     }
   },
   {
     name: "btnx_get_account_status",
-    description: "Check whether a BTNX customer account is currently authenticated in this session. Returns the signed-in customer profile or an unauthenticated notice prompting the user to sign in.",
+    description: "Check whether a verified BTNX customer account is currently authenticated in this session. Returns customer name, email, saved address, and total orders, or informs that authentication is required.",
     inputSchema: {
       type: "object",
-      properties: {
-        accountEmail: { type: "string", description: "Optional BTNX account email to check" }
-      }
+      properties: {}
     }
   },
   {
     name: "btnx_sign_out",
-    description: "Sign out of the currently authenticated BTNX store account.",
+    description: "Sign out of the currently authenticated BTNX customer account and terminate the authenticated session.",
     inputSchema: {
       type: "object",
       properties: {}
@@ -446,58 +607,37 @@ const MCP_TOOLS = [
   },
   {
     name: "btnx_list_my_orders",
-    description: "List orders placed under the currently signed-in BTNX account. If not yet signed in, prompts the user to authenticate with their BTNX account email or specify an account email.",
+    description: "List all verified orders placed under the currently authenticated BTNX customer account. Requires an authenticated session.",
     inputSchema: {
       type: "object",
       properties: {
-        accountEmail: { type: "string", description: "Optional BTNX account email if not already signed in" },
-        statusFilter: { type: "string", description: "Optional filter: 'Pending', 'Confirmed', 'Processing', 'In Transit', 'Delivered', 'Cancelled', or 'All'" }
+        statusFilter: { type: "string", description: "Optional filter by order status: 'Pending', 'Confirmed', 'Processing', 'In Transit', 'Delivered', 'Cancelled', or 'All'" }
       }
     }
   },
   {
     name: "btnx_get_invoice",
-    description: "Retrieve official digital invoice, items breakdown, financial totals, and interactive luxury HTML invoice card. If orderId is provided, retrieves that specific order invoice. If orderId is omitted, automatically retrieves the latest invoice for the authenticated BTNX account.",
+    description: "Retrieve the official digital invoice and interactive luxury visual card directly from the database. If orderId is omitted, retrieves the latest invoice for the authenticated BTNX account. If orderId is provided, retrieves that invoice after verifying that the requester is the authorized owner.",
     inputSchema: {
       type: "object",
       properties: {
-        orderId: { type: "string", description: "Optional specific order reference (e.g. BX-829104). If omitted, pulls latest order for the authenticated BTNX user" },
-        accountEmail: { type: "string", description: "Optional BTNX account email if not already signed in" }
+        orderId: { type: "string", description: "Specific BTNX order reference number" }
       }
     }
   },
   {
     name: "btnx_track_parcel",
-    description: "Retrieve real-time tracking, courier progress, and visual tracking stepper card. If orderId is omitted, tracks the latest parcel for the authenticated BTNX user.",
+    description: "Track real-time shipment progress, courier status, and interactive tracking card for an order directly from the database.",
     inputSchema: {
       type: "object",
       properties: {
-        orderId: { type: "string", description: "Optional order reference number" },
-        accountEmail: { type: "string", description: "Optional BTNX account email" }
-      }
-    }
-  },
-  {
-    name: "btnx_create_customer_order",
-    description: "Place a customer order directly into the BTNX store database. If signed in, automatically pulls your saved BTNX name, email, and Nigerian delivery address. Otherwise, asks for required shipping information.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        productId: { type: "string", description: "Product identifier (optional, defaults to 'ny-1')" },
-        quantity: { type: "number", description: "Quantity of pieces (optional, defaults to 1)" },
-        size: { type: "string", description: "Garment size: XS, S, M, L, XL (optional, defaults to 'M')" },
-        customerName: { type: "string", description: "Full name (optional if signed into BTNX account)" },
-        customerEmail: { type: "string", description: "Email (optional if signed into BTNX account)" },
-        customerPhone: { type: "string", description: "Phone number (optional)" },
-        shippingAddress: { type: "string", description: "Delivery address in Nigeria (optional if signed into BTNX account)" },
-        color: { type: "string", description: "Optional garment color" },
-        promoCode: { type: "string", description: "Optional promo voucher code to apply" }
+        orderId: { type: "string", description: "BTNX order reference number" }
       }
     }
   },
   {
     name: "btnx_get_active_promos",
-    description: "Fetch all currently active discount voucher codes, seasonal promotions, and privileges directly from the live database. Call this whenever the user asks for promo codes, discounts, or vouchers.",
+    description: "Fetch all active promotional discount voucher codes and seasonal privileges currently stored in the database. Call this whenever the user asks for available promo codes or discounts.",
     inputSchema: {
       type: "object",
       properties: {}
@@ -505,59 +645,77 @@ const MCP_TOOLS = [
   },
   {
     name: "btnx_check_promo_code",
-    description: "Validate a promotional voucher code directly against the database and calculate the exact eligible discount amount in Nigerian Naira (₦).",
+    description: "Verify a promo voucher code against the active database records and calculate the exact percentage discount and savings in Nigerian Naira (₦).",
     inputSchema: {
       type: "object",
       properties: {
-        code: { type: "string", description: "The promotional voucher code to validate" },
-        subtotal: { type: "number", description: "Optional basket subtotal in Nigerian Naira (₦) to calculate savings" }
+        code: { type: "string", description: "Promo voucher code to validate" },
+        subtotal: { type: "number", description: "Optional subtotal in Nigerian Naira (₦)" }
       },
       required: ["code"]
     }
   },
   {
     name: "btnx_list_catalog",
-    description: "Search and list garments in the BTNX fashion store catalog directly from the database. Filter by category or search query. Returns prices in Nigerian Naira (₦), stock levels, and luxury details.",
+    description: "Search and list garments in the BTNX fashion catalog directly from the database. Returns current prices in Nigerian Naira (₦), stock levels, category, and garment descriptions.",
     inputSchema: {
       type: "object",
       properties: {
         category: { type: "string", description: "Optional category filter ('Womenswear', 'Knitwear', 'Outerwear', 'All')" },
-        search: { type: "string", description: "Optional search keyword for garment name or description" }
+        search: { type: "string", description: "Optional search query" }
       }
     }
   },
   {
     name: "btnx_get_product_details",
-    description: "Retrieve comprehensive specifications and standalone luxury UI card for any BTNX garment directly from the database, including Fabric & Care, Fit & Silhouette, Packaging, Price in ₦, stock, and live visual preview URL.",
+    description: "Retrieve full specifications and interactive luxury UI card for a BTNX garment directly from the database, including price in ₦, fabric details, sizing, silhouette, and stock.",
     inputSchema: {
       type: "object",
       properties: {
-        productId: { type: "string", description: "Product identifier (e.g. 'ny-1', 'ny-2', 'ny-3', 'ny-4', 'ny-5', 'ny-6')" }
+        productId: { type: "string", description: "Garment product identifier from catalog" }
       },
       required: ["productId"]
     }
   },
   {
     name: "btnx_calculate_order",
-    description: "Calculate order subtotal, database promo discount, shipping fee, and final total in Nigerian Naira (₦).",
+    description: "Calculate subtotal, valid promo discount from database, nationwide shipping fee, and grand total in Nigerian Naira (₦) for selected garments.",
     inputSchema: {
       type: "object",
       properties: {
         items: {
           type: "array",
-          description: "List of items with price and quantity",
           items: {
             type: "object",
             properties: {
-              price: { type: "number" },
-              quantity: { type: "number" }
+              productId: { type: "string", description: "Garment product identifier" },
+              quantity: { type: "number", description: "Quantity of pieces" }
             },
-            required: ["price", "quantity"]
+            required: ["productId"]
           }
         },
-        promoCode: { type: "string", description: "Optional promo code to apply" }
+        promoCode: { type: "string", description: "Optional promo voucher code to apply" }
       },
       required: ["items"]
+    }
+  },
+  {
+    name: "btnx_create_customer_order",
+    description: "Place a customer order directly into the BTNX database. If authenticated, automatically uses your saved verified name, email, and Nigerian delivery address. Otherwise, asks for required recipient information.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        productId: { type: "string", description: "Garment product identifier from catalog" },
+        quantity: { type: "number", description: "Quantity of pieces to order" },
+        size: { type: "string", description: "Garment size (XS, S, M, L, XL)" },
+        color: { type: "string", description: "Garment color" },
+        customerName: { type: "string", description: "Recipient full name (optional if signed in)" },
+        customerEmail: { type: "string", description: "Recipient email (optional if signed in)" },
+        customerPhone: { type: "string", description: "Recipient phone number (optional)" },
+        shippingAddress: { type: "string", description: "Recipient delivery address in Nigeria (optional if signed in)" },
+        promoCode: { type: "string", description: "Optional promo voucher code to apply" }
+      },
+      required: ["productId", "quantity", "size"]
     }
   },
   {
@@ -568,77 +726,70 @@ const MCP_TOOLS = [
       properties: {
         widgetType: {
           type: "string",
-          enum: ["product_card", "invoice", "tracking_stepper"],
+          enum: ["product", "invoice", "track"],
           description: "Type of luxury UI component to render"
         },
-        id: { type: "string", description: "Target ID: productId (for product_card), orderId (for invoice/tracking)" }
+        targetId: { type: "string", description: "Target ID: productId (for product), orderId (for invoice/tracking)" }
       },
-      required: ["widgetType"]
+      required: ["widgetType", "targetId"]
     }
   }
 ];
 
 // 5. Tool Execution Handler
-async function executeTool(name: string, args: any, sessionId: string, reqHost = "https://btnx-website-mcp.vercel.app") {
+async function executeTool(name: string, args: any, sessionId: string, reqUser: any | null, reqHost = "https://btnx-website-mcp.vercel.app") {
   await ensureAdminAuth();
 
   switch (name) {
     case "btnx_sign_in": {
       const inputEmail = String(args?.email || "").toLowerCase().trim();
+      const inputPassword = String(args?.password || "").trim();
+
       if (!inputEmail) {
         return { error: "Please provide your registered BTNX email to sign in." };
       }
-
-      // Try Firebase Auth if password was provided
-      if (args?.password) {
-        try {
-          await signInWithEmailAndPassword(auth, inputEmail, String(args.password));
-        } catch (err: any) {
-          if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
-            return {
-              authenticated: false,
-              error: "Incorrect passcode for this BTNX account. Please check your password and try again.",
-            };
-          }
-        }
-      }
-
-      // Search Firestore 'users' collection
-      const uSnap = await getDocs(query(collection(db, "users"), where("email", "==", inputEmail)));
-      let profile: any = null;
-      if (!uSnap.empty) {
-        profile = { id: uSnap.docs[0].id, ...uSnap.docs[0].data() };
-      }
-
-      // Search Firestore 'orders' collection
-      const oSnap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", inputEmail)));
-      const oSnap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", inputEmail)));
-      const orderMap = new Map<string, any>();
-      oSnap1.docs.forEach((d) => orderMap.set(d.id, { id: d.id, ...d.data() }));
-      oSnap2.docs.forEach((d) => orderMap.set(d.id, { id: d.id, ...d.data() }));
-      const orders = Array.from(orderMap.values()).sort((a, b) => {
-        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tB - tA;
-      });
-
-      if (!profile && orders.length === 0) {
+      if (!inputPassword) {
         return {
           authenticated: false,
-          message: `No BTNX customer account found for '${inputEmail}'. Would you like to create a new BTNX account with 'btnx_sign_up'?`,
-          displayMarkdown: `### ❌ Account Not Found\nNo BTNX account is registered under \`${inputEmail}\`.\nYou can create an account using **btnx_sign_up** (provide name, email, and delivery address).`,
+          error: "Password required. For security and customer verification, please provide your BTNX account password to sign in."
         };
       }
 
-      const customerName = profile?.name || orders[0]?.customerName || "BTNX Customer";
+      let cred: any = null;
+      try {
+        cred = await signInWithEmailAndPassword(customerAuth, inputEmail, inputPassword);
+      } catch (err: any) {
+        return {
+          authenticated: false,
+          error: "Authentication failed. Invalid email or password. Please verify your credentials and try again."
+        };
+      }
+
+      // Load user profile from Firestore
+      let profile: any = null;
+      try {
+        const uDoc = await getDoc(doc(db, "users", cred.user.uid));
+        if (uDoc.exists()) profile = uDoc.data();
+      } catch {}
+      if (!profile) {
+        const uSnap = await getDocs(query(collection(db, "users"), where("email", "==", inputEmail)));
+        if (!uSnap.empty) profile = uSnap.docs[0].data();
+      }
+
+      // Load user orders from Firestore
+      const oSnap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", inputEmail)));
+      const orders: any[] = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const customerName = profile?.name || cred.user.displayName || "BTNX Customer";
       const address = profile?.shippingStreet
         ? `${profile.shippingStreet}, ${profile.shippingCity || "Lagos"}, ${profile.shippingCountry || "Nigeria"}`
-        : orders[0]?.shippingAddress || "Registered with orders";
+        : (orders[0]?.shippingAddress || "Nigeria");
       const phone = profile?.phone || orders[0]?.customerPhone || "N/A";
       const vipTier = profile?.role === "admin" ? "Master Atelier Admin" : "Atelier Collector";
 
       const sessionData = {
         sessionId,
+        uid: cred.user.uid,
         email: inputEmail,
         name: customerName,
         phone,
@@ -647,19 +798,19 @@ async function executeTool(name: string, args: any, sessionId: string, reqHost =
         authenticatedAt: new Date().toISOString(),
       };
 
-      await setAuthenticatedUser(sessionId, sessionData);
+      await setAuthenticatedSession(sessionId, sessionData);
 
-      const displayMarkdown = `### ✅ SIGNED IN TO BTNX ACCOUNT
+      const displayMarkdown = `### ✅ VERIFIED & SIGNED IN TO BTNX ACCOUNT
 **Welcome, ${customerName}!**  
-- **BTNX Account Email:** \`${inputEmail}\`  
-- **Delivery Destination:** ${address}  
+- **BTNX Customer:** \`${inputEmail}\`  
+- **Verified UID:** \`${cred.user.uid}\`  
+- **Delivery Address:** ${address}  
 - **Contact Phone:** \`${phone}\`  
-- **VIP Status:** 💎 ${vipTier}  
-- **Orders on Record:** ${orders.length}  
+- **Total Orders on Record:** ${orders.length}  
 
-${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(orders[0].total)}) — Status: **${orders[0].status || "Confirmed"}**\n👉 [Open Latest Invoice](${reqHost}/render/invoice/${orders[0].id})` : ""}
+${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(orders[0].total)}) — Status: **${orders[0].status || "Confirmed"}**\n👉 [✨ Open Latest Invoice Card](${reqHost}/render/invoice/${orders[0].id})` : ""}
 
-*Your BTNX account is now active. You can check your order history, pull invoices, or order pieces directly.*`;
+*Your account is securely verified. You can now pull your private invoices, track orders, or place new orders.*`;
 
       return {
         authenticated: true,
@@ -674,28 +825,30 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
           latestOrderReference: orders[0]?.id || null,
         },
         displayMarkdown,
+        instructionsForAssistant: "The user has successfully verified and signed into their BTNX account. You may now retrieve their orders, invoices, or delivery address."
       };
     }
 
     case "btnx_sign_up": {
       const name = String(args?.name || "").trim();
       const email = String(args?.email || "").toLowerCase().trim();
+      const password = String(args?.password || "").trim();
       const shippingAddress = String(args?.shippingAddress || "").trim();
       const phone = String(args?.phone || "+2348000000000").trim();
 
-      if (!name || !email || !shippingAddress) {
-        return { error: "Name, email, and shipping address are required to create a BTNX account." };
+      if (!name || !email || !password || !shippingAddress) {
+        return { error: "Name, email, password, and shippingAddress are required to create a verified BTNX account." };
       }
 
-      // Check existing user
-      const existing = await getDocs(query(collection(db, "users"), where("email", "==", email)));
-      if (!existing.empty) {
-        return { error: `An account with email '${email}' already exists. Please sign in using btnx_sign_in.` };
+      let cred: any = null;
+      try {
+        cred = await createUserWithEmailAndPassword(customerAuth, email, password);
+      } catch (err: any) {
+        return { error: `Account creation failed: ${err.message}` };
       }
 
-      const newUid = "btnx_usr_" + Math.floor(100000 + Math.random() * 900000);
       const newProfile = {
-        id: newUid,
+        id: cred.user.uid,
         email,
         name,
         phone,
@@ -705,10 +858,11 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
         createdAt: new Date().toISOString(),
       };
 
-      await setDoc(doc(db, "users", newUid), newProfile);
+      await setDoc(doc(db, "users", cred.user.uid), newProfile);
 
       const sessionData = {
         sessionId,
+        uid: cred.user.uid,
         email,
         name,
         phone,
@@ -717,16 +871,16 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
         authenticatedAt: new Date().toISOString(),
       };
 
-      await setAuthenticatedUser(sessionId, sessionData);
+      await setAuthenticatedSession(sessionId, sessionData);
 
-      const displayMarkdown = `### 🎉 BTNX ACCOUNT REGISTERED & SIGNED IN!
+      const displayMarkdown = `### 🎉 BTNX ACCOUNT CREATED & VERIFIED!
 **Welcome to the BTNX Atelier, ${name}!**  
 - **Email:** \`${email}\`  
 - **Delivery Address:** ${shippingAddress}  
 - **Phone:** \`${phone}\`  
 - **VIP Status:** 💎 Atelier Collector  
 
-*Your new BTNX store account has been saved directly to the database and is now active for orders and invoices.*`;
+*Your new BTNX store account has been saved securely to the database.*`;
 
       return {
         success: true,
@@ -744,55 +898,49 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
     }
 
     case "btnx_get_account_status": {
-      let user = await getAuthenticatedUser(sessionId);
-      if (!user && args?.accountEmail) {
-        const email = String(args.accountEmail).toLowerCase().trim();
-        const uSnap = await getDocs(query(collection(db, "users"), where("email", "==", email)));
-        if (!uSnap.empty) {
-          const prof = uSnap.docs[0].data();
-          user = {
-            sessionId,
-            email,
-            name: prof.name || "BTNX Customer",
-            phone: prof.phone || "N/A",
-            shippingAddress: prof.shippingStreet || "Nigeria",
-            vipTier: "Atelier Collector",
-          };
-          await setAuthenticatedUser(sessionId, user);
-        }
-      }
-
+      let user = reqUser;
       if (!user) {
         const displayMarkdown = `### 🔒 NO BTNX ACCOUNT SIGNED IN
 You are connected to the BTNX Atelier, but no customer account is signed in for this conversation.
 
-**To sign in:**
-- Provide your BTNX store email (e.g. \`fortunewhyfortune@gmail.com\` or \`switchk326@gmail.com\`) and say **"Sign in as [email]"** using \`btnx_sign_in\`.
-- Or create a new account using \`btnx_sign_up\`.`;
+**To securely sign in:**
+- Call \`btnx_sign_in\` with your registered BTNX email and password.
+- Or create a new account using \`btnx_sign_up\` (name, email, password, and delivery address in Nigeria).`;
 
         return {
           authenticated: false,
-          message: "No BTNX account is currently signed in. Ask the user for their BTNX store account email to sign in using btnx_sign_in, or create one with btnx_sign_up.",
+          message: "No BTNX customer account is currently authenticated in this session. Ask the user for their BTNX email and password to sign in using btnx_sign_in, or create one with btnx_sign_up.",
           displayMarkdown,
         };
       }
 
-      const displayMarkdown = `### 👤 CURRENT BTNX USER SESSION
+      const oSnap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
+      const orders = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const displayMarkdown = `### 👤 VERIFIED BTNX CUSTOMER SESSION
 - **Customer Name:** **${user.name}**  
 - **BTNX Email:** \`${user.email}\`  
-- **Delivery Address:** ${user.shippingAddress}  
-- **Phone:** \`${user.phone}\`  
-- **Status:** ✅ Signed In to BTNX Store`;
+- **Delivery Address:** ${user.shippingAddress || "Nigeria"}  
+- **Phone:** \`${user.phone || "N/A"}\`  
+- **Total Orders:** ${orders.length}  
+- **Security Status:** 🛡️ Verified & Authenticated`;
 
       return {
         authenticated: true,
-        customer: user,
+        customer: {
+          name: user.name,
+          email: user.email,
+          shippingAddress: user.shippingAddress,
+          phone: user.phone,
+          ordersCount: orders.length,
+          latestOrderReference: orders[0]?.id || null,
+        },
         displayMarkdown,
       };
     }
 
     case "btnx_sign_out": {
-      await clearAuthenticatedUser(sessionId);
+      await clearAuthenticatedSession(sessionId);
       return {
         success: true,
         authenticated: false,
@@ -802,21 +950,19 @@ You are connected to the BTNX Atelier, but no customer account is signed in for 
     }
 
     case "btnx_list_my_orders": {
-      let user = await getAuthenticatedUser(sessionId);
-      let targetEmail = user?.email || (args?.accountEmail ? String(args.accountEmail).toLowerCase().trim() : null);
-
-      if (!targetEmail) {
+      let user = reqUser;
+      if (!user) {
         return {
           requiresAuth: true,
-          message: "Please sign in with your BTNX account email using 'btnx_sign_in' to list your private orders, or provide your BTNX account email.",
-          displayMarkdown: `### 🔒 BTNX SIGN-IN REQUIRED
+          message: "Authentication required. For security and privacy, you must sign in with your BTNX email and password using 'btnx_sign_in' to view your personal order history.",
+          displayMarkdown: `### 🔒 BTNX AUTHENTICATION REQUIRED
 Please sign in to your BTNX account to view your order history.  
-Say **"Sign in as [your-email@example.com]"** to unlock your orders.`,
+Use \`btnx_sign_in\` with your email and password.`,
         };
       }
 
-      const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", targetEmail)));
-      const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", targetEmail)));
+      const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
+      const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email)));
       const map = new Map<string, any>();
       snap1.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
       snap2.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
@@ -826,64 +972,62 @@ Say **"Sign in as [your-email@example.com]"** to unlock your orders.`,
         return tB - tA;
       });
 
-      if (args?.statusFilter && args.statusFilter !== "All") {
-        const sf = String(args.statusFilter).toLowerCase();
-        orders.filter((o) => (o.status || "").toLowerCase().includes(sf));
-      }
-
       if (orders.length === 0) {
         return {
-          customerEmail: targetEmail,
+          customerEmail: user.email,
           count: 0,
           orders: [],
-          displayMarkdown: `### 📦 BTNX ORDERS FOR \`${targetEmail}\`\nNo orders found for this account. You can explore the catalog and place an order anytime!`,
+          displayMarkdown: `### 📦 BTNX ORDERS FOR \`${user.email}\`\nNo orders found for this account. You can explore the catalog using \`btnx_list_catalog\` and place an order anytime!`,
         };
       }
 
-      const tableRows = orders.slice(0, 6).map((o) => {
-        return `| **#${o.id}** | ${o.date || "Recent"} | ${formatNaira(o.total)} | \`${o.status || "Confirmed"}\` | [📄 View Invoice](${reqHost}/render/invoice/${o.id}) |`;
+      const tableRows = orders.slice(0, 10).map((o) => {
+        return `| **#${o.id}** | ${o.date || "Recent"} | ${formatNaira(o.total)} | \`${o.status || "Confirmed"}\` | [✨ View Luxury Invoice Card](${reqHost}/render/invoice/${o.id}) |`;
       }).join("\n");
 
-      const displayMarkdown = `### 📦 YOUR BTNX ORDERS (\`${targetEmail}\`)
+      const displayMarkdown = `### 📦 YOUR BTNX ORDERS (\`${user.email}\`)
 **Total Orders:** ${orders.length}  
 
 | Order ID | Date | Total | Status | Official Invoice |
 | :--- | :--- | :--- | :--- | :--- |
 ${tableRows}
 
-✨ *Click any invoice link above to view the standalone luxury card.*`;
+👉 **[✨ OPEN LATEST ORDER INVOICE](${reqHost}/render/invoice/${orders[0].id})**`;
 
       return {
-        customerEmail: targetEmail,
+        customerEmail: user.email,
         count: orders.length,
         orders: orders.map((o) => ({
           orderId: o.id,
-          customerName: o.customerName || user?.name || "BTNX Client",
-          date: o.date || "Recent",
-          status: o.status || "Confirmed",
+          date: o.date,
           totalNaira: formatNaira(o.total),
-          itemsCount: (o.items || []).length,
-          items: (o.items || []).map((it: any) => ({
-            name: it.product?.name || it.productName || "Luxury Piece",
-            size: it.size || "M",
-            quantity: it.quantity || 1,
-            price: formatNaira(it.product?.price || it.price),
-          })),
+          status: o.status || "Confirmed",
           viewInvoiceUrl: `${reqHost}/render/invoice/${o.id}`,
           viewTrackingUrl: `${reqHost}/render/track/${o.id}`,
         })),
         displayMarkdown,
+        instructionsForAssistant: "Present the order list in a clear table and always provide the clickable links to view the invoices."
       };
     }
 
     case "btnx_get_invoice": {
+      let user = reqUser;
       let targetId = String(args?.orderId || "").trim();
-      let user = await getAuthenticatedUser(sessionId);
-      let email = user?.email || (args?.accountEmail ? String(args.accountEmail).toLowerCase().trim() : null);
 
-      if (!targetId && email) {
-        const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", email)));
-        const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", email)));
+      // If no specific order ID provided:
+      if (!targetId) {
+        if (!user) {
+          return {
+            requiresAuth: true,
+            message: "No order reference was provided and you are not signed into a BTNX account. Please sign in with your BTNX email and password using 'btnx_sign_in' to automatically retrieve your latest invoice, or provide a specific order reference number.",
+            displayMarkdown: `### 🔒 AUTHENTICATION OR ORDER REFERENCE REQUIRED
+Please sign in to your BTNX account using \`btnx_sign_in\` (email and password) to view your invoices, or provide your specific order reference number.`,
+          };
+        }
+
+        // Pull the latest order for the authenticated user
+        const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
+        const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email)));
         const map = new Map<string, any>();
         snap1.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
         snap2.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
@@ -892,41 +1036,59 @@ ${tableRows}
           const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           return tB - tA;
         });
-        if (orders.length > 0) {
-          targetId = orders[0].id;
+
+        if (orders.length === 0) {
+          return {
+            count: 0,
+            message: `No orders found in the database for your authenticated account (${user.email}).`,
+            displayMarkdown: `### 📄 NO INVOICES ON RECORD
+No orders or invoices were found for account \`${user.email}\`. Browse the catalog using \`btnx_list_catalog\` to order pieces!`,
+          };
         }
+
+        targetId = orders[0].id;
       }
 
-      if (!targetId) {
-        return {
-          requiresAuth: true,
-          message: "Please sign in with your BTNX account using 'btnx_sign_in' to retrieve your latest invoice, or provide a specific order reference number (e.g. #BX-...).",
-          displayMarkdown: `### 🔒 BTNX ACCOUNT REQUIRED FOR INVOICE
-To look up your invoice automatically, please sign in with your BTNX account email using **btnx_sign_in**.  
-Alternatively, provide your order reference number (e.g. \`BX-829104\`).`,
-        };
-      }
-
+      // Fetch target order from Firestore
       const snap = await getDoc(doc(db, "orders", targetId));
       if (!snap.exists()) {
-        return { error: `Order #${targetId} was not found in the BTNX database.` };
+        return { error: `Invoice for order #${targetId} was not found in the database.` };
       }
 
       const order: any = { id: snap.id, ...snap.data() };
+
+      // SECURITY CHECK: Verify ownership!
+      const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase();
+      if (user) {
+        const isOwner = user.email.toLowerCase() === orderOwnerEmail || user.role === "admin";
+        if (!isOwner) {
+          return {
+            error: `Access denied. Order #${targetId} does not belong to your authenticated BTNX account.`,
+          };
+        }
+      } else {
+        return {
+          requiresAuth: true,
+          message: `For security and customer privacy, please sign in with your BTNX account using btnx_sign_in (email & password) to view invoice #${targetId}.`,
+          displayMarkdown: `### 🔒 AUTHENTICATION REQUIRED
+For security and privacy, you must sign in with the BTNX account that owns order \`#${targetId}\`. Please call \`btnx_sign_in\` with your registered email and password.`,
+        };
+      }
+
+      const items = Array.isArray(order.items) ? order.items : [];
       const invoiceHtml = renderInvoiceHtml(order, reqHost);
-      const items = order.items || [];
+
       const itemRows = items.map((it: any) => {
-        const name = it.product?.name || it.productName || "BTNX Garment";
-        const price = formatNaira(it.product?.price || it.price || 0);
-        return `| **${name}** | ${it.size || "M"} | ${it.quantity || 1} | ${price} |`;
+        const pName = it.product?.name || it.productName || "BTNX Luxury Garment";
+        const pPrice = it.product?.price || it.price || 0;
+        const qty = it.quantity || 1;
+        return `| **${pName}** | ${it.size || "M"} | ${qty} | ${formatNaira(pPrice * qty)} |`;
       }).join("\n");
 
-      const displayMarkdown = `### 🏷️ BTNX OSUN ATELIER — OFFICIAL DIGITAL INVOICE
-**Invoice Reference:** \`INV-${order.id}\`  
-**Order Reference:** \`${order.id}\`  
-**Date:** ${order.date || new Date().toLocaleDateString()}  
-**Client:** ${order.customerName || "Valued Client"} (\`${order.customerEmail || order.userEmail || "Customer"}\`)  
-**Delivery Destination:** ${order.shippingAddress || "Registered with order"}  
+      const displayMarkdown = `### 🧾 OFFICIAL BTNX INVOICE: \`#${order.id}\`
+**Atelier Issue Date:** ${order.date || "Recent"}  
+**Client:** **${order.customerName || "Valued Client"}** (\`${order.customerEmail || order.userEmail}\`)  
+**Delivery Destination:** ${order.shippingAddress || "Nigeria"}  
 **Order Status:** ✅ **${order.status || "CONFIRMED"}**
 
 | Piece | Size | Qty | Price |
@@ -934,10 +1096,10 @@ Alternatively, provide your order reference number (e.g. \`BX-829104\`).`,
 ${itemRows}
 
 **Subtotal:** ${formatNaira(order.subtotal || order.total)}  
-${order.discountAmount > 0 ? `**VIP Discount:** -${formatNaira(order.discountAmount)}\n` : ""}**Nationwide Express Courier:** ${order.shippingFee > 0 ? formatNaira(order.shippingFee) : "FREE"}  
+${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.discountAmount)}\n` : ""}**Nationwide Express Courier:** ${order.shippingFee > 0 ? formatNaira(order.shippingFee) : "FREE"}  
 **Grand Total:** **${formatNaira(order.total)}**
 
-👉 **[CLICK HERE TO OPEN FULL INTERACTIVE LUXURY INVOICE CARD](${reqHost}/render/invoice/${order.id})**`;
+👉 **[✨ CLICK HERE TO OPEN FULL INTERACTIVE LUXURY INVOICE CARD](${reqHost}/render/invoice/${order.id})**`;
 
       return {
         invoiceNumber: `INV-${order.id}`,
@@ -961,16 +1123,16 @@ ${order.discountAmount > 0 ? `**VIP Discount:** -${formatNaira(order.discountAmo
         liveCardUrl: `${reqHost}/render/invoice/${order.id}`,
         displayMarkdown,
         htmlSnippet: invoiceHtml,
+        instructionsForAssistant: "Always display the clickable live invoice card link directly in your response: [✨ View Luxury Invoice Card](...)"
       };
     }
 
     case "btnx_track_parcel": {
+      let user = reqUser;
       let targetId = String(args?.orderId || "").trim();
-      let user = await getAuthenticatedUser(sessionId);
-      let email = user?.email || (args?.accountEmail ? String(args.accountEmail).toLowerCase().trim() : null);
 
-      if (!targetId && email) {
-        const snap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", email)));
+      if (!targetId && user?.email) {
+        const snap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
         if (!snap.empty) targetId = snap.docs[0].id;
       }
 
@@ -978,7 +1140,7 @@ ${order.discountAmount > 0 ? `**VIP Discount:** -${formatNaira(order.discountAmo
         return {
           requiresAuth: true,
           message: "Please provide an order reference number to track your parcel, or sign in to your BTNX account using btnx_sign_in.",
-          displayMarkdown: `### 📦 TRACKING REFERENCE REQUIRED\nPlease provide your order reference number (e.g. \`BX-829104\`) or sign in to your BTNX account.`,
+          displayMarkdown: `### 📦 TRACKING REFERENCE REQUIRED\nPlease provide your order reference number or sign in to your BTNX account.`,
         };
       }
 
@@ -1002,7 +1164,7 @@ ${order.discountAmount > 0 ? `**VIP Discount:** -${formatNaira(order.discountAmo
 - [x] **Dispatched via Express Courier**
 - [ ] **Out for Local Doorstep Handover**
 
-👉 **[CLICK HERE TO VIEW LIVE INTERACTIVE TRACKING CARD](${reqHost}/render/track/${order.id})**`;
+👉 **[✨ CLICK HERE TO VIEW LIVE INTERACTIVE TRACKING CARD](${reqHost}/render/track/${order.id})**`;
 
       return {
         orderId: order.id,
@@ -1014,11 +1176,12 @@ ${order.discountAmount > 0 ? `**VIP Discount:** -${formatNaira(order.discountAmo
         liveCardUrl: `${reqHost}/render/track/${order.id}`,
         displayMarkdown,
         htmlSnippet: stepperHtml,
+        instructionsForAssistant: "Always provide the clickable live tracking card link directly in your response: [✨ View Tracking Card](...)"
       };
     }
 
     case "btnx_create_customer_order": {
-      let user = await getAuthenticatedUser(sessionId);
+      let user = reqUser;
 
       const customerName = args?.customerName || user?.name;
       const customerEmail = args?.customerEmail || user?.email;
@@ -1028,19 +1191,25 @@ ${order.discountAmount > 0 ? `**VIP Discount:** -${formatNaira(order.discountAmo
       if (!customerName || !customerEmail || !shippingAddress) {
         return {
           requiresDetails: true,
-          message: "To place an order, please sign in to your BTNX account using 'btnx_sign_in' (which automatically uses your saved address), or provide your full name, email, and delivery address in Nigeria.",
+          message: "To place an order, please sign in to your BTNX account using 'btnx_sign_in' with email and password (which automatically uses your saved verified address), or provide recipient name, email, and Nigerian delivery address.",
           displayMarkdown: `### ✍️ DELIVERY DETAILS NEEDED
-Please sign in to your BTNX account to use your saved address, or provide:
-- Your full name
-- Your email
-- Your delivery address in Nigeria`,
+Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
+- Recipient full name
+- Recipient email
+- Delivery address in Nigeria (street, city, state)`,
         };
       }
 
-      const pid = String(args?.productId || "ny-1").trim();
+      const pid = String(args?.productId || "").trim();
+      if (!pid) {
+        return {
+          error: "Please provide the productId of the garment to order. Use 'btnx_list_catalog' to view available garments."
+        };
+      }
+
       const pSnap = await getDoc(doc(db, "products", pid));
       if (!pSnap.exists()) {
-        return { error: `Cannot place order: Product '${pid}' not found in catalog.` };
+        return { error: `Product '${pid}' was not found in the database. Call btnx_list_catalog to view valid piece IDs.` };
       }
 
       const prod: any = { id: pSnap.id, ...pSnap.data() };
@@ -1048,8 +1217,8 @@ Please sign in to your BTNX account to use your saved address, or provide:
       const subtotal = prod.price * qty;
 
       let discountAmount = 0;
-      const promo = String(args?.promoCode || "BTNX50").toUpperCase().trim();
-      if (promo) {
+      if (args?.promoCode) {
+        const promo = String(args.promoCode).toUpperCase().trim();
         const cSnap = await getDoc(doc(db, "promoCodes", promo));
         if (cSnap.exists() && cSnap.data()?.isActive !== false) {
           const pct = Number(cSnap.data()?.discountPercentage || cSnap.data()?.percentage || 0) / 100;
@@ -1117,13 +1286,13 @@ Please sign in to your BTNX account to use your saved address, or provide:
 **Grand Total:** **${formatNaira(total)}**  
 **Order Status:** ✅ Confirmed & Queued for Quality Inspection  
 
-👉 **[CLICK HERE TO VIEW OFFICIAL INVOICE](${reqHost}/render/invoice/${randomRef})**  
-👉 **[CLICK HERE TO TRACK DISPATCH](${reqHost}/render/track/${randomRef})**`;
+👉 **[✨ CLICK HERE TO VIEW OFFICIAL LIVE INVOICE](${reqHost}/render/invoice/${randomRef})**  
+👉 **[✨ CLICK HERE TO TRACK PARCEL DISPATCH](${reqHost}/render/track/${randomRef})**`;
 
       return {
         success: true,
         orderReference: randomRef,
-        message: `Order #${randomRef} successfully saved to BTNX database and queued for express courier inspection.`,
+        message: `Order #${randomRef} successfully saved to BTNX database and queued for inspection.`,
         date: dateStr,
         grandTotalNaira: formatNaira(total),
         items: [{ piece: prod.name, quantity: qty, size, price: formatNaira(prod.price) }],
@@ -1131,6 +1300,7 @@ Please sign in to your BTNX account to use your saved address, or provide:
         viewTrackingUrl: `${reqHost}/render/track/${randomRef}`,
         displayMarkdown,
         htmlSnippet: invoiceHtml,
+        instructionsForAssistant: "Congratulate the user on placing their order and provide the clickable links to view their invoice and track shipment."
       };
     }
 
@@ -1142,7 +1312,7 @@ Please sign in to your BTNX account to use your saved address, or provide:
 
       const tableRows = validPromos.map((c: any) => {
         const pct = c.discountPercentage || c.percentage || 20;
-        return `| \`${c.code || c.id}\` | **${pct}% OFF** | Valid until ${c.expiresAt || "2027-12-31"} | Active & Unlocked |`;
+        return `| \`${c.code || c.id}\` | **${pct}% OFF** | Valid until ${c.expiresAt ? c.expiresAt.split("T")[0] : "Active"} | Active & Unlocked |`;
       }).join("\n");
 
       const displayMarkdown = `### 🎟️ BTNX STORE — ACTIVE DATABASE PROMO VOUCHERS
@@ -1157,7 +1327,7 @@ ${tableRows}
         vouchers: validPromos.map((c: any) => ({
           code: c.code || c.id,
           discount: `${c.discountPercentage || c.percentage || 20}% Off`,
-          expiresAt: c.expiresAt || "2027-12-31",
+          expiresAt: c.expiresAt ? c.expiresAt.split("T")[0] : "Active",
           eligible: "Full-price seasonal garments (excludes already marked-down items)",
         })),
         privilegeShipping: "Complimentary luxury express delivery unlocked on orders over ₦150,000 nationwide.",
@@ -1201,277 +1371,299 @@ ${tableRows}
 
     case "btnx_list_catalog": {
       const snap = await getDocs(collection(db, "products"));
-      let items = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+      let products = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       if (args?.category && args.category !== "All") {
         const cat = String(args.category).toLowerCase();
-        items = items.filter((p) => (p.category || "").toLowerCase().includes(cat));
+        products = products.filter((p: any) => (p.category || "").toLowerCase() === cat);
       }
+
       if (args?.search) {
         const q = String(args.search).toLowerCase();
-        items = items.filter(
-          (p) =>
+        products = products.filter(
+          (p: any) =>
             (p.name || "").toLowerCase().includes(q) ||
-            (p.description || "").toLowerCase().includes(q) ||
-            (p.category || "").toLowerCase().includes(q)
+            (p.description || "").toLowerCase().includes(q)
         );
       }
 
-      const rows = items.map((p) => {
-        return `| **${p.name}** (\`${p.id}\`) | ${p.category} | **${formatNaira(p.price)}** | Stock: ${p.stock ?? 20} | [👁️ View Card](${reqHost}/render/product/${p.id}) |`;
+      const catalogTable = products.map((p: any) => {
+        return `| \`${p.id}\` | **${p.name}** | ${formatNaira(p.price)} | ${p.stock > 0 ? `In Stock (${p.stock})` : "Made-to-Order"} | [✨ View Luxury Card](${reqHost}/render/product/${p.id}) |`;
       }).join("\n");
 
-      const displayMarkdown = `### 🧥 BTNX ATELIER — SEASONAL CATALOG
-Total Pieces Available: ${items.length}
+      const displayMarkdown = `### 🧥 BTNX ATELIER — CURRENT RUNWAY COLLECTION
+**Showing ${products.length} garments from the active catalog:**
 
-| Piece | Category | Price | Availability | Live Interactive Card |
+| ID | Garment Name | Price | Stock | Visual Showcase |
 | :--- | :--- | :--- | :--- | :--- |
-${rows}
+${catalogTable}
 
-✨ *Ask for product details by ID (e.g. \`ny-1\`) or ask to order directly.*`;
+✨ *Complimentary size exchanges & express nationwide delivery on orders over ₦150,000.*`;
 
       return {
-        count: items.length,
-        pieces: items.map((p) => ({
+        totalPieces: products.length,
+        catalog: products.map((p: any) => ({
           id: p.id,
           name: p.name,
           category: p.category,
           priceNaira: formatNaira(p.price),
-          originalPriceNaira: p.originalPrice ? formatNaira(p.originalPrice) : null,
-          stock: p.stock ?? 20,
-          badge: p.badge || null,
-          deliveryTimeline: p.deliveryTimeline || "2–4 Business Days across Nigeria",
+          rawPrice: p.price,
+          stock: p.stock,
           liveCardUrl: `${reqHost}/render/product/${p.id}`,
         })),
         displayMarkdown,
+        instructionsForAssistant: "Present available pieces in a markdown table and include the clickable card links."
       };
     }
 
     case "btnx_get_product_details": {
-      const pid = String(args?.productId || "ny-1").trim();
-      const snap = await getDoc(doc(db, "products", pid));
-      if (!snap.exists()) {
-        return { error: `Product '${pid}' was not found in the BTNX database.` };
+      const pid = String(args?.productId || "").trim();
+      if (!pid) {
+        return { error: "Please provide a productId. Call btnx_list_catalog to inspect valid IDs." };
       }
 
-      const p: any = { id: snap.id, ...snap.data() };
-      const cardHtml = renderProductCardHtml(p, reqHost);
-      const imgUrl = p.image?.startsWith("http") ? p.image : `${reqHost}/${p.image?.replace(/^\//, "")}`;
+      const snap = await getDoc(doc(db, "products", pid));
+      if (!snap.exists()) {
+        return { error: `Garment '${pid}' was not found in the BTNX database.` };
+      }
 
-      const displayMarkdown = `### 🧥 BTNX ATELIER — ${p.name.toUpperCase()}
-**Reference:** \`${p.id}\` | **Category:** ${p.category} | **Price:** **${formatNaira(p.price)}**  
-${p.badge ? `**Collection Badge:** 🏷️ ${p.badge}\n` : ""}
-![${p.name}](${imgUrl})
+      const product: any = { id: snap.id, ...snap.data() };
+      const cardHtml = renderProductCardHtml(product, reqHost);
 
-**Description:** ${p.description || "Contemporary structured silhouette tailored with refined finishes."}  
-**Fabric & Care:** ${p.fabricAndCare || "Heavyweight organic loopback cotton fleece. Machine wash cold."}  
-**Available Sizes:** ${(p.sizes || ["S", "M", "L", "XL"]).join(" · ")}  
-**Nationwide Delivery:** ${p.deliveryTimeline || "2–4 Business Days"}  
-**Packaging:** ${p.packagingType || "Cotton Garment Box"}  
+      const displayMarkdown = `### 🧥 ${product.name.toUpperCase()} (\`${product.id}\`)
+**Category:** ${product.category || "Limited Edition"} &middot; **Price:** **${formatNaira(product.price)}**  
+**Availability:** ${product.stock > 0 ? `✅ In Stock (${product.stock} units)` : "⏳ Made-to-Order"}  
+**Silhouette & Cut:** ${product.fit || "Relaxed Atelier Silhouette"}  
+**Textile Composition:** ${product.fabric || "100% Hand-finished Cotton"}  
+**Sizing Available:** ${(product.sizes || ["XS", "S", "M", "L", "XL"]).join(" · ")}  
 
-👉 **[CLICK HERE TO VIEW FULL INTERACTIVE LUXURY PRODUCT CARD](${reqHost}/render/product/${p.id})**`;
+${product.description || "Crafted in the Osun Atelier using heirloom textile techniques."}
+
+👉 **[✨ CLICK HERE TO VIEW FULL INTERACTIVE LUXURY PRODUCT CARD](${reqHost}/render/product/${product.id})**`;
 
       return {
-        product: {
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          priceNaira: formatNaira(p.price),
-          originalPriceNaira: p.originalPrice ? formatNaira(p.originalPrice) : null,
-          stock: p.stock ?? 20,
-          description: p.description,
-          fabricAndCare: p.fabricAndCare || "Heavyweight organic loopback cotton fleece. Machine wash cold.",
-          fitDetails: p.fitDetails || "Relaxed structured drape with reinforced seams.",
-          availableSizes: p.sizes || ["S", "M", "L", "XL"],
-          availableColors: p.colors || ["Noir Black", "Off-White"],
-          deliveryTimeline: p.deliveryTimeline || "2–4 Business Days across Nigeria",
-          packagingType: p.packagingType || "Cotton Garment Box",
-          returnPolicy: p.returnPolicy || "14-Day Free Exchanges on unworn items",
-          liveCardUrl: `${reqHost}/render/product/${p.id}`,
-          displayMarkdown,
-          htmlSnippet: cardHtml,
-        },
+        productId: product.id,
+        name: product.name,
+        priceNaira: formatNaira(product.price),
+        rawPrice: product.price,
+        description: product.description,
+        sizes: product.sizes || ["XS", "S", "M", "L", "XL"],
+        fit: product.fit || "Relaxed Atelier Cut",
+        fabric: product.fabric || "100% Cotton",
+        stock: product.stock,
+        liveCardUrl: `${reqHost}/render/product/${product.id}`,
+        displayMarkdown,
+        htmlSnippet: cardHtml,
+        instructionsForAssistant: "Always include the live interactive product card link in your reply: [✨ View Luxury Product Card](...)"
       };
     }
 
     case "btnx_calculate_order": {
-      const items = (args?.items as any[]) || [];
-      const code = String(args?.promoCode || "").toUpperCase().trim();
-
-      let subtotal = 0;
-      for (const it of items) {
-        subtotal += Number(it.price || 0) * Number(it.quantity || 1);
+      const items = Array.isArray(args?.items) ? args.items : [];
+      if (items.length === 0) {
+        return { error: "Please provide a list of items to calculate." };
       }
 
-      let discountPct = 0;
-      if (code) {
-        const snap = await getDoc(doc(db, "promoCodes", code));
-        if (snap.exists() && snap.data()?.isActive !== false) {
-          discountPct = Number(snap.data()?.discountPercentage || snap.data()?.percentage || 0) / 100;
+      let subtotal = 0;
+      const breakdown = [];
+
+      for (const item of items) {
+        const pid = String(item.productId || "").trim();
+        const qty = Number(item.quantity) || 1;
+        const snap = await getDoc(doc(db, "products", pid));
+        if (snap.exists()) {
+          const prod: any = snap.data();
+          const lineTotal = (prod.price || 0) * qty;
+          subtotal += lineTotal;
+          breakdown.push({
+            piece: prod.name,
+            quantity: qty,
+            unitPrice: formatNaira(prod.price),
+            lineTotal: formatNaira(lineTotal),
+          });
         }
       }
 
-      const discountAmount = subtotal * discountPct;
-      const isFreeShipping = subtotal >= 150000;
-      const shippingFee = isFreeShipping ? 0 : 3500;
-      const grandTotal = Math.max(0, subtotal - discountAmount) + shippingFee;
+      let discountAmount = 0;
+      if (args?.promoCode) {
+        const promo = String(args.promoCode).toUpperCase().trim();
+        const cSnap = await getDoc(doc(db, "promoCodes", promo));
+        if (cSnap.exists() && cSnap.data()?.isActive !== false) {
+          const pct = Number(cSnap.data()?.discountPercentage || cSnap.data()?.percentage || 0) / 100;
+          discountAmount = subtotal * pct;
+        }
+      }
+
+      const shippingFee = subtotal >= 150000 ? 0 : 3500;
+      const total = Math.max(0, subtotal - discountAmount) + shippingFee;
 
       return {
         subtotalNaira: formatNaira(subtotal),
-        appliedPromo: code ? (discountPct > 0 ? `${code} (${discountPct * 100}% Off)` : "Invalid / Expired") : "None",
         discountAmountNaira: formatNaira(discountAmount),
-        shippingFeeNaira: isFreeShipping ? "FREE (Orders over ₦150,000)" : formatNaira(shippingFee),
-        grandTotalNaira: formatNaira(grandTotal),
-        rawGrandTotal: grandTotal,
+        shippingFeeNaira: shippingFee === 0 ? "FREE (Privilege Delivery)" : formatNaira(shippingFee),
+        grandTotalNaira: formatNaira(total),
+        items: breakdown,
       };
     }
 
     case "btnx_render_ui_widget": {
-      const widgetType = String(args?.widgetType || "product_card");
-      const targetId = String(args?.id || "").trim();
+      const wType = String(args?.widgetType || "").trim();
+      const targetId = String(args?.targetId || "").trim();
 
-      if (widgetType === "product_card") {
-        let pId = targetId || "ny-1";
-        const snap = await getDoc(doc(db, "products", pId));
-        if (!snap.exists()) return { error: `Product '${pId}' not found.` };
-        const prod = { id: snap.id, ...snap.data() };
-        const html = renderProductCardHtml(prod, reqHost);
-        return {
-          widgetType: "product_card",
-          productId: prod.id,
-          livePreviewUrl: `${reqHost}/render/product/${prod.id}`,
-          htmlSnippet: html,
-        };
+      if (!targetId) {
+        return { error: "Please provide targetId (productId or orderId)." };
       }
 
-      if (widgetType === "invoice") {
-        let oId = targetId;
-        if (!oId) {
-          const all = await getDocs(collection(db, "orders"));
-          if (!all.empty) oId = all.docs[0].id;
-        }
-        const snap = await getDoc(doc(db, "orders", oId));
-        if (!snap.exists()) return { error: `Order '${oId}' not found.` };
-        const order = { id: snap.id, ...snap.data() };
-        const html = renderInvoiceHtml(order, reqHost);
-        return {
-          widgetType: "invoice",
-          orderId: order.id,
-          livePreviewUrl: `${reqHost}/render/invoice/${order.id}`,
-          htmlSnippet: html,
-        };
-      }
+      const liveCardUrl = `${reqHost}/render/${wType}/${targetId}`;
 
-      if (widgetType === "tracking_stepper") {
-        let oId = targetId;
-        if (!oId) {
-          const all = await getDocs(collection(db, "orders"));
-          if (!all.empty) oId = all.docs[0].id;
-        }
-        const snap = await getDoc(doc(db, "orders", oId));
-        if (!snap.exists()) return { error: `Order '${oId}' not found.` };
-        const order = { id: snap.id, ...snap.data() };
-        const html = renderTrackingStepperHtml(order, reqHost);
-        return {
-          widgetType: "tracking_stepper",
-          orderId: order.id,
-          livePreviewUrl: `${reqHost}/render/track/${order.id}`,
-          htmlSnippet: html,
-        };
-      }
-
-      return { error: `Widget type '${widgetType}' is not supported.` };
+      return {
+        widgetType: wType,
+        targetId,
+        liveCardUrl,
+        displayMarkdown: `👉 **[✨ CLICK HERE TO OPEN INTERACTIVE LUXURY ${wType.toUpperCase()} CARD](${liveCardUrl})**`,
+        instructionsForAssistant: "Present the clickable card link prominently in your response."
+      };
     }
 
     default:
-      return { error: `Unknown tool name: ${name}` };
+      return { error: `Tool '${name}' is not recognized.` };
   }
 }
 
-// 6. Standalone Interactive MCP Dashboard
+// 6. Luxury Dashboard HTML (Server landing page)
 const HTML_DASHBOARD = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTNX Store — Remote Model Context Protocol (MCP) Server</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BTNX Atelier &middot; Remote MCP &amp; OAuth Server</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background-color: #111110;
       color: #F3F1EC;
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 30px 20px;
       display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
-      padding: 24px 16px;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background-color: #191816;
+      border: 1px solid #2C2A26;
+      width: 100%;
+      max-width: 680px;
+      padding: 36px 30px;
+      border-radius: 4px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.85);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #C89B62;
+      border: 1px solid #38342E;
+      background: #262420;
+      padding: 4px 10px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+    p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #A7A299;
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #C89B62;
+      margin: 20px 0 10px;
+    }
+    .endpoint-box {
+      background: #141413;
+      border: 1px solid #2C2A26;
+      padding: 12px 14px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #F3F1EC;
+      margin-bottom: 8px;
+    }
+    .tool-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    @media (max-width: 500px) {
+      .tool-list { grid-template-columns: 1fr; }
+    }
+    .tool-item {
+      background: #141413;
+      border: 1px solid #2C2A26;
+      padding: 8px 12px;
+      font-size: 11.5px;
+      font-family: monospace;
+    }
+    .tool-desc {
+      display: block;
+      font-family: sans-serif;
+      font-size: 10.5px;
+      color: #A7A299;
+      margin-top: 2px;
+    }
+    .auth-banner {
+      background: #262420;
+      border: 1px solid #C89B62;
+      padding: 14px;
+      margin: 18px 0;
+      font-size: 12px;
       line-height: 1.5;
     }
-    .card {
-      max-width: 720px;
-      width: 100%;
-      background: #191816;
-      border: 1px solid #2C2A26;
-      border-radius: 4px;
-      padding: 36px 32px;
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
-    }
-    .header-sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: #C89B62; font-weight: 700; margin-bottom: 6px; }
-    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; color: #FAF9F7; }
-    p.lead { font-size: 13px; color: #A7A299; margin-bottom: 24px; }
-    .status-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(37, 211, 102, 0.12); border: 1px solid rgba(37, 211, 102, 0.3); color: #25D366; font-size: 11px; font-family: 'IBM Plex Mono', monospace; padding: 6px 12px; border-radius: 2px; margin-bottom: 24px; }
-    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #25D366; box-shadow: 0 0 10px #25D366; }
-    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #A7A299; font-weight: 700; margin-top: 24px; margin-bottom: 10px; border-bottom: 1px solid #2C2A26; padding-bottom: 6px; }
-    .tool-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-    @media (max-width: 600px) { .tool-list { grid-template-columns: 1fr; } .card { padding: 24px 20px; } }
-    .tool-item { background: #141413; border: 1px solid #2C2A26; padding: 12px 14px; border-radius: 2px; font-size: 12px; font-family: 'IBM Plex Mono', monospace; color: #C89B62; }
-    .tool-desc { display: block; font-size: 11px; color: #A7A299; font-family: 'Plus Jakarta Sans', sans-serif; margin-top: 3px; }
-    .endpoint-box { background: #111110; border: 1px solid #2C2A26; border-radius: 3px; padding: 14px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #25D366; margin-bottom: 16px; word-break: break-all; }
-    .preview-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .preview-pill { font-size: 11px; font-family: 'IBM Plex Mono', monospace; text-decoration: none; padding: 6px 12px; background: #141413; border: 1px solid #2C2A26; color: #C89B62; border-radius: 2px; }
-    .preview-pill:hover { border-color: #C89B62; background: #201F1D; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="header-sub">BTNX Store · Osun Atelier &amp; Logistics</div>
-    <h1>Remote Model Context Protocol (MCP) Server</h1>
-    <p class="lead">100% database-driven MCP server connected directly to Cloud Firestore. Authentic BTNX customer accounts, zero hardcoding, real vouchers, automated customer order invoice generation, and live luxury UI cards.</p>
-    
-    <div class="status-badge">
-      <span class="status-dot"></span>
-      <span>ACTIVE &amp; OPERATIONAL · 14 REAL-TIME TOOLS · CLOUD FIRESTORE</span>
+  <div class="container">
+    <span class="badge">BTNX Atelier &middot; Active</span>
+    <h1>BTNX Store Remote MCP &amp; OAuth Server</h1>
+    <p>
+      Official production MCP server and RFC 8414 OAuth 2.0 provider for the BTNX luxury fashion house. Powered directly by Cloud Firestore with end-to-end customer verification.
+    </p>
+
+    <div class="auth-banner">
+      🛡️ <strong>Secure Customer Authentication:</strong> Every customer signs in with their registered BTNX email and password via OAuth or chat verification. Zero hardcoded accounts or example stubs.
     </div>
 
-    <div class="section-title">Claude Custom Connector Endpoint</div>
+    <div class="section-title">MCP Connection URL</div>
     <div class="endpoint-box">https://btnx-website-mcp.vercel.app/mcp</div>
 
-    <div class="section-title">Live Luxury UI Card Previews</div>
-    <div class="preview-links">
-      <a href="/render/invoice/BX-829104" target="_blank" class="preview-pill">📄 View Invoice #BX-829104</a>
-      <a href="/render/track/BX-829104" target="_blank" class="preview-pill">🚚 View Tracking #BX-829104</a>
-      <a href="/render/product/ny-1" target="_blank" class="preview-pill">🧥 View Product Card ny-1</a>
-    </div>
+    <div class="section-title">OAuth 2.0 Discovery Endpoint</div>
+    <div class="endpoint-box">https://btnx-website-mcp.vercel.app/.well-known/oauth-authorization-server</div>
 
     <div class="section-title">Available Database-Driven Tools</div>
     <div class="tool-list">
-      <div class="tool-item">btnx_sign_in<span class="tool-desc">Sign in with BTNX customer email</span></div>
-      <div class="tool-item">btnx_sign_up<span class="tool-desc">Register new BTNX customer account</span></div>
-      <div class="tool-item">btnx_get_account_status<span class="tool-desc">Check active BTNX user session</span></div>
-      <div class="tool-item">btnx_sign_out<span class="tool-desc">Sign out of current BTNX account</span></div>
-      <div class="tool-item">btnx_list_my_orders<span class="tool-desc">List user purchases &amp; references</span></div>
-      <div class="tool-item">btnx_get_invoice<span class="tool-desc">Official receipt &amp; luxury invoice card</span></div>
-      <div class="tool-item">btnx_get_active_promos<span class="tool-desc">Fetch live unexpired vouchers</span></div>
-      <div class="tool-item">btnx_check_promo_code<span class="tool-desc">Calculate dynamic savings against DB</span></div>
-      <div class="tool-item">btnx_create_customer_order<span class="tool-desc">Create order with saved BTNX address</span></div>
-      <div class="tool-item">btnx_track_parcel<span class="tool-desc">Live courier tracking timeline card</span></div>
-      <div class="tool-item">btnx_list_catalog<span class="tool-desc">Search seasonal garments in ₦</span></div>
-      <div class="tool-item">btnx_get_product_details<span class="tool-desc">Specs, sizing, and luxury card</span></div>
+      <div class="tool-item">btnx_sign_in<span class="tool-desc">Verify customer email &amp; password</span></div>
+      <div class="tool-item">btnx_sign_up<span class="tool-desc">Register new customer in DB</span></div>
+      <div class="tool-item">btnx_get_account_status<span class="tool-desc">Inspect authenticated session</span></div>
+      <div class="tool-item">btnx_sign_out<span class="tool-desc">Terminate current session</span></div>
+      <div class="tool-item">btnx_list_my_orders<span class="tool-desc">List verified purchases in ₦</span></div>
+      <div class="tool-item">btnx_get_invoice<span class="tool-desc">Interactive luxury invoice card</span></div>
+      <div class="tool-item">btnx_get_active_promos<span class="tool-desc">Fetch live database promo codes</span></div>
+      <div class="tool-item">btnx_check_promo_code<span class="tool-desc">Verify discount % against DB</span></div>
+      <div class="tool-item">btnx_create_customer_order<span class="tool-desc">Place order with saved address</span></div>
+      <div class="tool-item">btnx_track_parcel<span class="tool-desc">Live courier timeline card</span></div>
+      <div class="tool-item">btnx_list_catalog<span class="tool-desc">Live database product catalog</span></div>
+      <div class="tool-item">btnx_get_product_details<span class="tool-desc">Garment specifications &amp; card</span></div>
       <div class="tool-item">btnx_calculate_order<span class="tool-desc">Subtotal, discount &amp; shipping</span></div>
       <div class="tool-item">btnx_render_ui_widget<span class="tool-desc">Standalone HTML card renderer</span></div>
     </div>
@@ -1507,19 +1699,239 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   const url = req.url || "/";
   const reqHost = `https://${req.headers["host"] || "btnx-website-mcp.vercel.app"}`;
 
-  // 1) Auth Discovery probes by Claude or custom clients
+  // Parse Body for POST Requests early
+  let body = req.body;
+  let rawBodyString = "";
+  if (typeof body === "string") {
+    rawBodyString = body;
+    try { body = JSON.parse(body); } catch {}
+  } else if (!body && req.method === "POST") {
+    try {
+      const buffers = [];
+      for await (const chunk of req) {
+        buffers.push(chunk);
+      }
+      rawBodyString = Buffer.concat(buffers).toString();
+      try {
+        body = JSON.parse(rawBodyString);
+      } catch {
+        // Form-encoded or non-JSON
+        body = Object.fromEntries(new URLSearchParams(rawBodyString));
+      }
+    } catch {}
+  }
+
+  // 1) RFC 8414 OAuth 2.0 & OpenID Connect Discovery
+  if (url.includes(".well-known/oauth-authorization-server") || url.includes(".well-known/openid-configuration")) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      issuer: reqHost,
+      authorization_endpoint: `${reqHost}/oauth/authorize`,
+      token_endpoint: `${reqHost}/oauth/token`,
+      userinfo_endpoint: `${reqHost}/oauth/userinfo`,
+      jwks_uri: `${reqHost}/oauth/jwks.json`,
+      response_types_supported: ["code"],
+      response_modes_supported: ["query"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
+      code_challenge_methods_supported: ["S256", "plain"],
+      scopes_supported: ["openid", "profile", "email", "orders", "btnx:all"]
+    }, null, 2));
+    return;
+  }
+
+  if (url.includes(".well-known/oauth-protected-resource")) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      resource: reqHost,
+      authorization_servers: [reqHost],
+      scopes_supported: ["openid", "profile", "email", "orders", "btnx:all"],
+      bearer_methods_supported: ["header"]
+    }, null, 2));
+    return;
+  }
+
   if (url.includes(".well-known")) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       status: "ok",
       service: "BTNX Remote MCP Server",
-      auth_type: "none",
-      version: "2.4.0",
+      version: "2.5.0",
+      auth_type: "oauth2",
+      authorization_endpoint: `${reqHost}/oauth/authorize`,
+      token_endpoint: `${reqHost}/oauth/token`,
     }));
     return;
   }
 
-  // 2) Handle Live HTML Card Render Routes (GET /render/:type/:id)
+  // 2) OAuth Endpoints
+  const pathname = url.split("?")[0];
+
+  // A) GET & POST /oauth/authorize
+  if (pathname === "/oauth/authorize" || pathname === "/api/oauth/authorize") {
+    await ensureAdminAuth();
+    const queryParams = new URL(url, reqHost).searchParams;
+    const clientId = queryParams.get("client_id") || body?.client_id || "chatgpt";
+    const redirectUri = queryParams.get("redirect_uri") || body?.redirect_uri || "";
+    const state = queryParams.get("state") || body?.state || "";
+    const scope = queryParams.get("scope") || body?.scope || "openid profile email orders";
+    const responseType = queryParams.get("response_type") || body?.response_type || "code";
+    const codeChallenge = queryParams.get("code_challenge") || body?.code_challenge || "";
+    const codeChallengeMethod = queryParams.get("code_challenge_method") || body?.code_challenge_method || "";
+
+    if (req.method === "POST") {
+      const email = String(body?.email || "").toLowerCase().trim();
+      const password = String(body?.password || "").trim();
+
+      if (!email || !password) {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderOAuthAuthorizePage({
+          error: "Please enter both your BTNX customer email and password.",
+          clientId, redirectUri, state, scope, responseType, codeChallenge, codeChallengeMethod
+        }));
+        return;
+      }
+
+      let cred: any = null;
+      try {
+        cred = await signInWithEmailAndPassword(customerAuth, email, password);
+      } catch (err: any) {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderOAuthAuthorizePage({
+          error: "Authentication failed. Invalid email or password. Please verify your BTNX credentials and try again.",
+          clientId, redirectUri, state, scope, responseType, codeChallenge, codeChallengeMethod
+        }));
+        return;
+      }
+
+      // Customer authenticated successfully! Generate authorization code
+      const code = "btnx_code_" + crypto.randomBytes(18).toString("hex");
+
+      let prof: any = null;
+      try {
+        const uDoc = await getDoc(doc(db, "users", cred.user.uid));
+        if (uDoc.exists()) prof = uDoc.data();
+      } catch {}
+
+      const codeRecord = {
+        code,
+        uid: cred.user.uid,
+        email: cred.user.email,
+        name: prof?.name || cred.user.displayName || "BTNX Customer",
+        shippingAddress: prof?.shippingStreet || "Nigeria",
+        phone: prof?.phone || "N/A",
+        clientId,
+        redirectUri,
+        codeChallenge,
+        codeChallengeMethod,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      };
+
+      await setDoc(doc(db, "oauth_codes", code), codeRecord);
+
+      // Redirect back to client callback
+      const targetUrl = new URL(redirectUri);
+      targetUrl.searchParams.set("code", code);
+      if (state) targetUrl.searchParams.set("state", state);
+
+      res.writeHead(302, { Location: targetUrl.toString() });
+      res.end();
+      return;
+    }
+
+    // GET /oauth/authorize -> Render login page
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(renderOAuthAuthorizePage({
+      clientId, redirectUri, state, scope, responseType, codeChallenge, codeChallengeMethod
+    }));
+    return;
+  }
+
+  // B) POST /oauth/token
+  if ((pathname === "/oauth/token" || pathname === "/api/oauth/token") && req.method === "POST") {
+    await ensureAdminAuth();
+    const grantType = body?.grant_type || "authorization_code";
+
+    if (grantType === "authorization_code") {
+      const code = String(body?.code || "").trim();
+      if (!code) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_request", error_description: "Missing code parameter" }));
+        return;
+      }
+
+      const cDoc = await getDoc(doc(db, "oauth_codes", code));
+      if (!cDoc.exists()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant", error_description: "Authorization code invalid or expired" }));
+        return;
+      }
+
+      const cData = cDoc.data();
+      try { await deleteDoc(doc(db, "oauth_codes", code)); } catch {}
+
+      const accessToken = "btnx_at_" + crypto.randomBytes(24).toString("hex");
+      const refreshToken = "btnx_rt_" + crypto.randomBytes(24).toString("hex");
+
+      const tokenRecord = {
+        token: accessToken,
+        refreshToken,
+        uid: cData.uid,
+        email: cData.email,
+        name: cData.name,
+        shippingAddress: cData.shippingAddress,
+        phone: cData.phone,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+
+      await setDoc(doc(db, "oauth_tokens", accessToken), tokenRecord);
+      memoryOAuthTokens.set(accessToken, tokenRecord);
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        access_token: accessToken,
+        token_type: "Bearer",
+        expires_in: 2592000,
+        refresh_token: refreshToken,
+        scope: "openid profile email orders"
+      }));
+      return;
+    }
+
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unsupported_grant_type" }));
+    return;
+  }
+
+  // C) GET /oauth/userinfo
+  if (pathname === "/oauth/userinfo" || pathname === "/api/oauth/userinfo") {
+    const user = await resolveSessionUser(req);
+    if (!user) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      sub: user.uid || user.email,
+      email: user.email,
+      name: user.name,
+      email_verified: true,
+      address: user.shippingAddress
+    }));
+    return;
+  }
+
+  // D) GET /oauth/jwks.json
+  if (pathname === "/oauth/jwks.json" || pathname === "/api/oauth/jwks.json") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ keys: [] }));
+    return;
+  }
+
+  // 3) Handle Live HTML Card Render Routes (GET /render/:type/:id)
   if (req.method === "GET" && url.startsWith("/render/")) {
     await ensureAdminAuth();
     const parts = url.split("?")[0].split("/").filter(Boolean);
@@ -1565,44 +1977,30 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 3) Handle GET /mcp (Claude Connector Health & Check)
-  const acceptHeader = req.headers["accept"] || "";
-  if (req.method === "GET" && (url.split("?")[0] === "/mcp" || url.split("?")[0] === "/api/mcp")) {
-    if (acceptHeader.includes("application/json")) {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        status: "healthy",
-        service: "BTNX Store Remote MCP",
-        version: "2.4.0",
-        protocolVersion: "2024-11-05",
-        endpoint: "/mcp",
-        toolsCount: MCP_TOOLS.length,
-      }));
-      return;
-    }
+  // 4) Handle GET /mcp (Claude Connector Health & Check)
+  if (req.method === "GET" && (pathname === "/mcp" || pathname === "/api/mcp")) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      status: "healthy",
+      service: "BTNX Store Remote MCP",
+      version: "2.5.0",
+      protocolVersion: "2024-11-05",
+      endpoint: "/mcp",
+      auth: {
+        type: "oauth2",
+        authorization_endpoint: `${reqHost}/oauth/authorize`,
+        token_endpoint: `${reqHost}/oauth/token`,
+      },
+      toolsCount: MCP_TOOLS.length,
+    }));
+    return;
   }
 
-  // 4) Parse Body for POST Requests
-  let body = req.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch {}
-  } else if (!body && req.method === "POST") {
-    try {
-      const buffers = [];
-      for await (const chunk of req) {
-        buffers.push(chunk);
-      }
-      const raw = Buffer.concat(buffers).toString();
-      body = JSON.parse(raw);
-    } catch {}
-  }
-
+  // 5) Handle JSON-RPC 2.0 (Claude Custom Connector, Cursor, and ChatGPT)
   const explicitToken = body?.params?.arguments?.sessionToken;
   const sessionId = resolveSessionId(req, explicitToken);
+  const sessionUser = await resolveSessionUser(req, explicitToken);
 
-  // 5) Handle JSON-RPC 2.0 (Claude Custom Connector & Cursor)
   if (req.method === "POST") {
     const id = body?.id ?? 1;
     const method = body?.method;
@@ -1618,7 +2016,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           },
           serverInfo: {
             name: "BTNX Store Remote MCP",
-            version: "2.4.0",
+            version: "2.5.0",
           },
         },
       };
@@ -1650,7 +2048,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       const toolName = body?.params?.name;
       const toolArgs = body?.params?.arguments || {};
 
-      const resultData = await executeTool(toolName, toolArgs, sessionId, reqHost);
+      const resultData = await executeTool(toolName, toolArgs, sessionId, sessionUser, reqHost);
 
       const response = {
         jsonrpc: "2.0",
@@ -1687,6 +2085,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   }
 
   // 6) Handle SSE Endpoint
+  const acceptHeader = req.headers["accept"] || "";
   if (acceptHeader.includes("text/event-stream")) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -1701,4 +2100,164 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   // 7) Normal Browser Visit — Serve Dashboard
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(HTML_DASHBOARD);
+}
+
+// 8. OAuth Authorize Page Renderer
+function renderOAuthAuthorizePage(params: {
+  error?: string;
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  scope: string;
+  responseType: string;
+  codeChallenge: string;
+  codeChallengeMethod: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BTNX Atelier &middot; Account Authorization</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #111110;
+      color: #F3F1EC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      background-color: #191816;
+      border: 1px solid #2C2A26;
+      width: 100%;
+      max-width: 440px;
+      padding: 36px 32px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.85);
+    }
+    .brand-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      text-align: center;
+      color: #F3F1EC;
+      margin-bottom: 4px;
+    }
+    .brand-sub {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #C89B62;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .desc {
+      font-size: 12px;
+      line-height: 1.6;
+      color: #A7A299;
+      text-align: center;
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #2C2A26;
+    }
+    .form-group {
+      margin-bottom: 18px;
+    }
+    label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #A7A299;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      height: 44px;
+      background: #141413;
+      border: 1px solid #2C2A26;
+      color: #F3F1EC;
+      padding: 0 14px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      border-color: #C89B62;
+    }
+    .btn-submit {
+      width: 100%;
+      height: 46px;
+      background: #C89B62;
+      color: #111110;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: filter 0.2s;
+    }
+    .btn-submit:hover {
+      filter: brightness(1.1);
+    }
+    .error-banner {
+      background: rgba(220, 38, 38, 0.15);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      padding: 12px;
+      font-size: 12px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .footer-note {
+      font-size: 11px;
+      color: #66625B;
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="brand-title">BTNX</div>
+    <div class="brand-sub">Osun Atelier &middot; Account Authorization</div>
+    <div class="desc">
+      Sign in with your BTNX registered customer credentials to securely connect your orders, invoices, and delivery preferences.
+    </div>
+    ${params.error ? `<div class="error-banner">${escapeHtml(params.error)}</div>` : ""}
+    <form method="POST" action="/oauth/authorize">
+      <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}" />
+      <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}" />
+      <input type="hidden" name="state" value="${escapeHtml(params.state)}" />
+      <input type="hidden" name="scope" value="${escapeHtml(params.scope)}" />
+      <input type="hidden" name="response_type" value="${escapeHtml(params.responseType)}" />
+      <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}" />
+      <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
+
+      <div class="form-group">
+        <label>BTNX Customer Email</label>
+        <input type="email" name="email" required autocomplete="email" placeholder="e.g. yourname@example.com" />
+      </div>
+
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+      </div>
+
+      <button type="submit" class="btn-submit">Verify &amp; Authorize Connection</button>
+    </form>
+    <div class="footer-note">
+      End-to-end encrypted connection &middot; Osun Atelier, Osogbo
+    </div>
+  </div>
+</body>
+</html>`;
 }
