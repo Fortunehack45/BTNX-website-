@@ -26,6 +26,18 @@
       "destination": "/assets/$1"
     },
     {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/mcp",
+      "destination": "/api"
+    },
+    {
+      "source": "/render/(.*)",
+      "destination": "/api"
+    },
+    {
       "source": "/(.*)",
       "has": [
         {

@@ -635,8 +635,12 @@ app.get("/render/support/:ticketId", async (req: Request, res: Response) => {
   );
 });
 
-app.listen(PORT, () => {
-  console.log(`[BTNX API] Luxury Store Server running on http://localhost:${PORT}`);
-  console.log(`[BTNX API] Endpoints ready: /api/products, /api/hero-slides, /api/orders, /api/whatsapp/webhook`);
-  console.log(`[BTNX Remote MCP] SSE Endpoint ready: http://localhost:${PORT}/sse (Dashboard: http://localhost:${PORT}/mcp)`);
-});
+if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    console.log(`[BTNX API] Luxury Store Server running on http://localhost:${PORT}`);
+    console.log(`[BTNX API] Endpoints ready: /api/products, /api/hero-slides, /api/orders, /api/whatsapp/webhook`);
+    console.log(`[BTNX Remote MCP] SSE Endpoint ready: http://localhost:${PORT}/sse (Dashboard: http://localhost:${PORT}/mcp)`);
+  });
+}
+
+export default app;
