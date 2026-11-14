@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "build": "tsc",
     "start": "tsx src/index.ts",
     "sandbox": "tsx src/whatsappSandbox.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",

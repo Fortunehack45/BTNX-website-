@@ -24,6 +24,7 @@ import {
   renderSupportTicketHtml,
 } from "./ui/templates.js";
 import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
+import { setupRemoteMcp } from "./mcp.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -45,6 +46,9 @@ app.use(express.static(publicDir));
 app.get("/logo.svg", (_req: Request, res: Response) => res.sendFile(path.join(publicDir, "btnx-logo.svg")));
 app.get("/btnx-logo.svg", (_req: Request, res: Response) => res.sendFile(path.join(publicDir, "btnx-logo.svg")));
 app.get("/logo.png", (_req: Request, res: Response) => res.sendFile(path.join(publicDir, "favicon-512x512.png")));
+
+// Mount Remote Model Context Protocol (MCP) Server for ChatGPT / Claude / Cursor (SSE Protocol)
+setupRemoteMcp(app);
 
 // Health Check
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -624,4 +628,5 @@ app.get("/render/support/:ticketId", async (req: Request, res: Response) => {
 app.listen(PORT, () => {
   console.log(`[BTNX API] Luxury Store Server running on http://localhost:${PORT}`);
   console.log(`[BTNX API] Endpoints ready: /api/products, /api/hero-slides, /api/orders, /api/whatsapp/webhook`);
+  console.log(`[BTNX Remote MCP] SSE Endpoint ready: http://localhost:${PORT}/sse (Dashboard: http://localhost:${PORT}/mcp)`);
 });

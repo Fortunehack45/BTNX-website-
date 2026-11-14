@@ -704,7 +704,7 @@ export default function Support({
         id="customer-service-chat-page"
         className="w-full max-w-[1680px] mx-auto px-0 sm:px-4 lg:px-6 flex-1 flex flex-col py-0 sm:py-6"
       >
-        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border-0 sm:border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-64px)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-64px)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
+        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border-0 sm:border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-3.5rem)] sm:min-h-[calc(100dvh-4rem)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-3.5rem)] sm:max-h-[calc(100dvh-4rem)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
           {/* Clean Single-Row Editorial Chat Header */}
           <div className="px-3.5 sm:px-6 py-3 sm:py-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -838,7 +838,7 @@ export default function Support({
                   } space-y-1.5`}
                 >
                   {/* Quiet Metadata Line (crisp single row with left sender info & right timestamp) */}
-                  <div className="flex items-center justify-between w-full max-w-[92%] sm:max-w-lg text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299] px-0.5 gap-2">
+                  <div className="flex items-center justify-between flex-nowrap w-full max-w-[92%] sm:max-w-lg text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299] px-0.5 gap-2">
                     <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                       <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap shrink-0">
                         {isCustomer ? "You" : msg.senderName}
@@ -1599,7 +1599,7 @@ export default function Support({
           )}
 
           {/* Clean, Non-Chunky Bottom Composer */}
-          <div className="px-3.5 sm:px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] space-y-2 shrink-0">
+          <div className="sticky bottom-0 z-20 px-3.5 sm:px-6 pt-2.5 pb-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] space-y-2 shrink-0">
             <input
               ref={fileInputRef}
               type="file"
