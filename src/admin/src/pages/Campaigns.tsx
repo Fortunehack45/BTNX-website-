@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, doc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import { Loader2, Megaphone, Plus, Trash2, RefreshCw, Eye, Info, Send } from 'lucide-react';
+import AdminSelect from '../components/AdminSelect';
 
 export default function Campaigns() {
   const [activeTab, setActiveTab] = useState<'announcements' | 'broadcasts'>('announcements');
@@ -37,7 +38,7 @@ export default function Campaigns() {
           ]);
         }
       } catch (err) {
-        console.error("Failed to fetch announcements:", err);
+        handleFirestoreError(err, OperationType.GET, 'siteContent/hero');
       }
     };
     fetchAnnouncements();
@@ -70,8 +71,8 @@ export default function Campaigns() {
       setAnnouncementMsg("Rotating banners updated successfully on the storefront!");
       setNewAnnouncement('');
     } catch (err) {
-      console.error("Failed to save announcement:", err);
-      setAnnouncementMsg("Error saving banner. Check internet or permissions.");
+      setUpdatingAnnouncements(false);
+      handleFirestoreError(err, OperationType.WRITE, 'siteContent/hero');
     }
     setUpdatingAnnouncements(false);
   };
@@ -90,8 +91,8 @@ export default function Campaigns() {
       }, { merge: true });
       setAnnouncementMsg("Rotating banner deleted successfully!");
     } catch (err) {
-      console.error("Failed to delete announcement:", err);
-      setAnnouncementMsg("Failed to update banners in database.");
+      setUpdatingAnnouncements(false);
+      handleFirestoreError(err, OperationType.WRITE, 'siteContent/hero');
     }
     setUpdatingAnnouncements(false);
   };
@@ -112,7 +113,8 @@ export default function Campaigns() {
       }, { merge: true });
       setAnnouncementMsg("Banners successfully restored to system defaults.");
     } catch (err) {
-      console.error(err);
+      setUpdatingAnnouncements(false);
+      handleFirestoreError(err, OperationType.WRITE, 'siteContent/hero');
     }
     setUpdatingAnnouncements(false);
   };
@@ -143,11 +145,8 @@ export default function Campaigns() {
       setBroadcastTitle('');
       setBroadcastMessage('');
     } catch (err) {
-      console.error("Failed to broadcast notification:", err);
-      setBroadcastStatus({
-        success: false,
-        message: "Failed to broadcast. Please verify Firestore credentials."
-      });
+      setSubmittingBroadcast(false);
+      handleFirestoreError(err, OperationType.CREATE, 'notifications');
     }
     setSubmittingBroadcast(false);
   };
@@ -362,15 +361,16 @@ export default function Campaigns() {
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Campaign Category</label>
-                  <select
+                  <AdminSelect
                     value={broadcastType}
-                    onChange={(e) => setBroadcastType(e.target.value as any)}
-                    className="w-full text-xs font-semibold px-4 py-3 border border-slate-200 focus:border-slate-900 focus:outline-none rounded-xl bg-white"
-                  >
-                    <option value="promo">Promo & Discount Offers</option>
-                    <option value="new_arrival">New Product Arrivals</option>
-                    <option value="system">Storefront System Alert</option>
-                  </select>
+                    onChange={(val) => setBroadcastType(val as any)}
+                    options={[
+                      { value: "promo", label: "Promo & Discount Offers" },
+                      { value: "new_arrival", label: "New Product Arrivals" },
+                      { value: "system", label: "Storefront System Alert" },
+                    ]}
+                    triggerClassName="w-full text-xs font-semibold px-4 py-3 border border-slate-200 rounded-xl bg-white"
+                  />
                 </div>
               </div>
 

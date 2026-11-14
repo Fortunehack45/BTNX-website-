@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, doc, deleteDoc, setDoc, query, orderBy } from 'firebase/firestore';
 import { Tag, Plus, Trash2, Calendar, Loader2, AlertCircle, RefreshCw, Percent, Sparkles, Layers, Check, Copy } from 'lucide-react';
+import AdminSelect from '../components/AdminSelect';
 
 interface Promo {
   id: string;
@@ -96,11 +97,8 @@ export default function Promos() {
       setLoading(false);
     }, (error) => {
       clearTimeout(timeoutId);
-      console.error("Firestore loading error:", error);
-      const local = loadLocalPromos();
-      setPromos(local);
-      setOfflineMode(true);
       setLoading(false);
+      handleFirestoreError(error, OperationType.LIST, 'promoCodes');
     });
 
     return () => {
@@ -152,8 +150,8 @@ export default function Promos() {
       });
       console.log("Promo successfully added to Firestore");
     } catch (err) {
-      console.warn("Saved locally. Firestore write failed:", err);
-      setOfflineMode(true);
+      setSubmitting(false);
+      handleFirestoreError(err, OperationType.CREATE, `promoCodes/${newPromoId}`);
     }
 
     setSubmitting(false);
@@ -180,8 +178,7 @@ export default function Promos() {
         });
       }
     } catch (err) {
-      console.warn("Could not update in Firestore. Saved locally:", err);
-      setOfflineMode(true);
+      handleFirestoreError(err, OperationType.UPDATE, `promoCodes/${promo.id}`);
     }
   };
 
@@ -197,8 +194,7 @@ export default function Promos() {
         await deleteDoc(doc(db, 'promoCodes', id));
       }
     } catch (err) {
-      console.warn("Could not delete from Firestore. Removed locally:", err);
-      setOfflineMode(true);
+      handleFirestoreError(err, OperationType.DELETE, `promoCodes/${id}`);
     }
   };
 
@@ -278,10 +274,8 @@ export default function Promos() {
       setBulkSuccessMsg(`Successfully generated and uploaded ${qty} codes to the system.`);
       setGeneratedCodes(newGenerated);
     } catch (err) {
-      console.warn("Some codes could not be sent to Firestore, but they are stored locally.", err);
-      setBulkSuccessMsg(`Generated ${qty} codes successfully (saved to offline local backup).`);
-      setGeneratedCodes(newGenerated);
-      setOfflineMode(true);
+      setBulkSubmitting(false);
+      handleFirestoreError(err, OperationType.WRITE, 'promoCodes');
     }
 
     setBulkSubmitting(false);
@@ -488,16 +482,17 @@ export default function Promos() {
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quantity</label>
-                <select
+                <AdminSelect
                   value={bulkQuantity}
-                  onChange={(e) => setBulkQuantity(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-slate-900 text-xs font-semibold bg-white"
-                >
-                  <option value="5">Generate 5 Promo Codes</option>
-                  <option value="10">Generate 10 Promo Codes</option>
-                  <option value="25">Generate 25 Promo Codes</option>
-                  <option value="50">Generate 50 Promo Codes</option>
-                </select>
+                  onChange={(val) => setBulkQuantity(val)}
+                  options={[
+                    { value: "5", label: "Generate 5 Promo Codes" },
+                    { value: "10", label: "Generate 10 Promo Codes" },
+                    { value: "25", label: "Generate 25 Promo Codes" },
+                    { value: "50", label: "Generate 50 Promo Codes" },
+                  ]}
+                  triggerClassName="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                />
               </div>
 
               <div>

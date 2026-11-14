@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Shield, ShieldAlert, UserCheck, Trash2, Search, CheckCircle2, RefreshCw } from 'lucide-react';
 
@@ -23,8 +23,8 @@ export default function Users() {
       setUsers(u);
       setLoading(false);
     }, (err) => {
-      console.error(err);
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'users');
     });
 
     return () => unsub();
@@ -39,8 +39,7 @@ export default function Users() {
           role: nextRole
         });
       } catch (err: any) {
-        console.error(err);
-        alert(`Database Error: ${err.message || 'Failed to update user role.'}`);
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
       } finally {
         setSavingId(null);
       }
@@ -52,8 +51,7 @@ export default function Users() {
       try {
         await deleteDoc(doc(db, 'users', userId));
       } catch (err: any) {
-        console.error(err);
-        alert(`Database Error: ${err.message || 'Failed to delete user.'}`);
+        handleFirestoreError(err, OperationType.DELETE, `users/${userId}`);
       }
     }
   };

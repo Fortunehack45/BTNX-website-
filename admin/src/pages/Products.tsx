@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { Plus, Trash2, Edit, X, Save, AlertCircle, Image as ImageIcon } from 'lucide-react';
 
@@ -59,9 +59,9 @@ export default function Products() {
       setProducts(prods);
       setLoading(false);
     }, (err) => {
-      console.error(err);
       setError("Failed to load products from database.");
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'products');
     });
 
     return () => unsub();
@@ -118,8 +118,7 @@ export default function Products() {
       try {
         await deleteDoc(doc(db, 'products', id));
       } catch (err) {
-        console.error(err);
-        alert("Failed to delete product from database.");
+        handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
       }
     }
   };
@@ -166,8 +165,12 @@ export default function Products() {
       }
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error(err);
       setError(`Database Error: ${err.message || 'Failed to save product.'}`);
+      handleFirestoreError(
+        err,
+        editingProduct ? OperationType.UPDATE : OperationType.CREATE,
+        editingProduct ? `products/${editingProduct.id}` : 'products'
+      );
     }
   };
 

@@ -1,87 +1,206 @@
-import { Twitter, Facebook, Instagram, Anchor } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Monitor, Sun, Moon } from "lucide-react";
+import { motion } from "motion/react";
+import BrandLogo from "./BrandLogo";
+import { useTheme, ThemePreference } from "../context/ThemeContext";
 
-export default function Footer() {
-  const handleSocialClick = (platform: string) => {
-    // Just a placeholder click action
-    console.log(`Social icon clicked: ${platform}`);
+interface FooterProps {
+  onAddToast?: (message: string, type: "success" | "error" | "info") => void;
+  onNavigateHome?: (sectionId?: string) => void;
+}
+
+const THEME_OPTIONS: {
+  value: ThemePreference;
+  label: string;
+  icon: typeof Monitor;
+}[] = [
+  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+];
+
+export default function Footer({ onAddToast, onNavigateHome }: FooterProps) {
+  const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+
+  const handleInfoLink = (label: string) => {
+    if (onAddToast) {
+      onAddToast(`${label} — Contact concierge@btnx.studio for full atelier documentation.`, "info");
+    }
+  };
+
+  const handleSectionLink = (sectionId?: string) => {
+    navigate("/");
+    if (onNavigateHome) {
+      onNavigateHome(sectionId);
+    } else if (sectionId) {
+      setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+      }, 90);
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   return (
-    <footer className="bg-white border-t border-slate-100 py-16" id="footer-section">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8">
-        
-        {/* Top Footer Row */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
-          
-          {/* Brand Logo */}
-          <div className="flex-shrink-0">
-            <a 
-              href="#" 
-              className="font-logo-anton text-4xl tracking-wider text-slate-900 select-none hover:opacity-80 transition-opacity"
+    <footer
+      className="bg-[#FAF9F7] dark:bg-[#111110] pb-20 lg:pb-0 transition-colors duration-200"
+      id="footer-section"
+    >
+      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12">
+        <div className="py-14 sm:py-16 grid grid-cols-1 md:grid-cols-12 gap-10">
+          <div className="md:col-span-5 space-y-4">
+            <button
+              type="button"
+              onClick={() => handleSectionLink()}
+              className="inline-block text-[#141413] dark:text-[#F3F1EC] hover:opacity-80 transition-opacity cursor-pointer"
+              aria-label="BTNX Home"
             >
-              BTNX
-            </a>
+              <BrandLogo className="h-9 w-auto" />
+            </button>
+            <p className="text-xs text-[#66625B] dark:text-[#A7A299] max-w-xs leading-relaxed">
+              Contemporary streetwear and structured outerwear studio. Crafted with architectural discipline and natural-fiber permanence.
+            </p>
           </div>
 
-          {/* Nav Links */}
-          <nav className="flex flex-wrap items-center gap-x-8 gap-y-4">
-            {["About", "Features", "Product", "Affiliates"].map((link) => (
-              <a
-                key={link}
-                href={`#${link.toLowerCase()}`}
-                className="text-sm font-semibold text-slate-500 hover:text-slate-950 transition-colors"
+          <div className="md:col-span-3 space-y-3.5">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#66625B] dark:text-[#A7A299] font-medium">
+              Navigation
+            </p>
+            <nav className="flex flex-col gap-1 text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+              <button
+                type="button"
+                onClick={() => handleSectionLink("new-arrivals")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
               >
-                {link}
-              </a>
-            ))}
-          </nav>
+                New Arrivals
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSectionLink("end-year-sale")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                Seasonal Archive
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSectionLink("collection")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                Collection
+              </button>
+              <Link
+                to="/shop"
+                onClick={() => {
+                  if (onNavigateHome) onNavigateHome();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
+              >
+                Shop Catalog
+              </Link>
+              <Link
+                to="/promos"
+                onClick={() => {
+                  if (onNavigateHome) onNavigateHome();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
+              >
+                Promo Codes
+              </Link>
+              <Link
+                to="/notifications"
+                onClick={() => {
+                  if (onNavigateHome) onNavigateHome();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="py-1.5 hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
+              >
+                Notifications
+              </Link>
+            </nav>
+          </div>
 
-          {/* Social Icons */}
-          <div className="flex items-center space-x-5 text-slate-400">
-            <button
-              onClick={() => handleSocialClick("Twitter")}
-              className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-full transition-colors"
-              aria-label="Twitter"
-            >
-              <Twitter className="w-4 h-4 fill-current stroke-0" />
-            </button>
-            <button
-              onClick={() => handleSocialClick("Facebook")}
-              className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-full transition-colors"
-              aria-label="Facebook"
-            >
-              <Facebook className="w-4 h-4 fill-current stroke-0" />
-            </button>
-            <button
-              onClick={() => handleSocialClick("Instagram")}
-              className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-full transition-colors"
-              aria-label="Instagram"
-            >
-              <Instagram className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleSocialClick("Pinterest")}
-              className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-full transition-colors"
-              aria-label="Pinterest"
-            >
-              <Anchor className="w-4 h-4" /> {/* standard icon for branding style */}
-            </button>
+          <div className="md:col-span-4 space-y-3.5">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-[#66625B] dark:text-[#A7A299] font-medium">
+              Client Services
+            </p>
+            <div className="flex flex-col gap-1 text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+              <button
+                type="button"
+                onClick={() => handleInfoLink("Shipping & Returns")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                Shipping &amp; Returns
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInfoLink("Care & Garment Guide")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                Care &amp; Garment Guide
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInfoLink("Privacy Policy")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                Privacy Policy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInfoLink("Terms of Sale")}
+                className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit cursor-pointer"
+              >
+                Terms of Sale
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Separator Line */}
-        <div className="border-t border-slate-100" />
+        {/* Bottom Utility Bar with Material 3 + Haze 3-Way Theme Switcher */}
+        <div className="py-6 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#66625B] dark:text-[#A7A299]">
+          <p className="order-2 sm:order-1">© 2026 BTNX Studio. All Rights Reserved.</p>
 
-        {/* Bottom copyright row */}
-        <div className="flex flex-col sm:flex-row items-center justify-between pt-8 gap-4 text-xs font-semibold text-slate-400 select-none">
-          <p>© Copyright 2022, All Rights Reserved</p>
-          
-          <div className="flex items-center gap-6">
-            <a href="#privacy" className="hover:text-slate-700 transition-colors">Privacy Policy</a>
-            <a href="#terms" className="hover:text-slate-700 transition-colors">Terms & Conditions</a>
+          <div
+            role="radiogroup"
+            aria-label="Color appearance mode"
+            className="order-1 sm:order-2 inline-flex items-center p-1 rounded-full m3-haze-chip border border-[#E6E2DA] dark:border-[#2C2A26] shadow-xs"
+          >
+            {THEME_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const isSelected = theme === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`${option.label} appearance`}
+                  title={`${option.label} theme`}
+                  onClick={() => setTheme(option.value)}
+                  className={`relative w-9 h-8 rounded-full flex items-center justify-center transition-colors duration-150 cursor-pointer ${
+                    isSelected
+                      ? "text-[#141413] dark:text-[#F3F1EC]"
+                      : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
+                  }`}
+                >
+                  {isSelected && (
+                    <motion.span
+                      layoutId="footer-theme-active-pill"
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-white dark:bg-[#2A2824] border border-[#E6E2DA]/90 dark:border-[#3A3731] shadow-xs"
+                    />
+                  )}
+                  <Icon className="relative z-10 w-3.5 h-3.5 stroke-[1.75]" />
+                </button>
+              );
+            })}
           </div>
-        </div>
 
+          <span className="order-3 tracking-[0.14em] uppercase">Lagos · London · Tokyo</span>
+        </div>
       </div>
     </footer>
   );

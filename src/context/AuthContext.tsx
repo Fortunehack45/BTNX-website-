@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User as FirebaseUser, onAuthStateChanged, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { auth, googleProvider, db } from "../lib/firebase";
+import { auth, googleProvider, db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc } from "firebase/firestore";
 import { User } from "../types";
 
@@ -32,27 +32,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (user) {
-        unsubDoc = onSnapshot(doc(db, "users", user.uid), async (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data() as User;
-            if (user.email === 'fortunedomination@gmail.com' && data.role !== 'admin') {
-              await updateDoc(doc(db, "users", user.uid), { role: 'admin' });
-              data.role = 'admin';
+        const userDocPath = `users/${user.uid}`;
+        unsubDoc = onSnapshot(
+          doc(db, "users", user.uid),
+          async (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data() as User;
+              if (
+                user.email?.toLowerCase() === "fortunedomination@gmail.com" &&
+                user.emailVerified &&
+                data.role !== "admin"
+              ) {
+                try {
+                  await updateDoc(doc(db, "users", user.uid), { role: "admin" });
+                  data.role = "admin";
+                } catch (err) {
+                  handleFirestoreError(err, OperationType.UPDATE, userDocPath);
+                }
+              }
+              setUserData(data);
+            } else {
+              setUserData({
+                id: user.uid,
+                email: user.email || "",
+                name: user.displayName || "New User",
+                role:
+                  user.email?.toLowerCase() === "fortunedomination@gmail.com" && user.emailVerified
+                    ? "admin"
+                    : "customer",
+                createdAt: new Date().toISOString(),
+              });
             }
-            setUserData(data);
-          } else {
-            // User logged in, but doc doesn't exist in Firestore yet (e.g. sign up is in progress).
-            // Populate basic fields to avoid showing blank or demo data.
-            setUserData({
-              id: user.uid,
-              email: user.email || "",
-              name: user.displayName || "New User",
-              role: user.email?.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
-              createdAt: new Date().toISOString()
-            });
+            setLoading(false);
+          },
+          (error) => {
+            setLoading(false);
+            handleFirestoreError(error, OperationType.GET, userDocPath);
           }
-          setLoading(false);
-        });
+        );
       } else {
         setUserData(null);
         setLoading(false);
@@ -67,106 +84,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
-    const userDoc = await getDoc(doc(db, "users", result.user.uid));
-    if (!userDoc.exists()) {
-      await setDoc(doc(db, "users", result.user.uid), {
-        id: result.user.uid,
-        email: result.user.email,
-        name: result.user.displayName || "New User",
-        role: result.user.email?.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
-        createdAt: new Date().toISOString(),
-      });
+    const userDocPath = `users/${result.user.uid}`;
+    let userDoc;
+    try {
+      userDoc = await getDoc(doc(db, "users", result.user.uid));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, userDocPath);
+    }
+    if (userDoc && !userDoc.exists()) {
+      const isBootstrapAdmin =
+        result.user.email?.toLowerCase() === "fortunedomination@gmail.com" &&
+        result.user.emailVerified;
+      try {
+        await setDoc(doc(db, "users", result.user.uid), {
+          id: result.user.uid,
+          email: result.user.email || "",
+          name: result.user.displayName || "New User",
+          role: isBootstrapAdmin ? "admin" : "customer",
+          createdAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, userDocPath);
+      }
 
-      // Add welcome notification
       try {
         await addDoc(collection(db, "notifications"), {
           userId: result.user.uid,
           title: "Welcome to BTNX Atelier!",
-          message: "Thank you for joining the BTNX Atelier. Enjoy premium bespoke designs, seasonal releases, and early access to curated collections. Use promo code BTNX50 in your cart for 50% off!",
+          message:
+            "Thank you for joining the BTNX Atelier. Enjoy premium bespoke designs, seasonal releases, and early access to curated collections. Use promo code BTNX50 in your cart for 50% off!",
           type: "promo",
           isRead: false,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.error("Failed to add welcome notification:", err);
+        handleFirestoreError(err, OperationType.CREATE, "notifications");
       }
     }
   };
 
   const signUpWithEmail = async (email: string, password: string, name: string) => {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const userDocPath = `users/${result.user.uid}`;
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
       await setDoc(doc(db, "users", result.user.uid), {
         id: result.user.uid,
         email,
         name,
-        role: email.toLowerCase() === "fortunedomination@gmail.com" ? "admin" : "customer",
+        role: "customer",
         createdAt: new Date().toISOString(),
       });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, userDocPath);
+    }
 
-      // Add welcome notification
-      try {
-        await addDoc(collection(db, "notifications"), {
-          userId: result.user.uid,
-          title: "Welcome to BTNX Atelier!",
-          message: `Dear ${name}, thank you for joining the BTNX collective. Discover exquisite seasonal garments, tailor-made styles, and dynamic coupon offers directly in your customer vault. Use promo code BTNX50 in your cart for 50% off!`,
-          type: "promo",
-          isRead: false,
-          createdAt: new Date().toISOString()
-        });
-      } catch (err) {
-        console.error("Failed to add welcome notification:", err);
-      }
-    } catch (error) {
-      console.error("Sign up error:", error);
-      throw error;
+    try {
+      await addDoc(collection(db, "notifications"), {
+        userId: result.user.uid,
+        title: "Welcome to BTNX Atelier!",
+        message: `Dear ${name}, thank you for joining the BTNX collective. Discover exquisite seasonal garments, tailor-made styles, and dynamic coupon offers directly in your customer vault. Use promo code BTNX50 in your cart for 50% off!`,
+        type: "promo",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, "notifications");
     }
   };
 
   const signInWithEmail = async (email: string, password: string) => {
     let actualEmail = email.trim();
-    if (actualEmail.toLowerCase() === 'btnx' || actualEmail.toLowerCase() === 'btnx@klamby.com' || actualEmail.toLowerCase() === 'btnx@btnx.com') {
-      actualEmail = 'btnx@btnx.com';
+    if (
+      actualEmail.toLowerCase() === "btnx" ||
+      actualEmail.toLowerCase() === "btnx@klamby.com" ||
+      actualEmail.toLowerCase() === "btnx@btnx.com"
+    ) {
+      actualEmail = "btnx@btnx.com";
     }
-    
-    try {
-      await signInWithEmailAndPassword(auth, actualEmail, password);
-    } catch (error: any) {
-      if (actualEmail === 'btnx@btnx.com' && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
-        try {
-          const result = await createUserWithEmailAndPassword(auth, actualEmail, password);
-          await setDoc(doc(db, "users", result.user.uid), {
-            id: result.user.uid,
-            email: actualEmail,
-            name: "Btnx Admin",
-            role: "admin",
-            createdAt: new Date().toISOString(),
-          });
 
-          // Add welcome notification
-          try {
-            await addDoc(collection(db, "notifications"), {
-              userId: result.user.uid,
-              title: "Welcome to BTNX Administration Panel",
-              message: "Welcome, Administrator. You have successfully initialized the secure BTNX atelier management portal. Here you can configure collections, products, manage incoming client orders, and broadcast store notifications.",
-              type: "system",
-              isRead: false,
-              createdAt: new Date().toISOString()
-            });
-          } catch (err) {
-            console.error("Failed to add admin welcome notification:", err);
-          }
-        } catch (createError: any) {
-          if (createError.code === 'auth/email-already-in-use') {
-            throw error;
-          } else {
-            throw createError;
-          }
-        }
-      } else {
-        throw error;
-      }
-    }
+    await signInWithEmailAndPassword(auth, actualEmail, password);
   };
 
   const logout = async () => {

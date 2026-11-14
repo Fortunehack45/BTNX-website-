@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Package, ShoppingCart, Users as UsersIcon, ArrowLeft, Lock, Mail, ShieldAlert, LogOut, Loader2, Bell, Tag, Megaphone } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { auth, db } from './lib/firebase';
+import { auth, db, OperationType, handleFirestoreError } from './lib/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Dashboard from './pages/Dashboard';
@@ -144,20 +144,23 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        const isBootstrapAdmin =
+          firebaseUser.email?.toLowerCase() === 'fortunedomination@gmail.com' &&
+          firebaseUser.emailVerified;
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           const userData = userDoc.exists() ? userDoc.data() : null;
-          
-          const role = userData?.role || (firebaseUser.email?.toLowerCase() === 'fortunedomination@gmail.com' ? 'admin' : 'customer');
-          
-          if (role === 'admin') {
+          if (userData?.role === 'admin' || isBootstrapAdmin) {
             setIsAdmin(true);
           } else {
             setIsAdmin(false);
           }
         } catch (err) {
-          console.error("Error checking user permissions:", err);
-          setIsAdmin(firebaseUser.email?.toLowerCase() === 'fortunedomination@gmail.com');
+          setIsAdmin(isBootstrapAdmin);
+          if (!isBootstrapAdmin) {
+            setAuthChecking(false);
+            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+          }
         }
       } else {
         setIsAdmin(null);
@@ -315,7 +318,7 @@ export default function App() {
   }
 
   // Render Access Denied if logged in but not an admin
-  if (isAdmin === false) {
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
         <div className="w-full max-w-md bg-slate-900/60 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-md">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { Package, Users, ShoppingCart, DollarSign, ArrowUpRight, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -48,13 +48,13 @@ export default function Dashboard() {
       const unsubProducts = onSnapshot(query(collection(db, 'products')), (snap) => {
         const prodCount = snap.size;
         setStats(s => ({ ...s, products: prodCount }));
-      }, (err) => console.error(err));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'products'));
       
       // Users Listener
       const unsubUsers = onSnapshot(query(collection(db, 'users')), (snap) => {
         const userCount = snap.size;
         setStats(s => ({ ...s, users: userCount }));
-      }, (err) => console.error(err));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
       // Orders Listener
       const unsubOrders = onSnapshot(query(collection(db, 'orders')), (snap) => {
@@ -117,8 +117,8 @@ export default function Dashboard() {
         setTopProducts(sortedTopProds);
         setLoading(false);
       }, (err) => {
-        console.error(err);
         setLoading(false);
+        handleFirestoreError(err, OperationType.LIST, 'orders');
       });
 
       return () => {

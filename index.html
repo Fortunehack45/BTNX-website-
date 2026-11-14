@@ -2,12 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BTNX — Luxury Streetwear & High Fashion Boutique</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/svg+xml" href="/btnx-logo.svg" />
+    <title>BTNX — Contemporary Streetwear &amp; Luxury Boutique</title>
+    <meta name="description" content="BTNX contemporary athletic and luxury streetwear boutique featuring seasonal collections, curated editorial releases, and seamless checkout." />
+    <meta property="og:title" content="BTNX — Contemporary Streetwear &amp; Luxury Boutique" />
+    <meta property="og:description" content="BTNX contemporary athletic and luxury streetwear boutique featuring seasonal collections, curated editorial releases, and seamless checkout." />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("btnx_theme");
+          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (saved === "dark" || (!saved && prefersDark)) {
+            document.documentElement.classList.add("dark");
+            document.documentElement.style.colorScheme = "dark";
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body>
+  <body class="bg-[#FAF9F7] text-[#141413] dark:bg-[#111110] dark:text-[#F3F1EC]">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

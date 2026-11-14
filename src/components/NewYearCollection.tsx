@@ -1,504 +1,448 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Product } from "../types";
+import { Product, CartItem } from "../types";
 import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
-import { Eye, ShoppingBag, Gift, Check, Filter, X } from "lucide-react";
-import LiveCartCounter from "./LiveCartCounter";
+import { getSwatchHex } from "../utils/colors";
+import { getDiscountPercent } from "../utils/invoice";
+import { Eye, ShoppingBag, Check, Copy, Heart, Minus, Plus, ArrowRight } from "lucide-react";
+import { motion } from "motion/react";
+import { Link } from "react-router-dom";
+import GalleryImage from "./GalleryImage";
+import {
+  galleryContainerVariants,
+  galleryCardVariants,
+  EDITORIAL_VIEWPORT,
+} from "../utils/motion";
 
 interface NewYearCollectionProps {
+  cart: CartItem[];
   categoryFilter: string;
+  onCategoryFilter?: (category: string) => void;
   onResetFilter: () => void;
   onOpenProduct: (product: Product) => void;
-  onAddToBag: (product: Product) => void;
+  onAddToBag: (product: Product, size?: string, color?: string) => void;
+  onUpdateQuantity: (productId: string, size: string, color: string, quantity: number) => void;
   onAddToast: (message: string, type: "success" | "error" | "info") => void;
   searchQuery?: string;
+  wishlist?: Product[];
+  onToggleWishlist?: (product: Product) => void;
 }
 
+const FILTER_TABS = [
+  { key: "", label: "All Pieces" },
+  { key: "Women", label: "Womenswear" },
+  { key: "Men", label: "Menswear" },
+  { key: "under-100", label: "Under ₦150,000" },
+];
+
 export default function NewYearCollection({
+  cart,
   categoryFilter,
+  onCategoryFilter,
   onResetFilter,
   onOpenProduct,
   onAddToBag,
+  onUpdateQuantity,
   onAddToast,
   searchQuery = "",
+  wishlist = [],
+  onToggleWishlist,
 }: NewYearCollectionProps) {
   const [isVoucherClaimed, setIsVoucherClaimed] = useState(false);
-  const [voucherCode, setVoucherCode] = useState("");
 
   const handleClaimVoucher = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isVoucherClaimed) {
-      // Copy code
-      navigator.clipboard.writeText("BTNX50");
-      onAddToast("Voucher code 'BTNX50' copied to clipboard!", "success");
-      return;
-    }
-    
+    navigator.clipboard?.writeText("BTNX50").catch(() => {});
     setIsVoucherClaimed(true);
-    setVoucherCode("BTNX50");
-    onAddToast("50% OFF VOUCHER CLAIMED! Use code BTNX50", "success");
+    onAddToast("Private voucher code BTNX50 copied — 50% off in bag.", "success");
   };
 
   const isSearchActive = !!searchQuery.trim();
 
-  // Unified search + filter list
-  const filteredSearchProducts = NEW_YEAR_PRODUCTS.filter((product) => {
+  const matchesCategory = (product: Product) => {
+    if (!categoryFilter) return true;
+    if (categoryFilter === "under-100") return product.price <= 100;
+    if (categoryFilter === "Women") {
+      return product.category.includes("Womenswear") || product.category.includes("Outerwear");
+    }
+    if (categoryFilter === "Men") {
+      return (
+        product.category.includes("Unisex") ||
+        product.id === "ny-2" ||
+        product.id === "ny-3" ||
+        product.id === "ny-6"
+      );
+    }
+    return true;
+  };
+
+  const displayedProducts = NEW_YEAR_PRODUCTS.filter((product) => {
     if (isSearchActive) {
       const q = searchQuery.toLowerCase().trim();
-      const nameMatch = product.name.toLowerCase().includes(q);
-      const descMatch = product.description?.toLowerCase().includes(q);
-      const catMatch = product.category.toLowerCase().includes(q);
-      const badgeMatch = product.badge?.toLowerCase().includes(q);
-      const colorMatch = product.colors?.some((c) => c.toLowerCase().includes(q));
-      if (!nameMatch && !descMatch && !catMatch && !badgeMatch && !colorMatch) return false;
+      const hit =
+        product.name.toLowerCase().includes(q) ||
+        product.category.toLowerCase().includes(q) ||
+        (product.description || "").toLowerCase().includes(q) ||
+        (product.badge || "").toLowerCase().includes(q) ||
+        product.colors?.some((c) => c.toLowerCase().includes(q));
+      if (!hit) return false;
     }
-
-    if (!categoryFilter || categoryFilter === "under-100") return true;
-    if (categoryFilter === "Women" && product.category.includes("Woman")) return true;
-    if (categoryFilter === "Men") {
-      // Birmania or Royale Leather or cropped space as unisex
-      return product.category.includes("Man") || product.id === "ny-3" || product.id === "ny-2" || product.id === "ny-6";
-    }
-    if (categoryFilter === "Kids") {
-      // Map Kids filter to soft pastel hoodie or colors like layorigin
-      return product.id === "ny-4" || product.id === "ny-1";
-    }
-    return true;
+    return matchesCategory(product);
   });
 
-  // Divide the products according to the layout requirements for curated layout:
-  const purpleBrooklyn = NEW_YEAR_PRODUCTS[0];
-  const croppedSpace = NEW_YEAR_PRODUCTS[1];
-  const bottomRowProducts = NEW_YEAR_PRODUCTS.slice(2);
+  const renderProductCard = (product: Product) => {
+    const isSaved = wishlist.some((p) => p.id === product.id);
+    const secondaryImage =
+      product.images && product.images.length > 1 && product.images[1] !== product.image
+        ? product.images[1]
+        : null;
+    const defaultSize = product.sizes?.[0] || "M";
+    const defaultColor = product.colors?.[0] || "Default";
+    const matchingItems = cart.filter((item) => item.product.id === product.id);
+    const totalInBag = matchingItems.reduce((sum, item) => sum + item.quantity, 0);
+    const primaryItem =
+      matchingItems.find(
+        (item) =>
+          (item.selectedSize || "M") === defaultSize &&
+          (item.selectedColor || "Default") === defaultColor
+      ) || matchingItems[0];
+    const discountPct = getDiscountPercent(product.price, product.originalPrice);
 
-  const filteredBottomRow = bottomRowProducts.filter((p) => {
-    if (!categoryFilter || categoryFilter === "under-100") return true;
-    if (categoryFilter === "Women" && p.category.includes("Woman")) return true;
-    if (categoryFilter === "Men") {
-      return p.category.includes("Man") || p.id === "ny-3" || p.id === "ny-6";
-    }
-    if (categoryFilter === "Kids") {
-      return p.id === "ny-4";
-    }
-    return true;
-  });
+    const renderStepper = (compact = false) =>
+      totalInBag > 0 && primaryItem ? (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className={`${
+            compact ? "min-h-[38px] min-w-[104px]" : "flex-1 min-h-[40px]"
+          } border border-[#141413] dark:border-[#F3F1EC]/75 bg-[#FAF9F7] dark:bg-[#22211E] rounded-sm grid grid-cols-3 items-center overflow-hidden shadow-xs`}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUpdateQuantity(
+                product.id,
+                primaryItem.selectedSize || defaultSize,
+                primaryItem.selectedColor || defaultColor,
+                primaryItem.quantity - 1
+              );
+            }}
+            aria-label={`Remove one ${product.name} from bag`}
+            className="h-full flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] hover:bg-[#E6E2DA]/70 dark:hover:bg-[#2E2C28] transition-colors cursor-pointer"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC] text-center tabular-nums select-none">
+            {totalInBag}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToBag(
+                product,
+                primaryItem.selectedSize || defaultSize,
+                primaryItem.selectedColor || defaultColor
+              );
+            }}
+            aria-label={`Add one more ${product.name} to bag`}
+            className="h-full flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] hover:bg-[#E6E2DA]/70 dark:hover:bg-[#2E2C28] transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ) : null;
+
+    return (
+      <motion.article
+        key={product.id}
+        id={`collection-card-${product.id}`}
+        variants={galleryCardVariants}
+        onClick={() => onOpenProduct(product)}
+        className="group cursor-pointer flex flex-col"
+      >
+        <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm mb-4">
+          <GalleryImage
+            src={product.image}
+            alt={product.name}
+            className={`w-full h-full object-cover object-center transition-all duration-700 ease-out ${
+              secondaryImage ? "group-hover:opacity-0" : "group-hover:scale-[1.03]"
+            }`}
+          />
+
+          {secondaryImage && (
+            <GalleryImage
+              src={secondaryImage}
+              alt={`${product.name} editorial view`}
+              className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-700 ease-out"
+            />
+          )}
+
+          {discountPct && (
+            <span className="absolute top-3 left-3 px-2.5 py-1 m3-haze-photo text-[#FAF9F7] font-mono text-[10px] font-medium uppercase tracking-[0.12em] rounded-sm">
+              -{discountPct}%
+            </span>
+          )}
+
+          {onToggleWishlist && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleWishlist(product);
+              }}
+              aria-label={isSaved ? `Remove ${product.name} from saved` : `Save ${product.name}`}
+              className={`absolute top-3 right-3 w-10 h-10 rounded-full m3-haze-chip flex items-center justify-center transition-all duration-200 cursor-pointer shadow-sm ${
+                isSaved
+                  ? "text-[#966830] dark:text-[#C89B62] opacity-100"
+                  : "text-[#141413] dark:text-[#F3F1EC] opacity-100 lg:opacity-0 lg:group-hover:opacity-100 hover:bg-white dark:hover:bg-[#191816]"
+              }`}
+            >
+              <Heart className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
+            </button>
+          )}
+
+          <div className="hidden lg:flex absolute inset-x-3 bottom-3 p-1.5 m3-haze-surface border border-white/40 dark:border-white/12 rounded-sm opacity-0 translate-y-1.5 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenProduct(product);
+              }}
+              className="flex-1 py-2 text-[#141413] dark:text-[#F3F1EC] hover:bg-[#141413]/[0.06] dark:hover:bg-white/[0.08] text-[11px] font-medium uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 rounded-sm transition-colors cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Inspect</span>
+            </button>
+            {totalInBag > 0 ? (
+              renderStepper(false)
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToBag(product, defaultSize, defaultColor);
+                }}
+                className="flex-1 py-2 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-[11px] font-medium uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 rounded-sm transition-colors cursor-pointer"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
+            <span className="truncate">{product.category}</span>
+            {product.badge && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="text-[#966830] dark:text-[#C89B62] shrink-0">{product.badge}</span>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-[16px] font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.01em] truncate">
+              {product.name}
+            </h3>
+            <div className="flex items-baseline gap-1.5 shrink-0">
+              {product.originalPrice && product.originalPrice > product.price && (
+                <span className="font-mono text-xs text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
+                  {formatNaira(product.originalPrice)}
+                </span>
+              )}
+              <span className="font-mono text-sm font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                {formatNaira(product.price)}
+              </span>
+            </div>
+          </div>
+
+          {product.description && (
+            <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed line-clamp-2">
+              {product.description}
+            </p>
+          )}
+
+          <div className="flex items-center justify-between gap-2 pt-1 min-h-[38px]">
+            {product.colors && product.colors.length > 0 ? (
+              <div className="flex items-center gap-1.5" aria-label="Available colorways">
+                {product.colors.map((color) => (
+                  <span
+                    key={color}
+                    title={color}
+                    className="w-3 h-3 rounded-full border border-black/15 dark:border-white/25"
+                    style={{ backgroundColor: getSwatchHex(color) }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <span />
+            )}
+
+            {totalInBag > 0 ? (
+              renderStepper(true)
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToBag(product, defaultSize, defaultColor);
+                }}
+                className="lg:hidden min-h-[38px] inline-flex items-center gap-1.5 px-4 py-2 bg-[#141413] text-[#FAF9F7] dark:bg-[#F3F1EC] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.1em] rounded-sm cursor-pointer"
+              >
+                <ShoppingBag className="w-3 h-3" />
+                <span>Add</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.article>
+    );
+  };
 
   return (
-    <section id="collection" className="bg-slate-50 py-20 border-t border-slate-100">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8">
-        
-        {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
+    <section id="collection" className="w-full bg-white dark:bg-[#191816] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
+      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22 space-y-10 sm:space-y-12">
+        {/* Header + Interactive Filter Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
           <div>
-            <h2 
-              className="font-display text-4xl sm:text-5xl md:text-6xl font-extrabold text-slate-900 tracking-wider uppercase select-none"
+            <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-2">
+              The Collection
+            </span>
+            <h2
               id="collection-heading"
+              className="font-display text-3xl sm:text-4xl lg:text-5xl font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.01em] text-balance"
             >
-              NEW YEAR COLLECTION
+              Seasonal Edition
             </h2>
-            <p className="font-sans text-sm text-slate-500 mt-2 font-medium">
-              Carefully curated seasonal garments selected for ultimate modern styling.
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-4 w-full lg:w-auto">
+            <div
+              className="flex items-center gap-1 p-1 bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm overflow-x-auto no-scrollbar max-w-full border border-[#E6E2DA]/70 dark:border-[#2C2A26]"
+              role="tablist"
+              aria-label="Collection Category Filter"
+            >
+              {FILTER_TABS.map((tab) => {
+                const active = categoryFilter === tab.key;
+                return (
+                  <button
+                    key={tab.label}
+                    type="button"
+                    onClick={() => {
+                      if (tab.key === "") {
+                        onResetFilter();
+                      } else if (onCategoryFilter) {
+                        onCategoryFilter(tab.key);
+                      }
+                    }}
+                    className={`min-h-[38px] px-4 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 transition-all rounded-sm cursor-pointer ${
+                      active
+                        ? "bg-white dark:bg-[#191816] text-[#141413] dark:text-[#F3F1EC] shadow-xs"
+                        : "text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <span className="font-mono text-xs text-[#66625B] dark:text-[#A7A299] tabular-nums whitespace-nowrap">
+              {displayedProducts.length} {displayedProducts.length === 1 ? "Piece" : "Pieces"}
+            </span>
+          </div>
+        </div>
+
+        {isSearchActive && (
+          <div className="px-5 py-3.5 bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm flex items-center justify-between gap-4">
+            <span className="text-xs text-[#66625B] dark:text-[#A7A299]">
+              Showing <strong className="font-mono text-[#141413] dark:text-[#F3F1EC] tabular-nums">{displayedProducts.length}</strong> results for &ldquo;{searchQuery}&rdquo;
+            </span>
+            <button
+              onClick={onResetFilter}
+              className="text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] underline cursor-pointer"
+            >
+              Reset Search
+            </button>
+          </div>
+        )}
+
+        {/* Symmetrical 3-Column Product Gallery */}
+        {displayedProducts.length > 0 ? (
+          <motion.div
+            key={categoryFilter || "all"}
+            id="collection-grid"
+            variants={galleryContainerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={EDITORIAL_VIEWPORT}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12"
+          >
+            {displayedProducts.map(renderProductCard)}
+          </motion.div>
+        ) : (
+          <div id="empty-collection-state" className="py-20 px-6 text-center bg-[#FAF9F7] dark:bg-[#22211E] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
+            <p className="font-display text-2xl text-[#141413] dark:text-[#F3F1EC] mb-2">No pieces match this selection</p>
+            <p className="text-xs text-[#66625B] dark:text-[#A7A299] max-w-md mx-auto mb-6">
+              Try clearing your search or switching back to All Pieces to explore the full seasonal release.
+            </p>
+            <button
+              onClick={onResetFilter}
+              className="px-6 py-3 bg-[#141413] text-white dark:bg-[#F3F1EC] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] rounded-sm cursor-pointer"
+            >
+              Reset All Filters
+            </button>
+          </div>
+        )}
+
+        {/* Full-Width Architectural Privilege Strip */}
+        <div
+          id="voucher-promo-card"
+          className="bg-[#141413] dark:bg-[#12110F] dark:border dark:border-[#C89B62]/30 text-[#FAF9F7] p-8 sm:p-10 lg:px-14 lg:py-12 rounded-sm flex flex-col lg:flex-row lg:items-center justify-between gap-8"
+        >
+          <div className="space-y-2.5 max-w-xl">
+            <span className="text-[11px] uppercase tracking-[0.18em] text-[#C69B62] font-medium block">
+              Private Client Privilege · 50% Reduction
+            </span>
+            <h3 className="font-display text-3xl sm:text-4xl font-medium text-white text-balance">
+              End of Year Archive Privilege
+            </h3>
+            <p className="text-sm text-[#E6E2DA]/80 leading-relaxed">
+              Enter invitation code <span className="font-mono text-white tracking-wider">BTNX50</span> in your shopping bag to receive 50% off selected seasonal garments.
             </p>
           </div>
 
-          {/* Active Filter Pill */}
-          {categoryFilter && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider"
-              id="active-filter-pill"
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={handleClaimVoucher}
+              className="min-h-[48px] px-7 py-4 bg-[#FAF9F7] text-[#141413] hover:bg-white text-xs font-medium uppercase tracking-[0.14em] flex items-center justify-center gap-2.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer rounded-sm"
             >
-              <Filter className="w-3.5 h-3.5" />
-              <span>Viewing: {categoryFilter === "under-100" ? "Under ₦150,000" : categoryFilter}</span>
-              <button 
-                onClick={onResetFilter}
-                className="ml-1.5 p-0.5 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
-                aria-label="Clear Filter"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </motion.div>
-          )}
-        </div>
-
-        {isSearchActive ? (
-          <div>
-            {/* Search metadata */}
-            <div className="mb-8 p-6 bg-white border border-slate-100 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
-              <span className="text-sm text-slate-500 font-medium">
-                Found <span className="text-slate-900 font-extrabold">{filteredSearchProducts.length}</span> matching items for "<span className="text-slate-900 font-bold">{searchQuery}</span>"
-              </span>
-              <button
-                onClick={onResetFilter}
-                className="text-xs text-slate-400 hover:text-slate-900 font-bold uppercase tracking-wider underline transition-colors"
-              >
-                Clear Filters & Search
-              </button>
-            </div>
-
-            {/* Results Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8" id="search-results-grid">
-              <AnimatePresence mode="popLayout">
-                {filteredSearchProducts.map((product) => (
-                  <motion.div
-                    layout
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    key={product.id}
-                    className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onOpenProduct(product)}
-                    id={`search-card-${product.id}`}
-                  >
-                    <div className="relative aspect-[3/4] rounded-2xl overflow-hidden mb-4 bg-slate-50">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                      {product.badge && (
-                        <span className="absolute top-3 left-3 bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm">
-                          {product.badge}
-                        </span>
-                      )}
-                      <LiveCartCounter productId={product.id} />
-                      <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenProduct(product);
-                          }}
-                          className="p-3 bg-white hover:bg-slate-50 text-slate-800 rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Quick View"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAddToBag(product);
-                          }}
-                          className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Add to Bag"
-                        >
-                          <ShoppingBag className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-start pt-1">
-                      <div>
-                        <h4 className="font-sans font-extrabold text-slate-800 text-sm tracking-wide uppercase">
-                          {product.name}
-                        </h4>
-                        <p className="font-sans text-[11px] text-slate-400 font-semibold mt-0.5">
-                          {product.category}
-                        </p>
-                      </div>
-                      <span className="font-display text-xl font-bold text-slate-900">
-                        {formatNaira(product.price)}
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              {filteredSearchProducts.length === 0 && (
-                <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-slate-100" id="empty-search-state">
-                  <div className="max-w-md mx-auto px-4">
-                    <p className="text-slate-800 font-extrabold text-lg uppercase tracking-wider mb-2">No results matched your search</p>
-                    <p className="text-slate-400 font-medium text-xs leading-relaxed mb-6">
-                      Try searching for broader keywords like <span className="font-bold text-slate-600">purple</span>, <span className="font-bold text-slate-600">leather</span>, or <span className="font-bold text-slate-600">cropped</span>, or choose one of our catalog categories in the navigation header.
-                    </p>
-                    <button 
-                      onClick={() => {
-                        onResetFilter();
-                        // Clear search field by triggering window event or similar if needed, or simply clearing filter
-                      }}
-                      className="px-6 py-2.5 bg-slate-900 text-white text-xs font-bold uppercase rounded-full hover:bg-slate-800 transition-colors"
-                    >
-                      Reset All Filters
-                    </button>
-                  </div>
-                </div>
+              {isVoucherClaimed ? (
+                <>
+                  <Check className="w-4 h-4 text-[#966830]" />
+                  <span>Copied: BTNX50</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  <span>Copy Code BTNX50</span>
+                </>
               )}
-            </div>
+            </button>
+
+            <Link
+              to="/promos"
+              className="min-h-[48px] px-6 py-4 border border-white/25 bg-white/8 hover:bg-white/15 backdrop-blur-md text-[#FAF9F7] text-xs font-medium uppercase tracking-[0.14em] flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0 rounded-sm"
+            >
+              <span>All Privileges</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
-        ) : (
-          <>
-            {/* Curated Grid: Large left voucher promo banner, two smaller product cards on the right */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12" id="collection-top-grid">
-              
-              {/* Large Promo Card (END YEAR BIG DEAL) */}
-              <div 
-                className="lg:col-span-2 relative h-[450px] sm:h-[500px] md:h-[520px] lg:h-auto rounded-3xl overflow-hidden shadow-md group cursor-pointer border border-slate-100"
-                id="voucher-promo-card"
-              >
-                {/* Background image */}
-                <img
-                  src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=1200"
-                  alt="End Year Big Deal Promo"
-                  className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-[1200ms]"
-                  referrerPolicy="no-referrer"
-                />
-                {/* Soft dark mask */}
-                <div className="absolute inset-0 bg-black/35 group-hover:bg-black/30 transition-colors duration-300" />
-
-                {/* Inner Content */}
-                <div className="absolute inset-0 flex flex-col items-start justify-end p-8 sm:p-12 text-left">
-                  <span className="bg-rose-500 text-white text-[11px] font-bold uppercase tracking-[0.2em] px-3.5 py-1.5 rounded-full mb-4 shadow-sm flex items-center gap-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-widest">Limited Offer</span>
-                  </span>
-                  <h3 
-                    className="font-display text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-widest uppercase mb-3 leading-none drop-shadow-sm"
-                  >
-                    END YEAR BIG DEAL
-                  </h3>
-                  <p 
-                    className="font-sans text-sm sm:text-base text-slate-100 font-light max-w-sm mb-8 leading-relaxed drop-shadow-xs"
-                  >
-                    With Special Offers Up to 50% off on selected items
-                  </p>
-
-                  <button
-                    onClick={handleClaimVoucher}
-                    className={`px-8 py-3.5 font-bold text-xs tracking-widest rounded-full uppercase shadow-lg transform transition-all duration-300 flex items-center gap-2 ${
-                      isVoucherClaimed
-                        ? "bg-emerald-500 hover:bg-emerald-600 text-white hover:scale-105 active:scale-95"
-                        : "bg-white hover:bg-slate-100 text-slate-900 hover:scale-105 active:scale-95"
-                    }`}
-                  >
-                    {isVoucherClaimed ? (
-                      <>
-                        <Check className="w-4 h-4 text-white" />
-                        <span>CODE: BTNX50 (COPY)</span>
-                      </>
-                    ) : (
-                      <>
-                        <Gift className="w-4 h-4 text-slate-800" />
-                        <span>CLAIM VOUCHER</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Right Column: Purple Brooklyn and Cropped Space Stack */}
-              <div className="flex flex-col sm:flex-row lg:flex-col gap-8" id="top-featured-products">
-                
-                {/* Small Card 1: Purple Brooklyn */}
-                <div 
-                  className="flex-1 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
-                  onClick={() => onOpenProduct(purpleBrooklyn)}
-                  id="featured-product-purple-brooklyn"
-                >
-                  <div className="relative aspect-square sm:aspect-[4/3] lg:aspect-square rounded-2xl overflow-hidden mb-4 bg-slate-50">
-                    <img
-                      src={purpleBrooklyn.image}
-                      alt={purpleBrooklyn.name}
-                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    
-                    {/* Hot badge */}
-                    <span className="absolute top-3 left-3 bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm">
-                      {purpleBrooklyn.badge}
-                    </span>
-
-                    <LiveCartCounter productId={purpleBrooklyn.id} />
-
-                    {/* Quick actions overlay */}
-                    <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenProduct(purpleBrooklyn);
-                        }}
-                        className="p-3 bg-white hover:bg-slate-50 text-slate-800 rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                        title="Quick View"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddToBag(purpleBrooklyn);
-                        }}
-                        className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                        title="Add to Bag"
-                      >
-                        <ShoppingBag className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Title & Price Footer */}
-                  <div className="flex justify-between items-start pt-1">
-                    <div>
-                      <h4 className="font-sans font-extrabold text-slate-800 text-base tracking-wide uppercase">
-                        {purpleBrooklyn.name}
-                      </h4>
-                      <p className="font-sans text-xs text-slate-400 font-semibold mt-0.5">
-                        {purpleBrooklyn.category}
-                      </p>
-                    </div>
-                    <span className="font-display text-2xl font-bold text-slate-900">
-                      {formatNaira(purpleBrooklyn.price)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Small Card 2: Cropped Space */}
-                <div 
-                  className="flex-1 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
-                  onClick={() => onOpenProduct(croppedSpace)}
-                  id="featured-product-cropped-space"
-                >
-                  <div className="relative aspect-square sm:aspect-[4/3] lg:aspect-square rounded-2xl overflow-hidden mb-4 bg-slate-50">
-                    <img
-                      src={croppedSpace.image}
-                      alt={croppedSpace.name}
-                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-
-                    {/* Trending badge */}
-                    <span className="absolute top-3 left-3 bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm">
-                      {croppedSpace.badge}
-                    </span>
-
-                    <LiveCartCounter productId={croppedSpace.id} />
-
-                    {/* Quick actions overlay */}
-                    <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenProduct(croppedSpace);
-                        }}
-                        className="p-3 bg-white hover:bg-slate-50 text-slate-800 rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                        title="Quick View"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddToBag(croppedSpace);
-                        }}
-                        className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                        title="Add to Bag"
-                      >
-                        <ShoppingBag className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Title & Price Footer */}
-                  <div className="flex justify-between items-start pt-1">
-                    <div>
-                      <h4 className="font-sans font-extrabold text-slate-800 text-base tracking-wide uppercase">
-                        {croppedSpace.name}
-                      </h4>
-                      <p className="font-sans text-xs text-slate-400 font-semibold mt-0.5">
-                        {croppedSpace.category}
-                      </p>
-                    </div>
-                    <span className="font-display text-2xl font-bold text-slate-900">
-                      {formatNaira(croppedSpace.price)}
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Bottom Grid: 4-Column Row of core products */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8" id="collection-bottom-grid">
-              <AnimatePresence mode="popLayout">
-                {filteredBottomRow.map((product) => (
-                  <motion.div
-                    layout
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    key={product.id}
-                    className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onOpenProduct(product)}
-                    id={`product-card-${product.id}`}
-                  >
-                    {/* Product Frame */}
-                    <div className="relative aspect-[3/4] rounded-2xl overflow-hidden mb-4 bg-slate-50">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-
-                      <LiveCartCounter productId={product.id} />
-
-                      {/* Actions cover */}
-                      <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenProduct(product);
-                          }}
-                          className="p-3 bg-white hover:bg-slate-50 text-slate-800 rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Quick View"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAddToBag(product);
-                          }}
-                          className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Add to Bag"
-                        >
-                          <ShoppingBag className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Footer Label */}
-                    <div className="flex justify-between items-start pt-1">
-                      <div>
-                        <h4 className="font-sans font-extrabold text-slate-800 text-sm tracking-wide uppercase">
-                          {product.name}
-                        </h4>
-                        <p className="font-sans text-[11px] text-slate-400 font-semibold mt-0.5">
-                          {product.category}
-                        </p>
-                      </div>
-                      <span className="font-display text-xl font-bold text-slate-900">
-                        {formatNaira(product.price)}
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              {filteredBottomRow.length === 0 && (
-                <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-100" id="empty-collection-state">
-                  <p className="text-slate-400 font-medium">No products found in this category.</p>
-                  <button 
-                    onClick={onResetFilter}
-                    className="mt-4 px-6 py-2 bg-slate-900 text-white text-xs font-bold uppercase rounded-full hover:bg-slate-800 transition-colors"
-                  >
-                    Clear Filters
-                  </button>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
+        </div>
       </div>
     </section>
   );

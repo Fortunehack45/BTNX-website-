@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
 import { Eye, X, Check, AlertCircle, ShoppingBag, Truck, CheckCircle2, RefreshCw } from 'lucide-react';
+import AdminSelect from '../components/AdminSelect';
 
 interface OrderItem {
   product?: {
@@ -49,9 +50,9 @@ export default function Orders() {
       setOrders(fetchedOrders);
       setLoading(false);
     }, (err) => {
-      console.error(err);
       setError("Failed to stream orders from database.");
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'orders');
     });
 
     return () => unsub();
@@ -68,8 +69,7 @@ export default function Orders() {
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
       }
     } catch (err: any) {
-      console.error(err);
-      alert(`Failed to update status in database: ${err.message}`);
+      handleFirestoreError(err, OperationType.UPDATE, `orders/${orderId}`);
     } finally {
       setSavingStatus(null);
     }
@@ -158,12 +158,13 @@ export default function Orders() {
 
                       {/* Dynamic Status update */}
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <select
+                        <div className="flex items-center gap-2 min-w-[140px]">
+                          <AdminSelect
                             value={order.status || "Pending"}
-                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                            onChange={(val) => handleStatusChange(order.id, val)}
                             disabled={savingStatus === order.id}
-                            className={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border focus:outline-none transition-all ${
+                            options={STATUSES.map((st) => ({ value: st, label: st }))}
+                            triggerClassName={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border focus:outline-none transition-all ${
                               savingStatus === order.id ? 'opacity-50' : ''
                             } ${
                               ['Completed', 'Delivered', 'delivered'].includes(order.status || '') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
@@ -171,13 +172,9 @@ export default function Orders() {
                               ['Cancelled', 'cancelled'].includes(order.status || '') ? 'bg-rose-50 text-rose-700 border-rose-200' :
                               'bg-slate-50 text-slate-700 border-slate-200'
                             }`}
-                          >
-                            {STATUSES.map(st => (
-                              <option key={st} value={st}>{st}</option>
-                            ))}
-                          </select>
+                          />
                           {savingStatus === order.id && (
-                            <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                            <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin shrink-0" />
                           )}
                         </div>
                       </td>
@@ -234,16 +231,13 @@ export default function Orders() {
                 <div className="space-y-1">
                   <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Current Status</p>
                   <div className="flex items-center gap-2">
-                    <select
+                    <AdminSelect
                       value={selectedOrder.status || "Pending"}
-                      onChange={(e) => handleStatusChange(selectedOrder.id, e.target.value)}
+                      onChange={(val) => handleStatusChange(selectedOrder.id, val)}
                       disabled={savingStatus === selectedOrder.id}
-                      className="font-mono font-bold uppercase text-[11px] bg-white border border-slate-200 px-2.5 py-1 rounded focus:outline-none"
-                    >
-                      {STATUSES.map(st => (
-                        <option key={st} value={st}>{st}</option>
-                      ))}
-                    </select>
+                      options={STATUSES.map((st) => ({ value: st, label: st }))}
+                      triggerClassName="font-mono font-bold uppercase text-[11px] bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg"
+                    />
                   </div>
                 </div>
                 <div className="space-y-1 col-span-2 border-t border-slate-150 pt-3">

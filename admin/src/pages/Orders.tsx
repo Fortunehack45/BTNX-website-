@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
 import { Eye, X, Check, AlertCircle, ShoppingBag, Truck, CheckCircle2, RefreshCw } from 'lucide-react';
 
@@ -49,9 +49,9 @@ export default function Orders() {
       setOrders(fetchedOrders);
       setLoading(false);
     }, (err) => {
-      console.error(err);
       setError("Failed to stream orders from database.");
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'orders');
     });
 
     return () => unsub();
@@ -68,8 +68,7 @@ export default function Orders() {
         setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
       }
     } catch (err: any) {
-      console.error(err);
-      alert(`Failed to update status in database: ${err.message}`);
+      handleFirestoreError(err, OperationType.UPDATE, `orders/${orderId}`);
     } finally {
       setSavingStatus(null);
     }

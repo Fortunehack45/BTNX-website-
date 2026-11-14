@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { Bell, Plus, Trash2, Tag, Truck, Sparkles, Megaphone, Search, X, Loader2, Info, MapPin, User } from 'lucide-react';
 
@@ -33,8 +33,8 @@ export default function Notifications() {
       setNotifications(list);
       setLoading(false);
     }, (err) => {
-      console.error("Failed to stream notifications:", err);
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'notifications');
     });
 
     return () => unsub();
@@ -65,8 +65,8 @@ export default function Notifications() {
       setType('promo');
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error("Failed to create broadcast notification:", err);
       setError(err.message || "Failed to submit broadcast.");
+      handleFirestoreError(err, OperationType.CREATE, 'notifications');
     } finally {
       setSubmitting(false);
     }
@@ -77,8 +77,7 @@ export default function Notifications() {
       try {
         await deleteDoc(doc(db, 'notifications', notifId));
       } catch (err: any) {
-        console.error("Failed to delete notification:", err);
-        alert(err.message || "Failed to delete notification.");
+        handleFirestoreError(err, OperationType.DELETE, `notifications/${notifId}`);
       }
     }
   };

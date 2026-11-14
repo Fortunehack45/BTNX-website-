@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Mail, Check } from "lucide-react";
-import { db } from "../lib/firebase";
+import { Check, ArrowRight } from "lucide-react";
+import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
+import { ATELIER_BACKDROP } from "../data";
+import GalleryImage from "./GalleryImage";
 
 interface NewsletterProps {
   onAddToast: (message: string, type: "success" | "error" | "info") => void;
@@ -16,7 +17,7 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !email.includes("@")) {
-      onAddToast("Please provide a valid email address.", "error");
+      onAddToast("Please enter a valid email address.", "error");
       return;
     }
 
@@ -26,120 +27,95 @@ export default function Newsletter({ onAddToast }: NewsletterProps) {
         email: email.trim().toLowerCase(),
         createdAt: new Date().toISOString(),
       });
-      setIsSubmitting(false);
       setIsSubscribed(true);
-      onAddToast(`Welcome to the BTNX newsletter: ${email}!`, "success");
+      onAddToast(`Subscribed ${email} to BTNX dispatches.`, "success");
     } catch (err) {
-      console.error("Newsletter error", err);
-      onAddToast("Something went wrong. Please try again later.", "error");
+      onAddToast("Unable to subscribe right now. Please try again.", "error");
+      handleFirestoreError(err, OperationType.CREATE, "newsletters");
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <section id="newsletter" className="relative w-full bg-slate-950 overflow-hidden select-none">
-      
-      {/* Background Frame with Vignette Overlay */}
-      <div className="absolute inset-0 select-none">
-        <img
-          src="https://images.unsplash.com/photo-1516257984-b1b4d707412e?q=80&w=1800"
-          alt="Streetwear high-fashion city models"
-          className="w-full h-full object-cover object-center"
-          referrerPolicy="no-referrer"
-          id="newsletter-bg-img"
-        />
-        {/* Soft dark vignette overlay from left to right to prioritize text readability */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-black/30" />
-      </div>
+    <section id="newsletter" className="w-full bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
+      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm overflow-hidden">
+          {/* Atelier Photography Left */}
+          <div className="lg:col-span-6 aspect-[16/10] lg:aspect-[4/3] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden">
+            <GalleryImage
+              src={ATELIER_BACKDROP.image}
+              alt={ATELIER_BACKDROP.alt}
+              id="newsletter-bg-img"
+              className="w-full h-full object-cover object-center"
+            />
+          </div>
 
-      {/* Content Container aligned inside standard max-w-7xl page borders */}
-      <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-[450px] sm:h-[500px] md:h-[550px] lg:h-[600px] flex items-center justify-start">
-        
-        <div className="max-w-2xl text-left flex flex-col items-start">
-          <AnimatePresence mode="wait">
+          {/* Editorial Newsletter Form Right */}
+          <div className="lg:col-span-6 p-6 sm:p-12 lg:p-14 flex flex-col justify-center">
+            <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium mb-3">
+              Private Dispatch
+            </span>
+
             {!isSubscribed ? (
-              <motion.div
-                key="newsletter-form"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.5 }}
-                className="flex flex-col items-start text-left"
-              >
-                {/* Title */}
-                <h2 
-                  className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-[70px] font-extrabold text-white leading-[1.05] tracking-widest uppercase mb-4"
+              <div className="max-w-md space-y-5">
+                <h2
                   id="newsletter-heading"
+                  className="font-display text-3xl sm:text-4xl font-medium text-[#141413] dark:text-[#F3F1EC] leading-[1.08] text-balance"
                 >
-                  STAY UP TO DATE BY <br /> JOINING OUR NEWSLETTER
+                  Receive seasonal lookbooks and private archive releases.
                 </h2>
 
-                {/* Description */}
-                <p 
-                  className="font-sans text-sm sm:text-base text-slate-300 font-light tracking-wide max-w-xl mb-8 leading-relaxed"
-                  id="newsletter-desc"
-                >
-                  Get The Latest Collection From BTNX, And Collect Lots Of Discount Vouchers
+                <p id="newsletter-desc" className="text-sm text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+                  Subscribers receive early access to limited garment runs and private atelier invitations.
                 </p>
 
-                {/* Email Form */}
-                <form 
-                  onSubmit={handleSubmit} 
-                  className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md sm:bg-white/10 sm:backdrop-blur-md p-1.5 rounded-full border border-white/10 shadow-lg"
-                  id="newsletter-email-form"
-                >
-                  <div className="relative flex-1 w-full sm:w-auto">
+                <form onSubmit={handleSubmit} id="newsletter-email-form" className="pt-2">
+                  <div className="flex flex-col sm:flex-row border border-[#141413]/85 dark:border-[#2C2A26] focus-within:border-[#141413] dark:focus-within:border-[#F3F1EC] rounded-sm overflow-hidden bg-[#FAF9F7] dark:bg-[#22211E]">
                     <input
                       type="email"
                       placeholder="Enter your email address"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={isSubmitting}
-                      className="w-full bg-white/15 sm:bg-transparent text-white placeholder-slate-300 text-sm py-3.5 pl-12 pr-4 rounded-full outline-none border border-white/20 sm:border-transparent focus:bg-black/20 focus:border-white/20 sm:focus:border-transparent transition-all font-medium"
                       required
+                      className="flex-1 min-h-[44px] px-4 py-3 text-sm text-[#141413] dark:text-[#F3F1EC] placeholder-[#66625B] dark:placeholder-[#A7A299] bg-transparent outline-none"
                     />
-                    <Mail className="absolute left-4.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="min-h-[44px] px-6 py-3 bg-[#141413] text-[#FAF9F7] hover:bg-[#2B2A28] dark:bg-[#F3F1EC] dark:text-[#141413] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>{isSubmitting ? "Joining..." : "Subscribe"}</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full sm:w-auto px-8 py-3.5 bg-white text-slate-900 hover:bg-slate-100 font-bold text-xs tracking-widest rounded-full uppercase shadow-md transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {isSubmitting ? "JOINING..." : "JOIN NOW"}
-                  </button>
                 </form>
-              </motion.div>
+              </div>
             ) : (
-              <motion.div
-                key="newsletter-success"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: "spring", duration: 0.6 }}
-                className="bg-white/10 backdrop-blur-md p-8 sm:p-12 rounded-3xl border border-white/15 max-w-md text-center shadow-2xl"
-              >
-                <div className="mx-auto w-16 h-16 bg-white text-slate-900 rounded-full flex items-center justify-center mb-6 shadow-md">
-                  <Check className="w-8 h-8" />
+              <div className="max-w-md space-y-4">
+                <div className="w-10 h-10 border border-[#141413] dark:border-[#F3F1EC] rounded-sm flex items-center justify-center">
+                  <Check className="w-4 h-4 text-[#141413] dark:text-[#F3F1EC]" />
                 </div>
-                <h3 className="font-display text-3xl font-extrabold text-white uppercase tracking-wider mb-2 flex items-center justify-center gap-2">
-                  <span className="font-bold">Subscribed!</span>
+                <h3 className="font-display text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
+                  Subscription Confirmed
                 </h3>
-                <p className="font-sans text-sm text-slate-200 font-light leading-relaxed mb-6">
-                  You are now on the official BTNX VVIP list. Check your inbox for your first voucher details.
+                <p className="text-sm text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+                  Your address is registered for upcoming BTNX atelier dispatches and private releases.
                 </p>
                 <button
                   onClick={() => {
                     setIsSubscribed(false);
                     setEmail("");
                   }}
-                  className="px-6 py-2 bg-white/20 hover:bg-white/30 text-white font-semibold text-xs tracking-widest rounded-full uppercase transition-colors"
+                  className="text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] hover:text-[#966830] dark:hover:text-[#C89B62] underline cursor-pointer"
                 >
-                  Subscribe another email
+                  Register another address
                 </button>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
-
       </div>
     </section>
   );

@@ -1,83 +1,92 @@
+import { ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 import { END_YEAR_SALES } from "../data";
+import GalleryImage from "./GalleryImage";
+import {
+  galleryContainerVariants,
+  galleryCardVariants,
+  EDITORIAL_VIEWPORT,
+} from "../utils/motion";
 
 interface BigSaleProps {
   onCategoryFilter: (category: string) => void;
-  onAddToast: (message: string, type: "success" | "error" | "info") => void;
 }
 
-export default function BigSale({ onCategoryFilter, onAddToast }: BigSaleProps) {
+export default function BigSale({ onCategoryFilter }: BigSaleProps) {
   const handleSaleClick = (title: string) => {
-    if (title === "THE MODERN CLASSIC") {
+    if (title === "The Modern Classic") {
       onCategoryFilter("Women");
     } else {
       onCategoryFilter("Men");
     }
-
-    const collectionSection = document.getElementById("collection");
-    if (collectionSection) {
-      collectionSection.scrollIntoView({ behavior: "smooth" });
-    }
+    document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
-    <section id="end-year-sale" className="bg-white max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 py-16">
-      
-      {/* Section Title */}
-      <div className="mb-10 flex items-center gap-3">
-        <h2 
-          className="font-display text-4xl sm:text-5xl md:text-6xl font-extrabold text-slate-900 tracking-wider uppercase select-none"
-          id="sale-heading"
+    <section id="end-year-sale" className="w-full bg-[#FAF9F7] dark:bg-[#111110] border-b border-[#E6E2DA] dark:border-[#2C2A26] transition-colors duration-200">
+      <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-12 py-16 sm:py-22">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-10 mb-10 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
+          <div>
+            <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-2">
+              Seasonal Archive
+            </span>
+            <h2
+              id="sale-heading"
+              className="font-display text-3xl sm:text-4xl lg:text-5xl font-medium text-[#141413] dark:text-[#F3F1EC] tracking-[-0.01em] text-balance"
+            >
+              End of Season Focus
+            </h2>
+          </div>
+          <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-sm leading-relaxed">
+            Two distinct wardrobe directions curated from the 2026 studio archives.
+          </p>
+        </div>
+
+        <motion.div
+          id="sale-cards-grid"
+          variants={galleryContainerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={EDITORIAL_VIEWPORT}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10"
         >
-          END YEAR BIG SALE
-        </h2>
-      </div>
+          {END_YEAR_SALES.map((sale) => (
+            <motion.article
+              key={sale.id}
+              id={`sale-card-${sale.id}`}
+              variants={galleryCardVariants}
+              onClick={() => handleSaleClick(sale.title)}
+              className="relative min-h-[340px] sm:aspect-[16/10] lg:aspect-[4/3] w-full overflow-hidden cursor-pointer group bg-[#141413] rounded-sm"
+            >
+              <GalleryImage
+                src={sale.image}
+                alt={sale.title}
+                className="w-full h-full object-cover object-center group-hover:scale-[1.03] transition-transform duration-700 ease-out"
+              />
+              <div className="absolute inset-0 editorial-scrim-bottom pointer-events-none" />
 
-      {/* Grid container */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8" id="sale-cards-grid">
-        {END_YEAR_SALES.map((sale) => (
-          <motion.div
-            key={sale.id}
-            whileHover={{ scale: 0.99 }}
-            transition={{ duration: 0.4 }}
-            className="relative h-[480px] sm:h-[560px] md:h-[620px] rounded-3xl overflow-hidden shadow-lg cursor-pointer group"
-            onClick={() => handleSaleClick(sale.title)}
-            id={`sale-card-${sale.id}`}
-          >
-            {/* Image */}
-            <img
-              src={sale.image}
-              alt={sale.title}
-              className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-[1200ms] ease-out"
-              referrerPolicy="no-referrer"
-            />
-
-            {/* Dark contrast filter overlay */}
-            <div className="absolute inset-0 bg-black/45 group-hover:bg-black/40 transition-colors duration-300" />
-
-            {/* Content centered or aligned beautifully */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 sm:p-12">
-              <motion.h3 
-                className="font-display text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-widest uppercase mb-4 leading-tight drop-shadow-md select-none"
-              >
-                {sale.title}
-              </motion.h3>
-              
-              <p 
-                className="font-sans text-sm sm:text-base text-slate-200 max-w-sm mb-8 font-light leading-relaxed tracking-wide drop-shadow-sm select-none"
-              >
-                {sale.description}
-              </p>
-
-              <button
-                className="px-8 py-3 bg-transparent text-white border border-white/70 hover:border-white font-semibold text-sm rounded-full tracking-widest hover:bg-white/10 active:scale-95 transition-all duration-200"
-                aria-label={sale.buttonText}
-              >
-                {sale.buttonText.toUpperCase()}
-              </button>
-            </div>
-          </motion.div>
-        ))}
+              <div className="absolute inset-0 p-6 sm:p-10 flex flex-col justify-end text-left">
+                <span className="text-[11px] uppercase tracking-[0.16em] text-[#E6C08A] mb-1.5">
+                  {sale.index}
+                </span>
+                <h3 className="font-display text-3xl sm:text-4xl font-medium text-white mb-2">
+                  {sale.title}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#E6E2DA]/90 max-w-md mb-5 leading-relaxed">
+                  {sale.description}
+                </p>
+                <button
+                  type="button"
+                  aria-label={sale.buttonText}
+                  className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-white border-b border-white/60 pb-1 group-hover:border-white w-fit transition-colors cursor-pointer"
+                >
+                  <span>{sale.buttonText}</span>
+                  <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                </button>
+              </div>
+            </motion.article>
+          ))}
+        </motion.div>
       </div>
     </section>
   );

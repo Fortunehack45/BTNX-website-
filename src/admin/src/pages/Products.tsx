@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { Plus, Trash2, Edit, X, Save, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import AdminSelect from '../components/AdminSelect';
 
 interface Product {
   id: string;
@@ -59,9 +60,9 @@ export default function Products() {
       setProducts(prods);
       setLoading(false);
     }, (err) => {
-      console.error(err);
       setError("Failed to load products from database.");
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'products');
     });
 
     return () => unsub();
@@ -118,8 +119,7 @@ export default function Products() {
       try {
         await deleteDoc(doc(db, 'products', id));
       } catch (err) {
-        console.error(err);
-        alert("Failed to delete product from database.");
+        handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
       }
     }
   };
@@ -166,8 +166,12 @@ export default function Products() {
       }
       setIsModalOpen(false);
     } catch (err: any) {
-      console.error(err);
       setError(`Database Error: ${err.message || 'Failed to save product.'}`);
+      handleFirestoreError(
+        err,
+        editingProduct ? OperationType.UPDATE : OperationType.CREATE,
+        editingProduct ? `products/${editingProduct.id}` : 'products'
+      );
     }
   };
 
@@ -356,15 +360,12 @@ export default function Products() {
                       {/* Category */}
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">Collection Segment</label>
-                        <select
+                        <AdminSelect
                           value={formData.category}
-                          onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                          className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:border-slate-950 transition-colors"
-                        >
-                          {CATEGORIES.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
+                          onChange={val => setFormData(prev => ({ ...prev, category: val }))}
+                          options={CATEGORIES.map(cat => ({ value: cat, label: cat }))}
+                          triggerClassName="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-white transition-colors"
+                        />
                       </div>
 
                       {/* Badge */}

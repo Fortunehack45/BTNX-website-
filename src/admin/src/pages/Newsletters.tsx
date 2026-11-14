@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { Mail, Loader2, Trash2 } from 'lucide-react';
 
@@ -20,8 +20,8 @@ export default function Newsletters() {
       setRequests(list);
       setLoading(false);
     }, (err) => {
-      console.error(err);
       setLoading(false);
+      handleFirestoreError(err, OperationType.LIST, 'newsletters');
     });
     return () => unsub();
   }, []);
@@ -31,7 +31,7 @@ export default function Newsletters() {
     try {
       await deleteDoc(doc(db, 'newsletters', id));
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, `newsletters/${id}`);
     }
   };
 
