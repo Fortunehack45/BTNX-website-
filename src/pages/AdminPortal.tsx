@@ -32,7 +32,10 @@ import {
   Eye,
   Sparkles,
   ZoomIn,
+  Truck,
+  Sliders,
 } from "lucide-react";
+import { Product, Order, StoreShippingSettings } from "../types";
 import {
   auth,
   db,
@@ -61,7 +64,6 @@ import BrandLogo from "../components/BrandLogo";
 import GalleryImage from "../components/GalleryImage";
 import { useTheme, ThemePreference } from "../context/ThemeContext";
 import { NEW_YEAR_PRODUCTS } from "../data";
-import { Product, Order } from "../types";
 import { formatNaira } from "../utils/currency";
 import { downloadOrderInvoice } from "../utils/invoice";
 import {
@@ -82,6 +84,8 @@ type AdminTab =
   | "support"
   | "orders"
   | "products"
+  | "hero"
+  | "shipping"
   | "promos"
   | "campaigns"
   | "clients";
@@ -235,8 +239,35 @@ export default function AdminPortal() {
     sizes: ["S", "M", "L", "XL"] as string[],
     colors: ["Black", "Off-White"] as string[],
     stock: "45",
+    // Dynamic Attributes
+    fabricAndCare: "",
+    fitDetails: "",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Cotton Garment Box",
+    returnPolicy: "14-Day Free Exchanges",
+    shippingFee: "",
+    isFreeShipping: false,
+    // Hero Showcase Pinning
+    isPinnedHero: false,
+    heroOrder: "1",
+    heroHeadline: "",
+    heroSubheadline: "",
+    heroLookNumber: "Look 01",
+    heroImage: "",
   });
   const productFileInputRef = useRef<HTMLInputElement>(null);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Global Shipping & Logistics State
+  const [shippingSettings, setShippingSettings] = useState<StoreShippingSettings>({
+    defaultShippingFee: 3500,
+    freeShippingThreshold: 150000,
+    isFreeShippingGlobal: false,
+    defaultDeliveryTimeline: "2–4 Business Days",
+    defaultPackagingType: "Cotton Garment Box",
+    defaultReturnPolicy: "14-Day Free Exchanges",
+  });
+  const [isSavingShipping, setIsSavingShipping] = useState(false);
 
   // Promo Form State
   const [newPromoCode, setNewPromoCode] = useState("");
@@ -260,6 +291,39 @@ export default function AdminPortal() {
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3200);
+  };
+
+  // Shipping Settings listener
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(doc(db, "settings", "shipping"), (snapshot) => {
+        if (snapshot.exists()) {
+          setShippingSettings(snapshot.data() as StoreShippingSettings);
+        }
+      });
+      return () => unsub();
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSaveShippingSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingShipping(true);
+    try {
+      const payload: StoreShippingSettings = {
+        ...shippingSettings,
+        defaultShippingFee: Number(shippingSettings.defaultShippingFee) || 0,
+        freeShippingThreshold: Number(shippingSettings.freeShippingThreshold) || 0,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, "settings", "shipping"), payload);
+      showToast("Store shipping & logistics policies updated.");
+    } catch {
+      showToast("Failed to save shipping settings to database.");
+    } finally {
+      setIsSavingShipping(false);
+    }
   };
 
   // Auth listener
@@ -767,6 +831,19 @@ export default function AdminPortal() {
       sizes: ["S", "M", "L", "XL"],
       colors: ["Black", "Off-White"],
       stock: "45",
+      fabricAndCare: "Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets. Built to layer easily over tees or knits.",
+      fitDetails: "Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean.",
+      deliveryTimeline: "2–4 Business Days",
+      packagingType: "Cotton Garment Box",
+      returnPolicy: "14-Day Free Exchanges",
+      shippingFee: "",
+      isFreeShipping: false,
+      isPinnedHero: false,
+      heroOrder: "1",
+      heroHeadline: "",
+      heroSubheadline: "",
+      heroLookNumber: "Look 01",
+      heroImage: "",
     });
     setIsProductModalOpen(true);
   };
@@ -784,6 +861,19 @@ export default function AdminPortal() {
       sizes: prod.sizes || ["S", "M", "L"],
       colors: prod.colors || ["Black"],
       stock: String(prod.stock ?? 45),
+      fabricAndCare: prod.fabricAndCare || "",
+      fitDetails: prod.fitDetails || "",
+      deliveryTimeline: prod.deliveryTimeline || "2–4 Business Days",
+      packagingType: prod.packagingType || "Cotton Garment Box",
+      returnPolicy: prod.returnPolicy || "14-Day Free Exchanges",
+      shippingFee: prod.shippingFee != null ? String(prod.shippingFee) : "",
+      isFreeShipping: Boolean(prod.isFreeShipping),
+      isPinnedHero: Boolean(prod.isPinnedHero),
+      heroOrder: String(prod.heroOrder ?? 1),
+      heroHeadline: prod.heroHeadline || "",
+      heroSubheadline: prod.heroSubheadline || "",
+      heroLookNumber: prod.heroLookNumber || "Look 01",
+      heroImage: prod.heroImage || "",
     });
     setIsProductModalOpen(true);
   };
@@ -797,6 +887,18 @@ export default function AdminPortal() {
       showToast("Product photo uploaded.");
     } catch {
       showToast("Could not read image file.");
+    }
+  };
+
+  const handleHeroImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressImageFile(file);
+      setProductForm((prev) => ({ ...prev, heroImage: dataUrl }));
+      showToast("Hero banner image uploaded.");
+    } catch {
+      showToast("Could not read hero image file.");
     }
   };
 
@@ -821,13 +923,30 @@ export default function AdminPortal() {
       sizes: productForm.sizes,
       colors: productForm.colors,
       stock: Number(productForm.stock) || 0,
+      fabricAndCare: productForm.fabricAndCare.trim() || undefined,
+      fitDetails: productForm.fitDetails.trim() || undefined,
+      deliveryTimeline: productForm.deliveryTimeline.trim() || "2–4 Business Days",
+      packagingType: productForm.packagingType.trim() || "Cotton Garment Box",
+      returnPolicy: productForm.returnPolicy.trim() || "14-Day Free Exchanges",
+      shippingFee: productForm.shippingFee ? Number(productForm.shippingFee) : undefined,
+      isFreeShipping: productForm.isFreeShipping,
+      isPinnedHero: productForm.isPinnedHero,
+      heroOrder: Number(productForm.heroOrder) || 1,
+      heroHeadline: productForm.heroHeadline.trim() || undefined,
+      heroSubheadline: productForm.heroSubheadline.trim() || undefined,
+      heroLookNumber: productForm.heroLookNumber.trim() || "Look 01",
+      heroImage: productForm.heroImage.trim() || undefined,
     };
 
     setCloudProducts((prev) => {
       const exists = prev.some((p) => p.id === prodId);
-      return exists
+      const next = exists
         ? prev.map((p) => (p.id === prodId ? newProd : p))
         : [newProd, ...prev];
+      try {
+        localStorage.setItem("btnx_cloud_products", JSON.stringify(next));
+      } catch {}
+      return next;
     });
 
     try {
@@ -843,6 +962,19 @@ export default function AdminPortal() {
         sizes: newProd.sizes || [],
         colors: newProd.colors || [],
         stock: newProd.stock ?? 45,
+        fabricAndCare: newProd.fabricAndCare || null,
+        fitDetails: newProd.fitDetails || null,
+        deliveryTimeline: newProd.deliveryTimeline,
+        packagingType: newProd.packagingType,
+        returnPolicy: newProd.returnPolicy,
+        shippingFee: newProd.shippingFee ?? null,
+        isFreeShipping: newProd.isFreeShipping ?? false,
+        isPinnedHero: newProd.isPinnedHero ?? false,
+        heroOrder: newProd.heroOrder ?? 1,
+        heroHeadline: newProd.heroHeadline || null,
+        heroSubheadline: newProd.heroSubheadline || null,
+        heroLookNumber: newProd.heroLookNumber || null,
+        heroImage: newProd.heroImage || null,
       });
     } catch {
       // Saved in local state seamlessly
@@ -1122,6 +1254,8 @@ export default function AdminPortal() {
       badge: pendingDispatchCount > 0 ? pendingDispatchCount : undefined,
     },
     { id: "products", label: "Catalog & Stock", icon: Package },
+    { id: "hero", label: "Hero Showcase", icon: Sparkles },
+    { id: "shipping", label: "Shipping & Logistics", icon: Truck },
     { id: "promos", label: "Promos & Vouchers", icon: Tag },
     { id: "campaigns", label: "Campaigns & Bar", icon: Megaphone },
     { id: "clients", label: "Clients & Leads", icon: Users },
@@ -2804,6 +2938,424 @@ export default function AdminPortal() {
             )}
           </div>
         )}
+
+        {/* MODULE: HERO SHOWCASE (ADMIN-PINNED PRODUCTS) */}
+        {activeTab === "hero" && (
+          <div className="space-y-6">
+            <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] block mb-1">
+                  Storefront Banner · Dynamic Slider Engine
+                </span>
+                <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight">
+                  Hero Carousel Showcase
+                </h1>
+                <p className="text-xs text-[#66625B] dark:text-[#A7A299] mt-1 max-w-2xl">
+                  Only the pieces you pin below will be featured on the main homepage Hero carousel. Customers clicking a slide will immediately open the garment modal.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("products");
+                  openAddProductModal();
+                }}
+                className="h-9 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add &amp; Pin Piece</span>
+              </button>
+            </div>
+
+            {/* Currently Pinned Hero Slides Table */}
+            <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-hidden">
+              <div className="p-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between">
+                <span className="font-mono text-xs uppercase tracking-[0.12em] font-medium text-[#141413] dark:text-[#F3F1EC]">
+                  Active Pinned Hero Slides ({allProducts.filter((p) => p.isPinnedHero).length})
+                </span>
+                <span className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62]">
+                  Ordered by Slide Priority
+                </span>
+              </div>
+
+              {allProducts.filter((p) => p.isPinnedHero).length === 0 ? (
+                <div className="p-10 text-center space-y-3">
+                  <Sparkles className="w-8 h-8 text-[#966830] mx-auto opacity-70" />
+                  <p className="text-sm font-medium text-[#141413] dark:text-[#F3F1EC]">
+                    No pieces are currently pinned to the hero slider.
+                  </p>
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] max-w-md mx-auto">
+                    The storefront is currently showing default lookbook slides. Pin products from the table below to feature your custom drops on the home banner.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-[#FAF9F7] dark:bg-[#141413] border-b border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase tracking-[0.14em] text-[#66625B]">
+                      <tr>
+                        <th className="px-5 py-3.5">Priority</th>
+                        <th className="px-5 py-3.5">Look #</th>
+                        <th className="px-5 py-3.5">Piece</th>
+                        <th className="px-5 py-3.5">Hero Headline &amp; Subtitle</th>
+                        <th className="px-5 py-3.5">Price</th>
+                        <th className="px-5 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+                      {allProducts
+                        .filter((p) => p.isPinnedHero)
+                        .sort((a, b) => (a.heroOrder ?? 1) - (b.heroOrder ?? 1))
+                        .map((prod) => (
+                          <tr key={prod.id} className="hover:bg-[#FAF9F7] dark:hover:bg-[#201F1D] transition-colors">
+                            <td className="px-5 py-3.5 font-mono text-xs font-semibold text-[#966830] dark:text-[#C89B62]">
+                              #{prod.heroOrder ?? 1}
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs">
+                              {prod.heroLookNumber || "Look 01"}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={prod.heroImage || prod.image}
+                                  alt={prod.name}
+                                  className="w-10 h-12 object-cover border border-[#E6E2DA] dark:border-[#2C2A26] shrink-0"
+                                />
+                                <div>
+                                  <span className="font-medium text-[#141413] dark:text-[#F3F1EC] block">
+                                    {prod.name}
+                                  </span>
+                                  <span className="text-[10px] text-[#66625B] uppercase font-mono">
+                                    {prod.category}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="block font-medium text-[#141413] dark:text-[#F3F1EC]">
+                                {prod.heroHeadline || prod.name}
+                              </span>
+                              <span className="block text-[11px] text-[#66625B]">
+                                {prod.heroSubheadline || `${prod.category} · Featured Look`}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs">
+                              {formatNaira(prod.price)}
+                            </td>
+                            <td className="px-5 py-3.5 text-right space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditProductModal(prod)}
+                                className="px-3 py-1.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase hover:border-[#141413] dark:hover:border-[#F3F1EC] cursor-pointer"
+                              >
+                                Edit Slide
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const updated = { ...prod, isPinnedHero: false };
+                                  setCloudProducts((prev) =>
+                                    prev.map((p) => (p.id === prod.id ? updated : p))
+                                  );
+                                  try {
+                                    await updateDoc(doc(db, "products", prod.id), {
+                                      isPinnedHero: false,
+                                    });
+                                  } catch {}
+                                  showToast(`Unpinned "${prod.name}" from Hero.`);
+                                }}
+                                className="px-3 py-1.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase text-[#A83232] hover:bg-[#FDF2F2] dark:hover:bg-[#2A1414] cursor-pointer"
+                              >
+                                Unpin
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Pin Other Products from Catalog */}
+            <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-lg font-medium">
+                    Quick-Pin Other Products to Hero Slider
+                  </h3>
+                  <p className="text-xs text-[#66625B]">
+                    Click "Pin to Hero" on any piece below to instantly add it to your home carousel.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {allProducts
+                  .filter((p) => !p.isPinnedHero)
+                  .slice(0, 6)
+                  .map((prod) => (
+                    <div
+                      key={prod.id}
+                      className="p-3 border border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <img
+                          src={prod.image}
+                          alt={prod.name}
+                          className="w-9 h-11 object-cover shrink-0 border border-[#E6E2DA] dark:border-[#2C2A26]"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate text-[#141413] dark:text-[#F3F1EC]">
+                            {prod.name}
+                          </p>
+                          <p className="font-mono text-[10px] text-[#966830]">
+                            {formatNaira(prod.price)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const currentPinnedCount = allProducts.filter((p) => p.isPinnedHero).length;
+                          const updated: Product = {
+                            ...prod,
+                            isPinnedHero: true,
+                            heroOrder: currentPinnedCount + 1,
+                            heroLookNumber: `Look 0${currentPinnedCount + 1}`,
+                          };
+                          setCloudProducts((prev) =>
+                            prev.map((p) => (p.id === prod.id ? updated : p))
+                          );
+                          try {
+                            await updateDoc(doc(db, "products", prod.id), {
+                              isPinnedHero: true,
+                              heroOrder: currentPinnedCount + 1,
+                              heroLookNumber: `Look 0${currentPinnedCount + 1}`,
+                            });
+                          } catch {}
+                          showToast(`Pinned "${prod.name}" to Hero Carousel.`);
+                        }}
+                        className="h-8 px-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[10px] font-mono uppercase tracking-wider shrink-0 cursor-pointer"
+                      >
+                        Pin to Hero
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODULE: GLOBAL SHIPPING & LOGISTICS ENGINE */}
+        {activeTab === "shipping" && (
+          <div className="space-y-6">
+            <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-5">
+              <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] block mb-1">
+                Storefront Logistics · Real-Time Calculation Engine
+              </span>
+              <h1 className="font-display text-2xl sm:text-3xl font-medium tracking-tight">
+                Shipping, Packaging &amp; Return Policies
+              </h1>
+              <p className="text-xs text-[#66625B] dark:text-[#A7A299] mt-1 max-w-2xl">
+                Set baseline nationwide shipping fees, free shipping cart limits, delivery duration, and packaging descriptions. Changes sync across all checkout carts and product drawers instantly.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Form Column */}
+              <div className="lg:col-span-8 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-6 space-y-6">
+                <form onSubmit={handleSaveShippingSettings} className="space-y-5 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
+                        Standard Nationwide Delivery Fee (₦)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={shippingSettings.defaultShippingFee}
+                        onChange={(e) =>
+                          setShippingSettings((prev) => ({
+                            ...prev,
+                            defaultShippingFee: Number(e.target.value) || 0,
+                          }))
+                        }
+                        className="w-full h-10 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-sm outline-none"
+                      />
+                      <span className="block text-[10px] text-[#8C877D] mt-1">
+                        Applied to carts below the free shipping threshold.
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
+                        Free Shipping Cart Minimum (₦)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={shippingSettings.freeShippingThreshold}
+                        onChange={(e) =>
+                          setShippingSettings((prev) => ({
+                            ...prev,
+                            freeShippingThreshold: Number(e.target.value) || 0,
+                          }))
+                        }
+                        className="w-full h-10 px-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-sm outline-none"
+                      />
+                      <span className="block text-[10px] text-[#8C877D] mt-1">
+                        Orders at or above this amount automatically unlock complimentary delivery.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between">
+                    <div>
+                      <span className="block text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+                        Global Site-Wide Free Shipping
+                      </span>
+                      <span className="block text-[11px] text-[#66625B] mt-0.5">
+                        When enabled, all orders receive free delivery regardless of cart subtotal.
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={shippingSettings.isFreeShippingGlobal}
+                        onChange={(e) =>
+                          setShippingSettings((prev) => ({
+                            ...prev,
+                            isFreeShippingGlobal: e.target.checked,
+                          }))
+                        }
+                        className="w-5 h-5 accent-[#966830]"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
+                        Estimated Delivery Duration
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={shippingSettings.defaultDeliveryTimeline}
+                        onChange={(e) =>
+                          setShippingSettings((prev) => ({
+                            ...prev,
+                            defaultDeliveryTimeline: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 2–4 Business Days"
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
+                        Luxury Packaging Type
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={shippingSettings.defaultPackagingType}
+                        onChange={(e) =>
+                          setShippingSettings((prev) => ({
+                            ...prev,
+                            defaultPackagingType: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Cotton Garment Box"
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
+                        Return &amp; Exchange Window
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={shippingSettings.defaultReturnPolicy}
+                        onChange={(e) =>
+                          setShippingSettings((prev) => ({
+                            ...prev,
+                            defaultReturnPolicy: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 14-Day Free Exchanges"
+                        className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isSavingShipping}
+                      className="h-10 px-6 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-xs font-medium uppercase tracking-[0.14em] cursor-pointer"
+                    >
+                      {isSavingShipping ? "Updating Database..." : "Save Shipping Policies"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Live Preview Card */}
+              <div className="lg:col-span-4 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] p-5 space-y-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] block">
+                  Storefront Client Preview
+                </span>
+
+                <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] p-4 rounded-xs space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-[#966830]" />
+                    <span className="text-xs font-medium uppercase tracking-wider">
+                      Delivery &amp; Packaging Specs
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-[#66625B]">Standard Rate:</span>
+                      <span className="font-mono font-medium">
+                        {formatNaira(shippingSettings.defaultShippingFee)}
+                      </span>
+                    </div>
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-[#66625B]">Free Delivery Over:</span>
+                      <span className="font-mono font-medium text-[#1D7A46] dark:text-[#67E28E]">
+                        {shippingSettings.isFreeShippingGlobal
+                          ? "Site-Wide Free"
+                          : formatNaira(shippingSettings.freeShippingThreshold)}
+                      </span>
+                    </div>
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-[#66625B]">Timeline:</span>
+                      <span>{shippingSettings.defaultDeliveryTimeline}</span>
+                    </div>
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-[#66625B]">Box Type:</span>
+                      <span>{shippingSettings.defaultPackagingType}</span>
+                    </div>
+                    <div className="pt-2 flex justify-between">
+                      <span className="text-[#66625B]">Exchanges:</span>
+                      <span>{shippingSettings.defaultReturnPolicy}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-[#66625B] leading-relaxed">
+                  These settings govern calculations in the customer Bag, invoice generation, checkout authorization, and product detail accordions.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ADD / EDIT PRODUCT MODAL */}
@@ -2986,10 +3538,10 @@ export default function AdminPortal() {
 
               <div>
                 <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                  Description
+                  Product Overview &amp; Description
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={productForm.description}
                   onChange={(e) =>
                     setProductForm((p) => ({
@@ -2999,6 +3551,263 @@ export default function AdminPortal() {
                   }
                   className="w-full p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none resize-none"
                 />
+              </div>
+
+              {/* FABRIC & CARE & FIT SPECIFICATIONS */}
+              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
+                  Fabric, Fit &amp; Garment Care (Customer Modal Specs)
+                </span>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                    Fabric &amp; Care Details (Multiline)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets."
+                    value={productForm.fabricAndCare}
+                    onChange={(e) =>
+                      setProductForm((p) => ({
+                        ...p,
+                        fabricAndCare: e.target.value,
+                      }))
+                    }
+                    className="w-full p-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                    Fit &amp; Washing Instructions
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean."
+                    value={productForm.fitDetails}
+                    onChange={(e) =>
+                      setProductForm((p) => ({
+                        ...p,
+                        fitDetails: e.target.value,
+                      }))
+                    }
+                    className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* SHIPPING, PACKAGING & RETURNS */}
+              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
+                  Shipping, Packaging &amp; Return Terms
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                      Delivery Window
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2–4 Business Days"
+                      value={productForm.deliveryTimeline}
+                      onChange={(e) =>
+                        setProductForm((p) => ({
+                          ...p,
+                          deliveryTimeline: e.target.value,
+                        }))
+                      }
+                      className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                      Packaging Spec
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Cotton Garment Box"
+                      value={productForm.packagingType}
+                      onChange={(e) =>
+                        setProductForm((p) => ({
+                          ...p,
+                          packagingType: e.target.value,
+                        }))
+                      }
+                      className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                      Return Policy
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 14-Day Free Exchanges"
+                      value={productForm.returnPolicy}
+                      onChange={(e) =>
+                        setProductForm((p) => ({
+                          ...p,
+                          returnPolicy: e.target.value,
+                        }))
+                      }
+                      className="w-full h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex flex-wrap items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productForm.isFreeShipping}
+                      onChange={(e) =>
+                        setProductForm((p) => ({
+                          ...p,
+                          isFreeShipping: e.target.checked,
+                        }))
+                      }
+                      className="w-4 h-4 accent-[#141413] dark:accent-[#F3F1EC]"
+                    />
+                    <span className="text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+                      Qualifies for Free Shipping
+                    </span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono uppercase text-[#66625B]">
+                      Custom Fee Override (₦):
+                    </span>
+                    <input
+                      type="number"
+                      placeholder="Default"
+                      disabled={productForm.isFreeShipping}
+                      value={productForm.shippingFee}
+                      onChange={(e) =>
+                        setProductForm((p) => ({
+                          ...p,
+                          shippingFee: e.target.value,
+                        }))
+                      }
+                      className="w-24 h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-xs outline-none disabled:opacity-40"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* HERO SHOWCASE PINNING SECTION */}
+              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
+                    Storefront Hero Carousel Pinning
+                  </span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productForm.isPinnedHero}
+                      onChange={(e) =>
+                        setProductForm((p) => ({
+                          ...p,
+                          isPinnedHero: e.target.checked,
+                        }))
+                      }
+                      className="w-4 h-4 accent-[#966830]"
+                    />
+                    <span className="text-xs font-medium text-[#966830] dark:text-[#C89B62]">
+                      Pin to Hero Carousel
+                    </span>
+                  </label>
+                </div>
+
+                {productForm.isPinnedHero && (
+                  <div className="space-y-2.5 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                          Look Number
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Look 01"
+                          value={productForm.heroLookNumber}
+                          onChange={(e) =>
+                            setProductForm((p) => ({
+                              ...p,
+                              heroLookNumber: e.target.value,
+                            }))
+                          }
+                          className="w-full h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                          Hero Headline (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Defaults to garment name"
+                          value={productForm.heroHeadline}
+                          onChange={(e) =>
+                            setProductForm((p) => ({
+                              ...p,
+                              heroHeadline: e.target.value,
+                            }))
+                          }
+                          className="w-full h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] outline-none text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                          Slide Priority Order
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={productForm.heroOrder}
+                          onChange={(e) =>
+                            setProductForm((p) => ({
+                              ...p,
+                              heroOrder: e.target.value,
+                            }))
+                          }
+                          className="w-full h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                        Hero Banner Image (URL or Upload)
+                      </label>
+                      <input
+                        ref={heroFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleHeroImageFile}
+                        className="hidden"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Leave blank to use main product photo"
+                          value={productForm.heroImage}
+                          onChange={(e) =>
+                            setProductForm((p) => ({
+                              ...p,
+                              heroImage: e.target.value,
+                            }))
+                          }
+                          className="flex-1 h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-xs outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => heroFileInputRef.current?.click()}
+                          className="h-8 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase cursor-pointer"
+                        >
+                          Upload Banner
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">

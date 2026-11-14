@@ -2,12 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { HERO_SLIDES, NEW_YEAR_PRODUCTS, GALLERY_INDEX_ITEMS } from "../data";
+import { HERO_SLIDES, NEW_YEAR_PRODUCTS, GALLERY_INDEX_ITEMS, HeroSlide } from "../data";
 import { Product } from "../types";
 import GalleryImage from "./GalleryImage";
+import { db } from "../lib/firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
 interface HeroProps {
   onOpenProduct?: (product: Product) => void;
+  products?: Product[];
 }
 
 const SLIDE_VARIANTS = {
@@ -25,14 +28,97 @@ const SLIDE_VARIANTS = {
   }),
 };
 
-export default function Hero({ onOpenProduct }: HeroProps) {
+export default function Hero({ onOpenProduct, products }: HeroProps) {
   const navigate = useNavigate();
   const [[activeIndex, direction], setSlide] = useState<[number, number]>([0, 1]);
   const [isPaused, setIsPaused] = useState(false);
+
+  const getPinnedSlides = (sourceProducts?: Product[]): { slides: HeroSlide[]; map: Record<string, Product> } => {
+    const list = sourceProducts || [];
+    const pinned = list.filter((p) => Boolean(p.isPinnedHero));
+    if (pinned.length === 0) {
+      return { slides: HERO_SLIDES, map: {} };
+    }
+    pinned.sort((a, b) => (a.heroOrder ?? 0) - (b.heroOrder ?? 0));
+    const dynamicSlides: HeroSlide[] = pinned.map((prod, idx) => ({
+      id: `hero-pinned-${prod.id}`,
+      lookNumber: prod.heroLookNumber || `Look 0${idx + 1}`,
+      title: prod.heroHeadline || prod.name,
+      subtitle: prod.heroSubheadline || `${prod.category} · Featured Look`,
+      image: prod.heroImage || prod.image,
+      alt: prod.name,
+      productId: prod.id,
+    }));
+    const map: Record<string, Product> = {};
+    pinned.forEach((p) => {
+      map[p.id] = p;
+    });
+    return { slides: dynamicSlides, map };
+  };
+
+  const initialPinned = getPinnedSlides(products);
+  const [slides, setSlides] = useState<HeroSlide[]>(initialPinned.slides);
+  const [pinnedProductsMap, setPinnedProductsMap] = useState<Record<string, Product>>(initialPinned.map);
   const touchStartX = useRef<number | null>(null);
 
-  const totalSlides = HERO_SLIDES.length;
-  const currentSlide = HERO_SLIDES[activeIndex];
+  useEffect(() => {
+    if (products && products.length > 0) {
+      const res = getPinnedSlides(products);
+      if (res.slides.length > 0 && res.slides !== HERO_SLIDES) {
+        setSlides(res.slides);
+        setPinnedProductsMap(res.map);
+      }
+    }
+  }, [products]);
+
+  useEffect(() => {
+    try {
+      const q = query(collection(db, "products"), where("isPinnedHero", "==", true));
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const fetched = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Product[];
+            const res = getPinnedSlides(fetched);
+            setPinnedProductsMap(res.map);
+            setSlides(res.slides);
+            setSlide([0, 1]);
+          } else if (products && products.length > 0) {
+            const res = getPinnedSlides(products);
+            setSlides(res.slides);
+            setPinnedProductsMap(res.map);
+          } else {
+            setSlides(HERO_SLIDES);
+          }
+        },
+        () => {
+          // If firestore fails or offline, use local products or default lookbook slides
+          if (products && products.length > 0) {
+            const res = getPinnedSlides(products);
+            setSlides(res.slides);
+            setPinnedProductsMap(res.map);
+          } else {
+            setSlides(HERO_SLIDES);
+          }
+        }
+      );
+      return () => unsubscribe();
+    } catch {
+      if (products && products.length > 0) {
+        const res = getPinnedSlides(products);
+        setSlides(res.slides);
+        setPinnedProductsMap(res.map);
+      } else {
+        setSlides(HERO_SLIDES);
+      }
+    }
+  }, [products]);
+
+  const totalSlides = slides.length;
+  const currentSlide = slides[activeIndex] || slides[0] || HERO_SLIDES[0];
 
   useEffect(() => {
     if (isPaused || totalSlides <= 1) return;
@@ -59,7 +145,10 @@ export default function Hero({ onOpenProduct }: HeroProps) {
 
   const handleInspectSlide = () => {
     if (currentSlide.productId && onOpenProduct) {
-      const target = NEW_YEAR_PRODUCTS.find((p) => p.id === currentSlide.productId);
+      const target =
+        pinnedProductsMap[currentSlide.productId] ||
+        products?.find((p) => p.id === currentSlide.productId) ||
+        NEW_YEAR_PRODUCTS.find((p) => p.id === currentSlide.productId);
       if (target) {
         onOpenProduct(target);
         return;
@@ -234,7 +323,7 @@ export default function Hero({ onOpenProduct }: HeroProps) {
                   className="absolute bottom-3.5 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-7 sm:bottom-7 z-10 flex items-center gap-2"
                   aria-label="Lookbook slide indicators"
                 >
-                  {HERO_SLIDES.map((slide, idx) => (
+                  {slides.map((slide, idx) => (
                     <button
                       key={slide.id}
                       type="button"

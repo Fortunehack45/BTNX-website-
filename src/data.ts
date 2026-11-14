@@ -163,6 +163,20 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
       "Heavyweight brushed fleece hoodie in dusty plum. Cut with dropped shoulders, thick ribbed cuffs, a double-lined hood, and a front pocket.",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Dusty Plum", "Lavender", "Slate"],
+    stock: 28,
+    fabricAndCare:
+      "480gsm brushed loopback organic cotton fleece. Heavyweight garment dye finish.",
+    fitDetails:
+      "Relaxed oversized drape with reinforced seams. Machine wash cold with similar colors; do not tumble dry.",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Cotton Garment Box",
+    returnPolicy: "14-Day Free Exchanges",
+    isFreeShipping: false,
+    shippingFee: 5000,
+    isPinnedHero: true,
+    heroOrder: 2,
+    heroHeadline: "Purple Brooklyn Hoodie",
+    heroSubheadline: "Womenswear · Heavyweight Fleece · Hand Finished",
   },
   {
     id: "ny-2",
@@ -177,6 +191,20 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
       "Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets. Built to layer easily over tees or knits.",
     sizes: ["XS", "S", "M", "L"],
     colors: ["Beige Plaid", "Grey Plaid", "Charcoal"],
+    stock: 14,
+    fabricAndCare:
+      "Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets. Built to layer easily over tees or knits.",
+    fitDetails:
+      "Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean.",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Cotton Garment Box",
+    returnPolicy: "14-Day Free Exchanges",
+    isFreeShipping: true,
+    shippingFee: 0,
+    isPinnedHero: true,
+    heroOrder: 1,
+    heroHeadline: "Cropped Space Overshirt",
+    heroSubheadline: "Womenswear · Outerwear · Limited Drop",
   },
   {
     id: "ny-3",
@@ -191,6 +219,20 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
       "Deep navy raglan crewneck knitted from 460gsm loopback organic cotton. Soft inside with sturdy ribbed collars and cuffs.",
     sizes: ["S", "M", "L"],
     colors: ["Deep Navy", "Forest Green", "Oatmeal"],
+    stock: 35,
+    fabricAndCare:
+      "100% organic cotton loopback French terry. Preshrunk with ribbed collar, hem, and cuffs.",
+    fitDetails:
+      "True to size with structured raglan sleeves. Machine wash cold, dry flat.",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Cotton Garment Box",
+    returnPolicy: "14-Day Free Exchanges",
+    isFreeShipping: true,
+    shippingFee: 0,
+    isPinnedHero: true,
+    heroOrder: 3,
+    heroHeadline: "Birmania Sunt Knitwear",
+    heroSubheadline: "Unisex · Heavy Cotton Knit · Osun Hub",
   },
   {
     id: "ny-4",
@@ -204,6 +246,16 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
       "Cut-and-sew paneled crewneck made from combed heavyweight cotton jersey in sky blue, chalk white, and heather grey.",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Sky / Chalk / Grey", "Sand / Charcoal"],
+    stock: 22,
+    fabricAndCare:
+      "100% combed cotton jersey panels with double-needle topstitching.",
+    fitDetails:
+      "Boxy streetwear cut. Machine wash gentle cycle inside out.",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Cotton Garment Box",
+    returnPolicy: "14-Day Free Exchanges",
+    isFreeShipping: false,
+    shippingFee: 5000,
   },
   {
     id: "ny-5",
@@ -217,6 +269,16 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
       "Ribbed varsity cardigan with contrast trim and horn buttons, shaped for a clean, easy layered fit.",
     sizes: ["XS", "S", "M", "L"],
     colors: ["Deep Navy", "Ivory White", "Burgundy"],
+    stock: 19,
+    fabricAndCare:
+      "Midweight merino-blend knit with genuine horn button placket.",
+    fitDetails:
+      "Tailored fit with relaxed armholes. Hand wash cold or gentle dry clean.",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Cotton Garment Box",
+    returnPolicy: "14-Day Free Exchanges",
+    isFreeShipping: true,
+    shippingFee: 0,
   },
   {
     id: "ny-6",
@@ -231,6 +293,16 @@ export const NEW_YEAR_PRODUCTS: Product[] = [
       "Cropped matte vegan-leather moto jacket finished with brushed silver zip hardware, wide lapels, and adjustable waist tabs.",
     sizes: ["S", "M", "L"],
     colors: ["Noir Black", "Deep Espresso", "Oxblood"],
+    stock: 9,
+    fabricAndCare:
+      "Premium micro-grain vegan leather shell with satin cupro lining.",
+    fitDetails:
+      "Cropped moto silhouette. Wipe clean with a damp cloth; specialized leather care only.",
+    deliveryTimeline: "2–4 Business Days",
+    packagingType: "Signature Garment Box & Dust Bag",
+    returnPolicy: "14-Day Free Exchanges",
+    isFreeShipping: true,
+    shippingFee: 0,
   },
 ];
 

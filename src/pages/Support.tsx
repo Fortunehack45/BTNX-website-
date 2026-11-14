@@ -114,7 +114,7 @@ const SAMPLE_ATTACHMENT_IMAGES = [
 const FAQ_LIST = [
   {
     q: "How does the Bot vs. Human Customer Care work?",
-    a: "Every conversation starts with our instant BTNX Automated Concierge Bot, which can inspect orders, log address updates, and answer sizing or promo questions immediately. At any moment, tap 'Speak with Human' (or type 'human' in chat) to connect with a live Human Customer Care Specialist at our Osogbo, Osun desk.",
+    a: "Every conversation starts with our instant BTNX Virtual Support Assistant, which can inspect orders, log address updates, and answer sizing or promo questions immediately. At any moment, tap 'Speak with Human' (or type 'human' in chat) to connect with a live Human Customer Care Specialist at our Osogbo, Osun desk.",
   },
   {
     q: "How long does nationwide delivery take from Osun?",
@@ -302,8 +302,8 @@ export default function Support({
     const welcomeMsg: SupportMessage = {
       id: `msg-${Date.now()}-welcome`,
       sender: "bot",
-      senderName: "BTNX Concierge Bot",
-      senderRole: "Automated Concierge",
+      senderName: "BTNX Support Assistant",
+      senderRole: "Virtual Assistant",
       text: `Hello ${
         clientDisplayName.split(" ")[0]
       }. Welcome to BTNX Client Care regarding "${chosenSubject}". Attach an order, product, or photo below—or select Speak with Human anytime to reach our Osun desk.`,
@@ -413,7 +413,7 @@ export default function Support({
       id: `msg-${Date.now()}-botmode`,
       sender: "system",
       senderName: "System",
-      text: "Switched to BTNX Automated Concierge",
+      text: "Switched to BTNX Virtual Assistant",
       createdAt: nowIso,
     };
     const updated: SupportTicket = {
@@ -424,7 +424,7 @@ export default function Support({
       messages: [...activeTicket.messages, sysMsg],
     };
     await persistTicket(updated);
-    onAddToast("Switched to Automated Concierge.", "info");
+    onAddToast("Switched to Virtual Assistant.", "info");
   };
 
   const handleMarkResolved = async () => {
@@ -581,7 +581,7 @@ export default function Support({
     await persistTicket(updatedTicket);
 
     if (updatedTicket.mode === "bot") {
-      setTypingResponder("BTNX Concierge Bot");
+      setTypingResponder("BTNX Support Assistant");
       const botOutcome = generateBotReply({
         userText: fallbackText,
         attachedOrder: currentOrderAttachment,
@@ -596,8 +596,8 @@ export default function Support({
         const botMsg: SupportMessage = {
           id: `msg-${Date.now()}-bot`,
           sender: "bot",
-          senderName: "BTNX Concierge Bot",
-          senderRole: "Automated Concierge",
+          senderName: "BTNX Support Assistant",
+          senderRole: "Virtual Assistant",
           text: botOutcome.replyText,
           createdAt: replyIso,
           suggestHumanTransfer: botOutcome.suggestHumanTransfer,
@@ -690,7 +690,7 @@ export default function Support({
         id="customer-service-chat-page"
         className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 flex-1 flex flex-col py-3 sm:py-6"
       >
-        <div className="w-full max-w-4xl mx-auto flex-1 flex flex-col bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-82px)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-82px)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
+        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-82px)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-82px)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
           {/* Clean Single-Row Editorial Chat Header */}
           <div className="px-3.5 sm:px-6 py-3 sm:py-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3 min-w-0">
@@ -719,7 +719,7 @@ export default function Support({
                   >
                     {activeTicket.mode === "human"
                       ? activeTicket.assignedAgent || "Human Specialist"
-                      : "Bot Concierge"}
+                      : "Virtual Assistant"}
                   </span>
                   {activeTicket.orderId && (
                     <>
@@ -1565,7 +1565,7 @@ export default function Support({
       className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12"
       id="customer-service-page"
     >
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="w-full space-y-8">
         {/* Top Breadcrumb & Editorial Header */}
         <div className="border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div className="space-y-2">
@@ -1585,7 +1585,7 @@ export default function Support({
               Client Care &amp; Support
             </h1>
             <p className="text-xs sm:text-sm text-[#66625B] dark:text-[#A7A299] max-w-xl leading-relaxed">
-              Open a conversation below to chat with our Automated Concierge Bot or connect directly with a Human Specialist at our Osogbo, Osun hub.
+              Open a conversation below to chat with our automated support desk or connect directly with a Human Specialist at our Osogbo, Osun hub.
             </p>
           </div>
 
@@ -1724,7 +1724,7 @@ export default function Support({
                             ? "Resolved"
                             : t.mode === "human"
                             ? "Human Specialist"
-                            : "Bot Concierge"}
+                            : "Virtual Assistant"}
                         </span>
                         {t.orderId && (
                           <>

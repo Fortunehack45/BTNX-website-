@@ -68,7 +68,10 @@ service cloud.firestore {
       return data.keys().hasAll(['name', 'category', 'price', 'image']) &&
         data.keys().hasOnly([
           'id', 'name', 'category', 'price', 'originalPrice', 'image', 'images',
-          'badge', 'description', 'sizes', 'colors', 'collectionId', 'stock', 'cartCount'
+          'badge', 'description', 'sizes', 'colors', 'collectionId', 'stock', 'cartCount',
+          'fabricAndCare', 'fitDetails', 'deliveryTimeline', 'packagingType', 'returnPolicy',
+          'shippingFee', 'isFreeShipping', 'isPinnedHero', 'heroOrder', 'heroHeadline',
+          'heroSubheadline', 'heroLookNumber', 'heroImage'
         ]) &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
         data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
@@ -83,24 +86,68 @@ service cloud.firestore {
         (!('images' in data) || (data.images is list && data.images.size() <= 20 && (data.images.size() == 0 || data.images[0] is string))) &&
         (!('collectionId' in data) || (data.collectionId is string && data.collectionId.size() <= 128)) &&
         (!('stock' in data) || (data.stock is number && data.stock >= 0)) &&
-        (!('cartCount' in data) || data.cartCount is number);
+        (!('cartCount' in data) || data.cartCount is number) &&
+        (!('fabricAndCare' in data) || data.fabricAndCare == null || (data.fabricAndCare is string && data.fabricAndCare.size() <= 5000)) &&
+        (!('fitDetails' in data) || data.fitDetails == null || (data.fitDetails is string && data.fitDetails.size() <= 1000)) &&
+        (!('deliveryTimeline' in data) || data.deliveryTimeline == null || (data.deliveryTimeline is string && data.deliveryTimeline.size() <= 120)) &&
+        (!('packagingType' in data) || data.packagingType == null || (data.packagingType is string && data.packagingType.size() <= 120)) &&
+        (!('returnPolicy' in data) || data.returnPolicy == null || (data.returnPolicy is string && data.returnPolicy.size() <= 120)) &&
+        (!('shippingFee' in data) || data.shippingFee == null || (data.shippingFee is number && data.shippingFee >= 0)) &&
+        (!('isFreeShipping' in data) || data.isFreeShipping == null || data.isFreeShipping is bool) &&
+        (!('isPinnedHero' in data) || data.isPinnedHero == null || data.isPinnedHero is bool) &&
+        (!('heroOrder' in data) || data.heroOrder == null || (data.heroOrder is number && data.heroOrder >= 0)) &&
+        (!('heroHeadline' in data) || data.heroHeadline == null || (data.heroHeadline is string && data.heroHeadline.size() <= 200)) &&
+        (!('heroSubheadline' in data) || data.heroSubheadline == null || (data.heroSubheadline is string && data.heroSubheadline.size() <= 200)) &&
+        (!('heroLookNumber' in data) || data.heroLookNumber == null || (data.heroLookNumber is string && data.heroLookNumber.size() <= 60)) &&
+        (!('heroImage' in data) || data.heroImage == null || (data.heroImage is string && data.heroImage.size() <= 2000));
+    }
+
+    function isOrderCreator(data) {
+      return isSignedIn() && (
+        ('userId' in data && data.userId != null && data.userId == request.auth.uid) ||
+        ('userEmail' in data && data.userEmail != null && request.auth.token.email != null && data.userEmail == request.auth.token.email) ||
+        ('customerEmail' in data && data.customerEmail != null && request.auth.token.email != null && data.customerEmail == request.auth.token.email) ||
+        ('email' in data && data.email != null && request.auth.token.email != null && data.email == request.auth.token.email) ||
+        ('phone' in data && data.phone != null && ('phone_number' in request.auth.token) && request.auth.token.phone_number != null && data.phone == request.auth.token.phone_number) ||
+        ('customerPhone' in data && data.customerPhone != null && ('phone_number' in request.auth.token) && request.auth.token.phone_number != null && data.customerPhone == request.auth.token.phone_number)
+      );
     }
 
     function isValidOrder(data, orderId) {
-      return data.keys().hasAll(['id', 'userId', 'items', 'total', 'status']) &&
-        data.keys().hasOnly(['id', 'userId', 'userEmail', 'items', 'total', 'status', 'date', 'promoCodeId', 'createdAt']) &&
+      return data.keys().hasAll(['id', 'items', 'total', 'status']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userEmail', 'customerEmail', 'email',
+          'phone', 'customerPhone', 'customerName',
+          'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry',
+          'items', 'total', 'status', 'date', 'promoCodeId', 'createdAt',
+          'source', 'shippingAddress', 'subtotal', 'discountAmount', 'shippingFee'
+        ]) &&
         data.id is string && data.id == orderId &&
-        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128)) &&
+        (!('userEmail' in data) || data.userEmail == null || (data.userEmail is string && data.userEmail.size() <= 254)) &&
+        (!('customerEmail' in data) || data.customerEmail == null || (data.customerEmail is string && data.customerEmail.size() <= 254)) &&
+        (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 254)) &&
+        (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 40)) &&
+        (!('customerPhone' in data) || data.customerPhone == null || (data.customerPhone is string && data.customerPhone.size() <= 40)) &&
+        (!('customerName' in data) || data.customerName == null || (data.customerName is string && data.customerName.size() <= 120)) &&
+        (!('shippingStreet' in data) || data.shippingStreet == null || (data.shippingStreet is string && data.shippingStreet.size() <= 250)) &&
+        (!('shippingCity' in data) || data.shippingCity == null || (data.shippingCity is string && data.shippingCity.size() <= 120)) &&
+        (!('shippingZip' in data) || data.shippingZip == null || (data.shippingZip is string && data.shippingZip.size() <= 32)) &&
+        (!('shippingCountry' in data) || data.shippingCountry == null || (data.shippingCountry is string && data.shippingCountry.size() <= 120)) &&
+        (!('source' in data) || data.source == null || (data.source is string && data.source.size() <= 64)) &&
+        (!('shippingAddress' in data) || data.shippingAddress == null || (data.shippingAddress is string && data.shippingAddress.size() <= 500)) &&
+        (!('subtotal' in data) || data.subtotal == null || (data.subtotal is number && data.subtotal >= 0)) &&
+        (!('discountAmount' in data) || data.discountAmount == null || (data.discountAmount is number && data.discountAmount >= 0)) &&
+        (!('shippingFee' in data) || data.shippingFee == null || (data.shippingFee is number && data.shippingFee >= 0)) &&
         data.items is list && data.items.size() >= 1 && data.items.size() <= 100 &&
         data.total is number && data.total >= 0 &&
         data.status is string && data.status in [
           'Pending', 'Confirmed', 'Processing', 'Shipped', 'In Transit', 'Delivered', 'Cancelled',
           'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'
         ] &&
-        (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 254)) &&
-        (!('date' in data) || (data.date is string && data.date.size() <= 64)) &&
-        (!('promoCodeId' in data) || (data.promoCodeId is string && data.promoCodeId.size() <= 64)) &&
-        (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp);
+        (!('date' in data) || data.date == null || (data.date is string && data.date.size() <= 64)) &&
+        (!('promoCodeId' in data) || data.promoCodeId == null || (data.promoCodeId is string && data.promoCodeId.size() <= 64)) &&
+        (!('createdAt' in data) || data.createdAt == null || data.createdAt is string || data.createdAt is timestamp);
     }
 
     function isValidPromoCode(data) {
@@ -233,11 +280,11 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow get: if isValidId(orderId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(orderId) && isSignedIn() && isValidOrder(incoming(), orderId) && incoming().userId == request.auth.uid;
+      allow get: if isValidId(orderId) && (isAdmin() || isOrderCreator(resource.data));
+      allow list: if isAdmin() || isOrderCreator(resource.data);
+      allow create: if isValidId(orderId) && isValidOrder(incoming(), orderId);
       allow update: if isValidId(orderId) && isAdmin() && (
-        (isValidOrder(incoming(), orderId) && incoming().userId == existing().userId && incoming().id == existing().id) ||
+        (isValidOrder(incoming(), orderId) && incoming().id == existing().id && (!('userId' in existing()) || incoming().userId == existing().userId)) ||
         (incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
           incoming().status is string &&
           incoming().status in [
@@ -246,6 +293,12 @@ service cloud.firestore {
           ])
       );
       allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /promoCodes/{promoCodeId} {

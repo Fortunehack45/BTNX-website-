@@ -84,7 +84,11 @@ export default function SeoManager({ activeProduct }: SeoManagerProps) {
     const routeMeta = ROUTE_META[pathname] || DEFAULT_META;
     const origin = window.location.origin;
     const canonicalUrl = `${origin}${pathname}`;
-    const previewImageUrl = `${origin}/btnx-og-preview.jpg`;
+    const previewImageUrl = activeProduct?.image
+      ? (activeProduct.image.startsWith("http")
+          ? activeProduct.image
+          : `${origin}${activeProduct.image.startsWith("/") ? "" : "/"}${activeProduct.image}`)
+      : `${origin}/btnx-og-preview.jpg`;
 
     const title = activeProduct
       ? `${activeProduct.name} — BTNX Store`

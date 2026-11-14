@@ -15,10 +15,12 @@ import {
   Download,
   Truck,
 } from "lucide-react";
-import { CartItem, Order, Product } from "../types";
+import { CartItem, Order, Product, StoreShippingSettings } from "../types";
 import { formatNaira } from "../utils/currency";
 import GalleryImage from "../components/GalleryImage";
 import BrandLogo from "../components/BrandLogo";
+import { db } from "../lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 interface BagProps {
   cart: CartItem[];
@@ -89,6 +91,28 @@ export default function Bag({
     }
   }, [checkoutStep]);
 
+  const [shippingSettings, setShippingSettings] = useState<StoreShippingSettings>({
+    defaultShippingFee: 3500,
+    freeShippingThreshold: 150000,
+    isFreeShippingGlobal: false,
+    defaultDeliveryTimeline: "2–4 Business Days",
+    defaultPackagingType: "Cotton Garment Box",
+    defaultReturnPolicy: "14-Day Free Exchanges",
+  });
+
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(doc(db, "settings", "shipping"), (snapshot) => {
+        if (snapshot.exists()) {
+          setShippingSettings(snapshot.data() as StoreShippingSettings);
+        }
+      });
+      return () => unsub();
+    } catch {
+      // Use defaults
+    }
+  }, []);
+
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const archiveSavings = cart.reduce((sum, item) => {
     if (item.product.originalPrice && item.product.originalPrice > item.product.price) {
@@ -97,7 +121,23 @@ export default function Bag({
     return sum;
   }, 0);
   const discountAmount = subtotal * appliedDiscount;
-  const finalTotal = subtotal - discountAmount;
+
+  // Dynamic Shipping Calculation Algorithm
+  const isEligibleForFreeShipping =
+    shippingSettings.isFreeShippingGlobal ||
+    subtotal >= shippingSettings.freeShippingThreshold ||
+    (cart.length > 0 && cart.every((item) => item.product.isFreeShipping || item.product.shippingFee === 0));
+
+  const shippingFee = cart.length === 0
+    ? 0
+    : isEligibleForFreeShipping
+    ? 0
+    : Math.max(
+        ...cart.map((item) => item.product.shippingFee ?? shippingSettings.defaultShippingFee),
+        shippingSettings.defaultShippingFee
+      );
+
+  const finalTotal = Math.max(0, subtotal - discountAmount) + shippingFee;
   const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleVoucherSubmit = async (e: React.FormEvent) => {
@@ -447,16 +487,25 @@ export default function Bag({
               <div className="p-5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
                 <div className="flex justify-between items-center gap-2 text-[11px] mb-2.5">
                   <span className="uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] truncate">
-                    Complimentary Luxury Gift Box
+                    {isEligibleForFreeShipping
+                      ? "Complimentary Shipping & Luxury Garment Box"
+                      : "Free Shipping & Luxury Garment Box"}
                   </span>
                   <span className="font-mono text-[#141413] dark:text-[#F3F1EC] tabular-nums whitespace-nowrap shrink-0">
-                    {subtotal >= 134 ? "Unlocked" : `${formatNaira(134 - subtotal)} away`}
+                    {isEligibleForFreeShipping
+                      ? "Unlocked"
+                      : `${formatNaira(Math.max(0, shippingSettings.freeShippingThreshold - subtotal))} away`}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-[#F4F1EC] dark:bg-[#22211E] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#141413] dark:bg-[#C89B62] transition-all duration-300"
-                    style={{ width: `${Math.min((subtotal / 134) * 100, 100)}%` }}
+                    style={{
+                      width: `${Math.min(
+                        (subtotal / (shippingSettings.freeShippingThreshold || 150000)) * 100,
+                        100
+                      )}%`,
+                    }}
                   />
                 </div>
               </div>
@@ -641,9 +690,11 @@ export default function Bag({
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span>Nationwide Delivery</span>
-                  <span className="text-[#141413] dark:text-[#F3F1EC]">Free</span>
+                <div className="flex justify-between items-center">
+                  <span>Nationwide Delivery ({shippingSettings.defaultDeliveryTimeline})</span>
+                  <span className="font-mono text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                    {shippingFee === 0 ? "Free" : formatNaira(shippingFee)}
+                  </span>
                 </div>
                 <div className="pt-3 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex justify-between items-baseline text-[#141413] dark:text-[#F3F1EC]">
                   <span className="font-medium text-sm">Total</span>

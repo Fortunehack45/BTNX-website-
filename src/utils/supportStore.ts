@@ -104,7 +104,7 @@ const SEED_TICKETS: SupportTicket[] = [
       {
         id: "msg-seed-1",
         sender: "bot",
-        senderName: "BTNX Concierge Bot",
+        senderName: "BTNX Support Assistant",
         senderRole: "Automated Assistant · Instant Reply",
         text: "Welcome to BTNX Client Care. I can help you track an order from our Osun hub, update a delivery address, start a size exchange, or connect you with a human specialist.",
         createdAt: "2026-11-13T14:20:00.000Z",
@@ -613,7 +613,7 @@ export function generateBotReply(params: {
 
   return {
     replyText:
-      "Thank you for reaching out to BTNX Client Care. As your automated concierge, I can inspect orders, process address updates or size exchanges, review attached garment photos, or transfer you immediately to a Human Customer Care Specialist at our Osun desk.",
+      "Thank you for reaching out to BTNX Client Care. As your virtual support assistant, I can inspect orders, process address updates or size exchanges, review attached garment photos, or transfer you immediately to a Human Customer Care Specialist at our Osun desk.",
     shouldEscalateToHuman: false,
     suggestHumanTransfer: true,
     quickReplies: [

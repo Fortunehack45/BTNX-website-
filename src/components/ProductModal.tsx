@@ -696,9 +696,13 @@ export default function ProductModal({
                         className="overflow-hidden"
                       >
                         <div className="pt-3 space-y-2 text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                          <p>{product.description}</p>
+                          {product.fabricAndCare ? (
+                            <p className="whitespace-pre-line">{product.fabricAndCare}</p>
+                          ) : (
+                            <p>{product.description}</p>
+                          )}
                           <p>
-                            Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean.
+                            {product.fitDetails || "Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean."}
                           </p>
                         </div>
                       </motion.div>
@@ -712,7 +716,14 @@ export default function ProductModal({
                     onClick={() => setIsShippingOpen(!isShippingOpen)}
                     className="w-full flex items-center justify-between text-xs font-medium uppercase tracking-[0.12em] text-[#141413] dark:text-[#F3F1EC] cursor-pointer"
                   >
-                    <span>Shipping, Packaging &amp; Returns</span>
+                    <div className="flex items-center gap-2">
+                      <span>Shipping, Packaging &amp; Returns</span>
+                      {(product.isFreeShipping || product.shippingFee === 0) && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-mono tracking-wider uppercase bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E] rounded-xs">
+                          Free Shipping
+                        </span>
+                      )}
+                    </div>
                     {isShippingOpen ? (
                       <ChevronUp className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                     ) : (
@@ -735,7 +746,16 @@ export default function ProductModal({
                               <span className="block text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
                                 Delivery
                               </span>
-                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">2–4 Business Days</span>
+                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">
+                                {product.deliveryTimeline || "2–4 Business Days"}
+                              </span>
+                              <span className="block text-[10px] text-[#8C877D] mt-0.5">
+                                {product.isFreeShipping || product.shippingFee === 0
+                                  ? "Free Delivery"
+                                  : product.shippingFee
+                                  ? formatNaira(product.shippingFee)
+                                  : "Standard Delivery"}
+                              </span>
                             </div>
                           </div>
                           <div className="flex items-start gap-2.5">
@@ -744,7 +764,9 @@ export default function ProductModal({
                               <span className="block text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
                                 Packaging
                               </span>
-                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">Cotton Garment Box</span>
+                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">
+                                {product.packagingType || "Cotton Garment Box"}
+                              </span>
                             </div>
                           </div>
                           <div className="flex items-start gap-2.5">
@@ -753,7 +775,9 @@ export default function ProductModal({
                               <span className="block text-[10px] uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
                                 Returns
                               </span>
-                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">14-Day Free Exchanges</span>
+                              <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">
+                                {product.returnPolicy || "14-Day Free Exchanges"}
+                              </span>
                             </div>
                           </div>
                         </div>

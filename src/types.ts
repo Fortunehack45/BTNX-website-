@@ -27,6 +27,33 @@ export interface Product {
   collectionId?: string;
   stock?: number;
   cartCount?: number;
+
+  // Custom Product-level Attributes (Editable in Admin)
+  fabricAndCare?: string;
+  fitDetails?: string;
+  deliveryTimeline?: string; // e.g. "2-4 Business Days"
+  packagingType?: string;    // e.g. "Cotton Garment Box"
+  returnPolicy?: string;     // e.g. "14-Day Free Exchanges"
+  shippingFee?: number;      // Specific fee override (or undefined to use store default)
+  isFreeShipping?: boolean;  // Mark product as free shipping
+
+  // Hero Carousel Pinning
+  isPinnedHero?: boolean;
+  heroOrder?: number;
+  heroHeadline?: string;
+  heroSubheadline?: string;
+  heroLookNumber?: string;
+  heroImage?: string;
+}
+
+export interface StoreShippingSettings {
+  defaultShippingFee: number;
+  freeShippingThreshold: number;
+  isFreeShippingGlobal: boolean;
+  defaultDeliveryTimeline: string;
+  defaultPackagingType: string;
+  defaultReturnPolicy: string;
+  updatedAt?: string;
 }
 
 export interface CartItem {

@@ -191,12 +191,12 @@ export default function Footer({ onNavigateHome, onOpenSupport }: FooterProps) {
               Customer Care
             </p>
             <div className="flex flex-col gap-1 text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
-              <a
-                href="/support/"
+              <Link
+                to="/support"
                 className="py-1.5 text-left hover:text-[#966830] dark:hover:text-[#C89B62] transition-colors w-fit"
               >
                 Customer Service &amp; Live Chat
-              </a>
+              </Link>
               <Link
                 to="/track"
                 onClick={() => {

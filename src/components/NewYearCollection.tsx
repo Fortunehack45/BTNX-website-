@@ -23,6 +23,7 @@ interface NewYearCollectionProps {
   searchQuery?: string;
   wishlist?: Product[];
   onToggleWishlist?: (product: Product) => void;
+  products?: Product[];
 }
 
 const FILTER_TABS = [
@@ -45,7 +46,9 @@ export default function NewYearCollection({
   searchQuery = "",
   wishlist = [],
   onToggleWishlist,
+  products,
 }: NewYearCollectionProps) {
+  const storeProducts = products && products.length > 0 ? products : NEW_YEAR_PRODUCTS;
   const [isVoucherClaimed, setIsVoucherClaimed] = useState(false);
 
   const handleClaimVoucher = (e: React.MouseEvent) => {
@@ -74,7 +77,7 @@ export default function NewYearCollection({
     return true;
   };
 
-  const displayedProducts = NEW_YEAR_PRODUCTS.filter((product) => {
+  const displayedProducts = storeProducts.filter((product) => {
     if (isSearchActive) {
       const q = searchQuery.toLowerCase().trim();
       const hit =

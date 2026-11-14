@@ -18,6 +18,7 @@ import TrackOrder from "./pages/TrackOrder";
 import UserProfileModal from "./components/UserProfileModal";
 import AuthModal from "./components/AuthModal";
 import InvoiceModal from "./components/InvoiceModal";
+import Support from "./pages/Support";
 import Notification, { Toast } from "./components/Notification";
 import MobileBottomNav from "./components/MobileBottomNav";
 import { AppBootSkeleton } from "./components/StoreSkeleton";
@@ -123,10 +124,61 @@ export default function App() {
     }
   }, [location.pathname, location.search]);
 
+  // Dynamic store products synchronized with Firestore and local cache
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const cached = localStorage.getItem("btnx_cloud_products");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const map = new Map<string, Product>();
+          NEW_YEAR_PRODUCTS.forEach((p) => map.set(p.id, p));
+          parsed.forEach((p: Product) => map.set(p.id, { ...map.get(p.id), ...p }));
+          return Array.from(map.values());
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return NEW_YEAR_PRODUCTS;
+  });
+
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(
+        collection(db, "products"),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const fetched = snapshot.docs.map((d) => ({
+              id: d.id,
+              ...d.data(),
+            })) as Product[];
+            const map = new Map<string, Product>();
+            NEW_YEAR_PRODUCTS.forEach((p) => map.set(p.id, p));
+            fetched.forEach((p) => map.set(p.id, { ...map.get(p.id), ...p }));
+            const merged = Array.from(map.values());
+            setProducts(merged);
+            try {
+              localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
+            } catch {}
+          }
+        },
+        () => {
+          // fallback to local state
+        }
+      );
+      return () => unsub();
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // Derive activeProduct and account modal state from URL query params so reload preserves them
   const urlProductId = searchParams.get("product");
   const activeProduct: Product | null = urlProductId
-    ? NEW_YEAR_PRODUCTS.find((p) => p.id === urlProductId) || null
+    ? products.find((p) => p.id === urlProductId) ||
+      NEW_YEAR_PRODUCTS.find((p) => p.id === urlProductId) ||
+      null
     : null;
 
   const accountParam = searchParams.get("account") as "profile" | "orders" | "favorites" | null;
@@ -482,9 +534,9 @@ export default function App() {
   const handleOpenSupport = (orderId?: string) => {
     handleCloseProfileModal();
     if (orderId) {
-      window.location.href = `/support/?order=${encodeURIComponent(orderId)}`;
+      navigate(`/support?order=${encodeURIComponent(orderId)}`);
     } else {
-      window.location.href = "/support/";
+      navigate("/support");
     }
   };
 
@@ -518,6 +570,7 @@ export default function App() {
         onMarkAsRead={markAsRead}
         onMarkAllAsRead={markAllAsRead}
         onOpenSupport={() => handleOpenSupport()}
+        products={products}
       />
 
       <main className="flex-grow">
@@ -532,7 +585,7 @@ export default function App() {
                 renderProductDetail(activeProduct)
               ) : (
                 <>
-                  <Hero onOpenProduct={setActiveProduct} />
+                  <Hero onOpenProduct={setActiveProduct} products={products} />
                   <NewArrivals onCategoryFilter={setCategoryFilter} />
                   <NewYearCollection
                     cart={cart}
@@ -550,6 +603,7 @@ export default function App() {
                     searchQuery={searchQuery}
                     wishlist={wishlist}
                     onToggleWishlist={handleToggleWishlist}
+                    products={products}
                   />
                   <BigSale onCategoryFilter={setCategoryFilter} />
                   <Newsletter onAddToast={handleAddToast} />
@@ -573,6 +627,7 @@ export default function App() {
                   wishlist={wishlist}
                   onToggleWishlist={handleToggleWishlist}
                   globalSearchQuery={searchQuery}
+                  products={products}
                 />
               )
             }
@@ -687,6 +742,26 @@ export default function App() {
                   onOpenProduct={(product) => setActiveProduct(product)}
                   onAddToast={handleAddToast}
                   onOpenSupport={handleOpenSupport}
+                />
+              )
+            }
+          />
+          <Route
+            path="/support"
+            element={
+              activeProduct ? (
+                renderProductDetail(activeProduct)
+              ) : (
+                <Support
+                  orders={orders}
+                  cart={cart}
+                  wishlist={wishlist}
+                  currentUser={currentUser}
+                  userName={userData?.name}
+                  userEmail={currentUser?.email || ""}
+                  onViewInvoice={(order) => setInvoiceOrder(order)}
+                  onOpenProduct={(product) => setActiveProduct(product)}
+                  onAddToast={handleAddToast}
                 />
               )
             }

@@ -46,6 +46,7 @@ interface HeaderProps {
   onMarkAsRead: (notif: AppNotification) => void;
   onMarkAllAsRead: () => void;
   onOpenSupport?: () => void;
+  products?: Product[];
 }
 
 export default function Header({
@@ -63,6 +64,7 @@ export default function Header({
   onMarkAsRead,
   onMarkAllAsRead,
   onOpenSupport,
+  products,
 }: HeaderProps) {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -293,15 +295,16 @@ export default function Header({
     navigate("/notifications");
   };
 
+  const allProducts = products && products.length > 0 ? products : NEW_YEAR_PRODUCTS;
   const cleanQuery = searchQuery.trim().toLowerCase();
   const suggestedProducts = cleanQuery
-    ? NEW_YEAR_PRODUCTS.filter(
+    ? allProducts.filter(
         (product) =>
           product.name.toLowerCase().includes(cleanQuery) ||
           product.category.toLowerCase().includes(cleanQuery) ||
           (product.description && product.description.toLowerCase().includes(cleanQuery))
       ).slice(0, 4)
-    : NEW_YEAR_PRODUCTS.slice(0, 4);
+    : allProducts.slice(0, 4);
 
   return (
     <>
@@ -615,14 +618,21 @@ export default function Header({
                               <Settings className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                               <span>Profile &amp; Shipping</span>
                             </button>
-                            <a
-                              href="/support/"
-                              onClick={() => setIsProfileDropdownOpen(false)}
-                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer"
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsProfileDropdownOpen(false);
+                                if (onOpenSupport) {
+                                  onOpenSupport();
+                                } else {
+                                  navigate("/support");
+                                }
+                              }}
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-sm text-xs font-medium text-[#141413] dark:text-[#F3F1EC] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E] transition-colors cursor-pointer text-left"
                             >
                               <Headphones className="w-4 h-4 text-[#66625B] dark:text-[#A7A299]" />
                               <span>Customer Service</span>
-                            </a>
+                            </button>
                             <div className="h-[1px] bg-[#E6E2DA] dark:bg-[#2C2A26] my-1 mx-2" />
                             <button
                               onClick={() => {

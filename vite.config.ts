@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import {defineConfig} from 'vite';
 
 const DEFAULT_PUBLIC_ORIGIN =
@@ -23,10 +24,43 @@ function resolveDeploymentOrigin(): string {
 function multiPageRootsPlugin() {
   return {
     name: 'multi-page-roots',
-    transformIndexHtml(html: string) {
+    transformIndexHtml(html: string, ctx?: any) {
       const targetOrigin = resolveDeploymentOrigin();
-      if (!targetOrigin || targetOrigin === DEFAULT_PUBLIC_ORIGIN) return html;
-      return html.replaceAll(DEFAULT_PUBLIC_ORIGIN, targetOrigin);
+      let transformed =
+        !targetOrigin || targetOrigin === DEFAULT_PUBLIC_ORIGIN
+          ? html
+          : html.replaceAll(DEFAULT_PUBLIC_ORIGIN, targetOrigin);
+
+      const reqUrl = ctx?.originalUrl || ctx?.path || '';
+      if (reqUrl.includes('product=')) {
+        const match = reqUrl.match(/product=([^&#]+)/);
+        const productId = match ? decodeURIComponent(match[1]) : '';
+        if (productId) {
+          try {
+            const dataFile = path.resolve(__dirname, 'src/data.ts');
+            if (fs.existsSync(dataFile)) {
+              const fileContent = fs.readFileSync(dataFile, 'utf-8');
+              const idRegex = new RegExp(`id:\\s*["']${productId}["'][\\s\\S]*?image:\\s*["']([^"']+)["']`);
+              const imgMatch = fileContent.match(idRegex);
+              const nameRegex = new RegExp(`id:\\s*["']${productId}["'][\\s\\S]*?name:\\s*["']([^"']+)["']`);
+              const nameMatch = fileContent.match(nameRegex);
+              if (imgMatch && imgMatch[1]) {
+                const prodImage = imgMatch[1].startsWith('http')
+                  ? imgMatch[1]
+                  : `${targetOrigin || ''}${imgMatch[1].startsWith('/') ? '' : '/'}${imgMatch[1]}`;
+                const prodName = nameMatch ? nameMatch[1] : 'BTNX Luxury Piece';
+                transformed = transformed
+                  .replace(/<meta property="og:image" content="[^"]*"/, `<meta property="og:image" content="${prodImage}"`)
+                  .replace(/<meta property="og:image:secure_url" content="[^"]*"/, `<meta property="og:image:secure_url" content="${prodImage}"`)
+                  .replace(/<meta name="twitter:image" content="[^"]*"/, `<meta name="twitter:image" content="${prodImage}"`)
+                  .replace(/<meta property="og:title" content="[^"]*"/, `<meta property="og:title" content="${prodName} — BTNX Store"`)
+                  .replace(/<title>[^<]*<\/title>/, `<title>${prodName} — BTNX Store</title>`);
+              }
+            }
+          } catch {}
+        }
+      }
+      return transformed;
     },
     configureServer(server: any) {
       server.middlewares.use((req: any, _res: any, next: any) => {
@@ -36,7 +70,7 @@ function multiPageRootsPlugin() {
         if (!pathname.includes('.')) {
           if (pathname === '/admin' || pathname.startsWith('/admin/')) {
             req.url = `/admin/index.html${query}`;
-          } else if (pathname === '/support' || pathname.startsWith('/support/')) {
+          } else if (pathname === '/support-staff' || pathname.startsWith('/support-staff') || pathname === '/support/staff' || pathname.startsWith('/support/staff')) {
             req.url = `/support/index.html${query}`;
           }
         }

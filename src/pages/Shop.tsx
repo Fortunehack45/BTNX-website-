@@ -34,6 +34,7 @@ interface ShopProps {
   wishlist?: Product[];
   onToggleWishlist?: (product: Product) => void;
   globalSearchQuery?: string;
+  products?: Product[];
 }
 
 const CATEGORIES = [
@@ -79,7 +80,9 @@ export default function Shop({
   wishlist = [],
   onToggleWishlist,
   globalSearchQuery = "",
+  products,
 }: ShopProps) {
+  const storeProducts = products && products.length > 0 ? products : NEW_YEAR_PRODUCTS;
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   const [searchQuery, setSearchQuery] = useState(urlQuery || globalSearchQuery);
@@ -202,9 +205,9 @@ export default function Shop({
   };
 
   const getCategoryCount = (cat: string) =>
-    NEW_YEAR_PRODUCTS.filter((p) => matchesCategoryName(p, cat)).length;
+    storeProducts.filter((p) => matchesCategoryName(p, cat)).length;
 
-  const filteredProducts = NEW_YEAR_PRODUCTS.filter((product) => {
+  const filteredProducts = storeProducts.filter((product) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -227,7 +230,7 @@ export default function Shop({
   });
 
   const visibleRecommendations = [0, 1, 2].map(
-    (offset) => NEW_YEAR_PRODUCTS[(recOffset + offset) % NEW_YEAR_PRODUCTS.length]
+    (offset) => storeProducts[(recOffset + offset) % storeProducts.length]
   );
 
   const renderFilterSections = (isMobile = false) => (
@@ -468,7 +471,7 @@ export default function Shop({
 
             <div className="flex items-center gap-4 sm:gap-5 shrink-0">
               <span className="font-mono tabular-nums whitespace-nowrap">
-                Showing <strong className="text-[#141413] dark:text-[#F3F1EC]">{sortedProducts.length}</strong> of {NEW_YEAR_PRODUCTS.length}
+                Showing <strong className="text-[#141413] dark:text-[#F3F1EC]">{sortedProducts.length}</strong> of {storeProducts.length}
               </span>
               {hasActiveFilters && (
                 <button
@@ -686,7 +689,7 @@ export default function Shop({
                 type="button"
                 onClick={() =>
                   setRecOffset(
-                    (prev) => (prev - 1 + NEW_YEAR_PRODUCTS.length) % NEW_YEAR_PRODUCTS.length
+                    (prev) => (prev - 1 + storeProducts.length) % storeProducts.length
                   )
                 }
                 className="w-10 h-10 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer"
@@ -696,7 +699,7 @@ export default function Shop({
               </button>
               <button
                 type="button"
-                onClick={() => setRecOffset((prev) => (prev + 1) % NEW_YEAR_PRODUCTS.length)}
+                onClick={() => setRecOffset((prev) => (prev + 1) % storeProducts.length)}
                 className="w-10 h-10 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer"
                 aria-label="Next recommendations"
               >

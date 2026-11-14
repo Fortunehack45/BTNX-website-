@@ -2,12 +2,22 @@
   "name": "react-example",
   "private": true,
   "workspaces": [
-    "src/admin"
+    "admin",
+    "support",
+    "server",
+    "mcp"
   ],
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev:web": "vite --port=3000 --host=0.0.0.0",
+    "dev:admin": "npm run dev --prefix admin",
+    "dev:support": "npm run dev --prefix support",
+    "dev:api": "npm run dev --prefix server",
+    "dev:mcp": "npm run dev --prefix mcp",
+    "dev:whatsapp-cli": "npm run sandbox --prefix server",
+    "dev:all": "npx concurrently -n \"web,admin,support,api\" -c \"blue,green,magenta,yellow\" \"npm run dev\" \"npm run dev:admin\" \"npm run dev:support\" \"npm run dev:api\"",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
