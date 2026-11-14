@@ -10,38 +10,28 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  Edit3,
   Check,
   Copy,
   Search,
   Send,
   Image as ImageIcon,
   UserCheck,
-  Bot,
-  CheckCircle2,
   RefreshCw,
   LogOut,
   Shield,
-  Lock,
-  Mail,
   Sun,
   Moon,
   Monitor,
   X,
   Download,
-  Eye,
   Sparkles,
-  ZoomIn,
   Truck,
-  Sliders,
   Star,
 } from "lucide-react";
 import { Product, Order, StoreShippingSettings } from "../types";
 import {
   auth,
   db,
-  OperationType,
-  handleFirestoreError,
 } from "../lib/firebase";
 import {
   onAuthStateChanged,
@@ -112,17 +102,6 @@ const PRODUCT_CATEGORIES = [
 ];
 
 const SIZES_LIST = ["XS", "S", "M", "L", "XL", "XXL"];
-const COLORS_LIST = [
-  "Black",
-  "Off-White",
-  "Dusty Plum",
-  "Deep Navy",
-  "Olive",
-  "Charcoal",
-  "Sand",
-  "Espresso",
-];
-
 const CANNED_AGENT_REPLIES = [
   {
     label: "Dispatched from Osun Hub",
@@ -286,8 +265,7 @@ export default function AdminPortal() {
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastType, setBroadcastType] = useState<"promo" | "new_arrival" | "system">("promo");
 
-  // Clients Search
-  const [clientSearch, setClientSearch] = useState("");
+  // Clients Subtab
   const [clientSubTab, setClientSubTab] = useState<"users" | "newsletters">("users");
 
   const showToast = (msg: string) => {
@@ -2934,6 +2912,34 @@ export default function AdminPortal() {
                   <span>Transmit Broadcast</span>
                 </button>
               </form>
+
+              {notificationsList.length > 0 && (
+                <div className="pt-5 border-t border-[#E6E2DA] dark:border-[#2C2A26] space-y-2.5">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299] block">
+                    Broadcast Dispatch History ({notificationsList.length})
+                  </span>
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                    {notificationsList.map((nt) => (
+                      <div
+                        key={nt.id}
+                        className="p-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between text-xs"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <p className="font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                            {nt.title}
+                          </p>
+                          <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] truncate">
+                            {nt.message}
+                          </p>
+                        </div>
+                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 bg-black/5 dark:bg-white/5 rounded-xs shrink-0">
+                          {nt.type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

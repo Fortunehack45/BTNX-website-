@@ -15,6 +15,19 @@ import {
   ArrowLeft,
   LogOut,
   Star,
+  Truck,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  ChevronRight,
+  ShoppingBag,
+  Eye,
+  FileText,
+  Check,
+  MapPin,
+  Phone,
+  User,
 } from "lucide-react";
 import BrandLogo from "../../src/components/BrandLogo";
 import { db, auth } from "../../src/lib/firebase";
@@ -32,6 +45,7 @@ import {
   setDoc,
   getDoc,
   query,
+  updateDoc,
 } from "firebase/firestore";
 import {
   SupportTicket,
@@ -41,8 +55,73 @@ import {
   compressImageFile,
 } from "../../src/utils/supportStore";
 import { formatNaira } from "../../src/utils/currency";
-import { Product } from "../../src/types";
+import { Order, Product } from "../../src/types";
 import { NEW_YEAR_PRODUCTS } from "../../src/data";
+
+const DEMO_SUPPORT_ORDERS: Order[] = [
+  {
+    id: "BX-849201",
+    status: "In Transit",
+    date: "12 Nov 2026",
+    total: 232500,
+    items: [
+      {
+        product: NEW_YEAR_PRODUCTS[0],
+        quantity: 1,
+        size: "L",
+        color: "Dusty Plum",
+      },
+      {
+        product: NEW_YEAR_PRODUCTS[2],
+        quantity: 1,
+        size: "L",
+        color: "Deep Navy",
+      },
+    ],
+  },
+  {
+    id: "BX-730419",
+    status: "Processing",
+    date: "13 Nov 2026",
+    total: 185000,
+    items: [
+      {
+        product: NEW_YEAR_PRODUCTS[1],
+        quantity: 1,
+        size: "M",
+        color: "Black",
+      },
+    ],
+  },
+  {
+    id: "BX-994102",
+    status: "Confirmed",
+    date: "14 Nov 2026",
+    total: 340000,
+    items: [
+      {
+        product: NEW_YEAR_PRODUCTS[3] || NEW_YEAR_PRODUCTS[0],
+        quantity: 2,
+        size: "XL",
+        color: "Noir Black",
+      },
+    ],
+  },
+  {
+    id: "BX-621804",
+    status: "Delivered",
+    date: "10 Nov 2026",
+    total: 120000,
+    items: [
+      {
+        product: NEW_YEAR_PRODUCTS[0],
+        quantity: 1,
+        size: "S",
+        color: "Off-White",
+      },
+    ],
+  },
+];
 
 const CANNED_REPLIES = [
   {
@@ -86,6 +165,16 @@ export default function SupportStaffPortal() {
   const [replyText, setReplyText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Orders State & Dossier
+  const [orders, setOrders] = useState<Order[]>(DEMO_SUPPORT_ORDERS);
+  const [ordersSearch, setOrdersSearch] = useState("");
+  const [ordersFilterStatus, setOrdersFilterStatus] = useState<string>("all");
+  const [inspectingOrder, setInspectingOrder] = useState<Order | null>(null);
+  const [activeTab, setActiveTab] = useState<"tickets" | "orders">("tickets");
+  const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
+  const [isLinkingOrder, setIsLinkingOrder] = useState(false);
+  const [linkSearchQuery, setLinkSearchQuery] = useState("");
 
   // Attachment & Chat State
   const [availableProducts, setAvailableProducts] = useState<Product[]>(NEW_YEAR_PRODUCTS);
@@ -195,6 +284,49 @@ export default function SupportStaffPortal() {
     } catch {}
   }, []);
 
+  // Fetch real-time orders for Support Team
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      const q = query(collection(db, "orders"));
+      const unsub = onSnapshot(
+        q,
+        (snap) => {
+          if (!snap.empty) {
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order));
+            list.sort((a: any, b: any) => {
+              const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : a.date ? new Date(a.date).getTime() : 0;
+              const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : b.date ? new Date(b.date).getTime() : 0;
+              return tB - tA;
+            });
+            setOrders(list);
+            try {
+              localStorage.setItem("btnx_orders", JSON.stringify(list));
+            } catch {}
+          } else {
+            try {
+              const local = localStorage.getItem("btnx_orders");
+              if (local) setOrders(JSON.parse(local));
+              else setOrders(DEMO_SUPPORT_ORDERS);
+            } catch {
+              setOrders(DEMO_SUPPORT_ORDERS);
+            }
+          }
+        },
+        () => {
+          try {
+            const local = localStorage.getItem("btnx_orders");
+            if (local) setOrders(JSON.parse(local));
+            else setOrders(DEMO_SUPPORT_ORDERS);
+          } catch {
+            setOrders(DEMO_SUPPORT_ORDERS);
+          }
+        }
+      );
+      return () => unsub();
+    } catch {}
+  }, [currentUser]);
+
   // Set selected ticket on load or when query param changes
   useEffect(() => {
     if (tickets.length > 0) {
@@ -217,6 +349,38 @@ export default function SupportStaffPortal() {
   }, [selectedTicketId, tickets]);
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0] || null;
+
+  // Matching Order for the currently selected ticket
+  const ticketOrder = orders.find(
+    (o) =>
+      Boolean(selectedTicket?.orderId) &&
+      (o.id.toLowerCase() === selectedTicket?.orderId?.toLowerCase() ||
+        o.id.toLowerCase().replace(/[^a-z0-9]/g, "") ===
+          selectedTicket?.orderId?.toLowerCase().replace(/[^a-z0-9]/g, ""))
+  ) || null;
+
+  // Other orders placed by this customer (matching userId or matching email)
+  const clientOrderHistory = orders.filter(
+    (o) =>
+      Boolean(o.id) &&
+      ((selectedTicket?.userId && o.userId === selectedTicket.userId) ||
+        (selectedTicket?.userEmail && (o as any).userEmail === selectedTicket.userEmail) ||
+        (ticketOrder && o.id === ticketOrder.id))
+  );
+
+  // Filtered orders list for the All Orders tab
+  const filteredOrders = orders.filter((o) => {
+    if (ordersFilterStatus !== "all") {
+      if (o.status?.toLowerCase() !== ordersFilterStatus.toLowerCase()) return false;
+    }
+    if (!ordersSearch.trim()) return true;
+    const q = ordersSearch.toLowerCase().trim();
+    return (
+      o.id.toLowerCase().includes(q) ||
+      o.status.toLowerCase().includes(q) ||
+      o.items?.some((it) => it.product?.name?.toLowerCase().includes(q))
+    );
+  });
 
   // Clean ticket document for Firestore (strictly removes undefined values)
   const cleanTicketDoc = (ticket: SupportTicket): any => {
@@ -464,6 +628,88 @@ export default function SupportStaffPortal() {
     }
   };
 
+  const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
+    setIsUpdatingOrderStatus(true);
+    try {
+      await updateDoc(doc(db, "orders", orderId), { status: nextStatus });
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus as any } : o))
+      );
+      if (inspectingOrder?.id === orderId) {
+        setInspectingOrder((prev) => (prev ? { ...prev, status: nextStatus as any } : null));
+      }
+      showToast(`Order #${orderId} status updated to ${nextStatus}.`);
+
+      if (selectedTicket && selectedTicket.orderId === orderId) {
+        const orderObj = orders.find((o) => o.id === orderId);
+        await handleSendAgentReply(
+          `Logistics update: Order #${orderId} status has been updated to "${nextStatus}". Our Osogbo dispatch board has logged this update.`,
+          {
+            order: {
+              id: orderId,
+              status: nextStatus,
+              total: orderObj?.total || 120000,
+              date: orderObj?.date || "Recent",
+              itemCount: orderObj?.items?.length || 1,
+              firstItemName: orderObj?.items?.[0]?.product?.name || "BTNX Garment Piece",
+              firstItemImage: orderObj?.items?.[0]?.product?.image,
+            },
+          }
+        );
+      }
+    } catch {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus as any } : o))
+      );
+      showToast(`Order #${orderId} updated locally to ${nextStatus}.`);
+    } finally {
+      setIsUpdatingOrderStatus(false);
+    }
+  };
+
+  const handleLinkOrderToTicket = async (orderId: string) => {
+    if (!selectedTicket) return;
+    const ord = orders.find((o) => o.id === orderId);
+    const updated: SupportTicket = {
+      ...selectedTicket,
+      orderId,
+      updatedAt: new Date().toISOString(),
+      messages: [
+        ...selectedTicket.messages,
+        {
+          id: `msg-${Date.now()}-link`,
+          sender: "system",
+          senderName: "System",
+          text: `${agentName} linked Order #${orderId} to this conversation thread.`,
+          createdAt: new Date().toISOString(),
+          attachedOrder: ord
+            ? {
+                id: ord.id,
+                status: ord.status,
+                total: ord.total,
+                date: ord.date,
+                itemCount: ord.items?.length || 1,
+                firstItemName: ord.items?.[0]?.product?.name || "BTNX Garment Piece",
+                firstItemImage: ord.items?.[0]?.product?.image,
+              }
+            : undefined,
+        },
+      ],
+    };
+
+    setSelectedTicketId(updated.id);
+    setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    broadcastTicketUpdate(updated);
+    setIsLinkingOrder(false);
+
+    try {
+      await setDoc(doc(db, "supportTickets", updated.id), cleanTicketDoc(updated), { merge: true });
+      showToast(`Linked Order #${orderId} to conversation.`);
+    } catch {
+      showToast("Linked locally.");
+    }
+  };
+
   const handleAttachImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -648,149 +894,313 @@ export default function SupportStaffPortal() {
 
       {/* Main Workspace: 3-Column Support Console */}
       <div className="flex-1 max-w-[1720px] w-full mx-auto p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* COLUMN 1: TICKET QUEUE (4 Cols) */}
+        {/* COLUMN 1: TICKET QUEUE & ORDERS EXPLORER (4 Cols) */}
         <div className="lg:col-span-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] flex flex-col h-[calc(100vh-100px)] overflow-hidden">
-          {/* Queue Filter Bar */}
-          <div className="p-3 border-b border-[#E6E2DA] dark:border-[#2C2A26] space-y-2.5">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[#66625B] absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by client, email, or order #..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-8 pl-8 pr-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
-              />
-            </div>
-
-            <div className="grid grid-cols-4 gap-1 text-[10px] font-mono uppercase tracking-wider">
-              <button
-                type="button"
-                onClick={() => setFilterMode("all")}
-                className={`py-1.5 text-center border cursor-pointer ${
-                  filterMode === "all"
-                    ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
-                    : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B]"
-                }`}
-              >
-                All ({tickets.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("human")}
-                className={`py-1.5 text-center border cursor-pointer relative ${
-                  filterMode === "human"
-                    ? "bg-[#966830] text-white border-[#966830]"
-                    : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#966830]"
-                }`}
-              >
-                Human ({humanPendingCount})
-                {humanPendingCount > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-[#E5484D] absolute -top-1 -right-1" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("open")}
-                className={`py-1.5 text-center border cursor-pointer ${
-                  filterMode === "open"
-                    ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
-                    : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B]"
-                }`}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("resolved")}
-                className={`py-1.5 text-center border cursor-pointer ${
-                  filterMode === "resolved"
-                    ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
-                    : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B]"
-                }`}
-              >
-                Done
-              </button>
-            </div>
+          {/* View Mode Switcher: Inquiries vs All Orders */}
+          <div className="grid grid-cols-2 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413]">
+            <button
+              type="button"
+              onClick={() => setActiveTab("tickets")}
+              className={`py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] flex items-center justify-center gap-1.5 border-b-2 cursor-pointer transition-colors ${
+                activeTab === "tickets"
+                  ? "border-[#966830] text-[#966830] dark:text-[#C89B62] bg-white dark:bg-[#191816]"
+                  : "border-transparent text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Inquiries ({tickets.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("orders")}
+              className={`py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] flex items-center justify-center gap-1.5 border-b-2 cursor-pointer transition-colors ${
+                activeTab === "orders"
+                  ? "border-[#966830] text-[#966830] dark:text-[#C89B62] bg-white dark:bg-[#191816]"
+                  : "border-transparent text-[#66625B] dark:text-[#A7A299] hover:text-[#141413] dark:hover:text-[#F3F1EC]"
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span>All Orders ({orders.length})</span>
+            </button>
           </div>
 
-          {/* Ticket Cards Stream */}
-          <div className="flex-1 overflow-y-auto divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
-            {filteredTickets.length === 0 ? (
-              <div className="p-8 text-center text-xs text-[#66625B] space-y-2">
-                <MessageSquare className="w-6 h-6 mx-auto opacity-50" />
-                <p>No customer tickets in this view.</p>
-              </div>
-            ) : (
-              filteredTickets.map((t) => {
-                const isSelected = selectedTicket?.id === t.id;
-                const lastMsg = t.messages[t.messages.length - 1];
-                const needsHuman = t.mode === "human" || t.status === "pending_human";
+          {activeTab === "tickets" ? (
+            <>
+              {/* Queue Filter Bar */}
+              <div className="p-3 border-b border-[#E6E2DA] dark:border-[#2C2A26] space-y-2.5">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[#66625B] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by client, email, or order #..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-8 pl-8 pr-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
+                  />
+                </div>
 
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => {
-                      setSelectedTicketId(t.id);
-                      setSearchParams({ ticket: t.id });
-                    }}
-                    className={`p-3.5 cursor-pointer transition-colors space-y-1.5 ${
-                      isSelected
-                        ? "bg-[#FAF9F7] dark:bg-[#201F1D] border-l-2 border-l-[#966830]"
-                        : "hover:bg-[#FAF9F7]/70 dark:hover:bg-[#201F1D]/50"
+                <div className="grid grid-cols-4 gap-1 text-[10px] font-mono uppercase tracking-wider">
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("all")}
+                    className={`py-1.5 text-center border cursor-pointer ${
+                      filterMode === "all"
+                        ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
+                        : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B]"
                     }`}
                   >
-                    <div className="flex items-center justify-between text-[10px] font-mono">
-                      <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
-                        {t.userName}
-                      </span>
-                      <span className="text-[#66625B] dark:text-[#A7A299]">
-                        {new Date(t.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
+                    All ({tickets.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("human")}
+                    className={`py-1.5 text-center border cursor-pointer relative ${
+                      filterMode === "human"
+                        ? "bg-[#966830] text-white border-[#966830]"
+                        : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#966830]"
+                    }`}
+                  >
+                    Human ({humanPendingCount})
+                    {humanPendingCount > 0 && (
+                      <span className="w-2 h-2 rounded-full bg-[#E5484D] absolute -top-1 -right-1" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("open")}
+                    className={`py-1.5 text-center border cursor-pointer ${
+                      filterMode === "open"
+                        ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
+                        : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B]"
+                    }`}
+                  >
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("resolved")}
+                    className={`py-1.5 text-center border cursor-pointer ${
+                      filterMode === "resolved"
+                        ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
+                        : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B]"
+                    }`}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
 
-                    <p className="text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
-                      {t.subject || t.topic}
-                    </p>
-
-                    <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] line-clamp-1">
-                      {lastMsg ? lastMsg.text : "No messages yet"}
-                    </p>
-
-                    <div className="flex items-center justify-between pt-1 text-[10px] font-mono">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`px-1.5 py-0.5 rounded-xs uppercase tracking-wider text-[9px] ${
-                            needsHuman
-                              ? "bg-[#FDF2F2] text-[#E5484D] dark:bg-[#2A1616]"
-                              : "bg-[#F4EFE6] text-[#966830] dark:bg-[#2A241A] dark:text-[#C89B62]"
-                          }`}
-                        >
-                          {needsHuman ? "Human Agent Handling" : "Bot Active"}
-                        </span>
-                        {t.status === "resolved" && (
-                          <span className="px-1.5 py-0.5 bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E] rounded-xs uppercase tracking-wider text-[9px]">
-                            Resolved
-                          </span>
-                        )}
-                        {t.rating && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs text-[9px] font-mono font-medium">
-                            <Star className="w-2.5 h-2.5 fill-current" />
-                            <span>{t.rating}.0</span>
-                          </span>
-                        )}
-                      </div>
-                      {t.orderId && (
-                        <span className="text-[#66625B] dark:text-[#A7A299]">
-                          #{t.orderId}
-                        </span>
-                      )}
-                    </div>
+              {/* Ticket Cards Stream */}
+              <div className="flex-1 overflow-y-auto divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+                {filteredTickets.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[#66625B] space-y-2">
+                    <MessageSquare className="w-6 h-6 mx-auto opacity-50" />
+                    <p>No customer tickets in this view.</p>
                   </div>
-                );
-              })
-            )}
-          </div>
+                ) : (
+                  filteredTickets.map((t) => {
+                    const isSelected = selectedTicket?.id === t.id;
+                    const lastMsg = t.messages[t.messages.length - 1];
+                    const needsHuman = t.mode === "human" || t.status === "pending_human";
+
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => {
+                          setSelectedTicketId(t.id);
+                          setSearchParams({ ticket: t.id });
+                        }}
+                        className={`p-3.5 cursor-pointer transition-colors space-y-1.5 ${
+                          isSelected
+                            ? "bg-[#FAF9F7] dark:bg-[#201F1D] border-l-2 border-l-[#966830]"
+                            : "hover:bg-[#FAF9F7]/70 dark:hover:bg-[#201F1D]/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-mono">
+                          <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                            {t.userName}
+                          </span>
+                          <span className="text-[#66625B] dark:text-[#A7A299]">
+                            {new Date(t.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+
+                        <p className="text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                          {t.subject || t.topic}
+                        </p>
+
+                        <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] line-clamp-1">
+                          {lastMsg ? lastMsg.text : "No messages yet"}
+                        </p>
+
+                        <div className="flex items-center justify-between pt-1 text-[10px] font-mono">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-1.5 py-0.5 rounded-xs uppercase tracking-wider text-[9px] ${
+                                needsHuman
+                                  ? "bg-[#FDF2F2] text-[#E5484D] dark:bg-[#2A1616]"
+                                  : "bg-[#F4EFE6] text-[#966830] dark:bg-[#2A241A] dark:text-[#C89B62]"
+                              }`}
+                            >
+                              {needsHuman ? "Human Agent Handling" : "Bot Active"}
+                            </span>
+                            {t.status === "resolved" && (
+                              <span className="px-1.5 py-0.5 bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E] rounded-xs uppercase tracking-wider text-[9px]">
+                                Resolved
+                              </span>
+                            )}
+                            {t.rating && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs text-[9px] font-mono font-medium">
+                                <Star className="w-2.5 h-2.5 fill-current" />
+                                <span>{t.rating}.0</span>
+                              </span>
+                            )}
+                          </div>
+                          {t.orderId && (
+                            <span className="text-[#66625B] dark:text-[#A7A299]">
+                              #{t.orderId}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* All Orders Search & Filter Bar */}
+              <div className="p-3 border-b border-[#E6E2DA] dark:border-[#2C2A26] space-y-2.5">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[#66625B] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by order ID, garment, or status..."
+                    value={ordersSearch}
+                    onChange={(e) => setOrdersSearch(e.target.value)}
+                    className="w-full h-8 pl-8 pr-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar text-[10px] font-mono uppercase tracking-wider">
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "in transit", label: "In Transit" },
+                    { id: "processing", label: "Processing" },
+                    { id: "confirmed", label: "Confirmed" },
+                    { id: "delivered", label: "Delivered" },
+                  ].map((st) => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setOrdersFilterStatus(st.id)}
+                      className={`px-2.5 py-1 text-center border cursor-pointer whitespace-nowrap transition-colors ${
+                        ordersFilterStatus === st.id
+                          ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413]"
+                          : "border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#141413]"
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* All Orders Stream */}
+              <div className="flex-1 overflow-y-auto divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+                {filteredOrders.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[#66625B] space-y-2">
+                    <Package className="w-6 h-6 mx-auto opacity-50" />
+                    <p>No orders matched your search.</p>
+                  </div>
+                ) : (
+                  filteredOrders.map((ord) => {
+                    const isLinkedToCurrent = selectedTicket?.orderId === ord.id;
+                    return (
+                      <div
+                        key={ord.id}
+                        className="p-3.5 hover:bg-[#FAF9F7] dark:hover:bg-[#201F1D]/50 transition-colors space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                            #{ord.id}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-xs text-[9px] font-mono uppercase tracking-wider ${
+                              ord.status?.toLowerCase().includes("transit") || ord.status?.toLowerCase().includes("ship")
+                                ? "bg-[#EDEAFE] text-[#6E56CF] dark:bg-[#261E4E] dark:text-[#BAA7FF]"
+                                : ord.status?.toLowerCase().includes("deliver")
+                                ? "bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E]"
+                                : ord.status?.toLowerCase().includes("process")
+                                ? "bg-[#E6F4FE] text-[#0D74CE] dark:bg-[#0D2847] dark:text-[#70B8FF]"
+                                : "bg-[#F4EFE6] text-[#966830] dark:bg-[#2A241A] dark:text-[#C89B62]"
+                            }`}
+                          >
+                            {ord.status}
+                          </span>
+                        </div>
+
+                        {/* Order Items Preview */}
+                        <div className="space-y-1">
+                          {ord.items?.slice(0, 2).map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs">
+                              {item.product?.image && (
+                                <img
+                                  src={item.product.image}
+                                  alt={item.product.name}
+                                  className="w-7 h-7 object-cover border border-[#E6E2DA] dark:border-[#2C2A26] shrink-0"
+                                />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-medium truncate text-[#141413] dark:text-[#F3F1EC]">
+                                  {item.product?.name || "BTNX Garment Piece"}
+                                </p>
+                                <span className="text-[10px] text-[#66625B] dark:text-[#A7A299] font-mono">
+                                  {item.size} / {item.color} · Qty {item.quantity}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {ord.items && ord.items.length > 2 && (
+                            <span className="text-[10px] text-[#8C877D] font-mono">
+                              +{ord.items.length - 2} more piece{ord.items.length - 2 > 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-[#E6E2DA]/50 dark:border-[#2C2A26]/50">
+                          <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                            {formatNaira(ord.total)}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setInspectingOrder(ord)}
+                              className="h-6 px-2 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye className="w-2.5 h-2.5" />
+                              <span>Details</span>
+                            </button>
+                            {selectedTicket && !isLinkedToCurrent && (
+                              <button
+                                type="button"
+                                onClick={() => handleLinkOrderToTicket(ord.id)}
+                                className="h-6 px-2 bg-[#966830] text-white text-[10px] font-mono uppercase tracking-wider cursor-pointer hover:opacity-90"
+                                title="Link this order to current ticket"
+                              >
+                                Link
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* COLUMN 2: LIVE CHAT & CONVERSATION THREAD (5 Cols) */}
@@ -1073,10 +1483,13 @@ export default function SupportStaffPortal() {
                   Client Profile
                 </span>
                 <div className="space-y-1">
-                  <h3 className="font-medium text-sm text-[#141413] dark:text-[#F3F1EC]">
-                    {selectedTicket.userName}
-                  </h3>
-                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] font-mono">
+                  <div className="flex items-center gap-2">
+                    <User className="w-3.5 h-3.5 text-[#66625B]" />
+                    <h3 className="font-medium text-sm text-[#141413] dark:text-[#F3F1EC]">
+                      {selectedTicket.userName}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] font-mono pl-5">
                     {selectedTicket.userEmail}
                   </p>
                 </div>
@@ -1095,23 +1508,9 @@ export default function SupportStaffPortal() {
                   <div className="flex justify-between">
                     <span className="text-[#66625B]">Handling:</span>
                     <span>
-                      {selectedTicket.mode === "human" ? "Human Agent Handling" : "Automated Virtual Assistant"}
+                      {selectedTicket.mode === "human" ? "Human Specialist" : "Automated Bot"}
                     </span>
                   </div>
-                  {selectedTicket.orderId && (
-                    <div className="flex justify-between">
-                      <span className="text-[#66625B]">Order ID:</span>
-                      <a
-                        href={`/track?order=${encodeURIComponent(selectedTicket.orderId)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#966830] dark:text-[#C89B62] underline inline-flex items-center gap-1"
-                      >
-                        <span>#{selectedTicket.orderId}</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    </div>
-                  )}
                   <div className="flex justify-between">
                     <span className="text-[#66625B]">Created:</span>
                     <span>
@@ -1123,9 +1522,16 @@ export default function SupportStaffPortal() {
 
               {/* Client Rating & Review Dossier */}
               <div className="space-y-2 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
-                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
-                  Client Rating &amp; Review
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
+                    Client Review &amp; Rating
+                  </span>
+                  {selectedTicket.rating && (
+                    <span className="text-[10px] font-mono font-semibold text-[#966830] dark:text-[#C89B62]">
+                      ★ {selectedTicket.rating}.0 / 5
+                    </span>
+                  )}
+                </div>
                 {selectedTicket.rating ? (
                   <div className="p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-2 rounded-xs">
                     <div className="flex items-center justify-between">
@@ -1141,8 +1547,8 @@ export default function SupportStaffPortal() {
                           />
                         ))}
                       </div>
-                      <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]">
-                        {selectedTicket.rating}.0 / 5
+                      <span className="text-[9px] font-mono uppercase tracking-wider text-[#1D7A46] bg-[#EBF5EE] dark:bg-[#132A1C] dark:text-[#67E28E] px-1.5 py-0.5 rounded-xs">
+                        Verified CSAT
                       </span>
                     </div>
                     {selectedTicket.feedbackComment && (
@@ -1172,19 +1578,305 @@ export default function SupportStaffPortal() {
                 )}
               </div>
 
+              {/* Active Linked Order Dossier */}
+              <div className="space-y-2.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Active Order Dossier</span>
+                  </span>
+                  {ticketOrder && (
+                    <button
+                      type="button"
+                      onClick={() => setInspectingOrder(ticketOrder)}
+                      className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Full View</span>
+                    </button>
+                  )}
+                </div>
+
+                {ticketOrder ? (
+                  <div className="space-y-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] p-3 rounded-xs text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-semibold text-xs text-[#141413] dark:text-[#F3F1EC]">
+                        #{ticketOrder.id}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-xs text-[9px] font-mono uppercase tracking-wider flex items-center gap-1 ${
+                          ticketOrder.status?.toLowerCase().includes("transit") || ticketOrder.status?.toLowerCase().includes("ship")
+                            ? "bg-[#EDEAFE] text-[#6E56CF] dark:bg-[#261E4E] dark:text-[#BAA7FF]"
+                            : ticketOrder.status?.toLowerCase().includes("deliver")
+                            ? "bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E]"
+                            : ticketOrder.status?.toLowerCase().includes("cancel")
+                            ? "bg-[#FDF2F2] text-[#E5484D] dark:bg-[#2A1616]"
+                            : ticketOrder.status?.toLowerCase().includes("process")
+                            ? "bg-[#E6F4FE] text-[#0D74CE] dark:bg-[#0D2847] dark:text-[#70B8FF]"
+                            : "bg-[#F4EFE6] text-[#966830] dark:bg-[#2A241A] dark:text-[#C89B62]"
+                        }`}
+                      >
+                        {ticketOrder.status?.toLowerCase().includes("cancel") && (
+                          <AlertCircle className="w-2.5 h-2.5" />
+                        )}
+                        <span>{ticketOrder.status}</span>
+                      </span>
+                    </div>
+
+                    {/* Order Status Transition Dropdown */}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-mono uppercase tracking-wider text-[#66625B] dark:text-[#A7A299]">
+                        Update Order Status:
+                      </label>
+                      <select
+                        disabled={isUpdatingOrderStatus}
+                        value={ticketOrder.status}
+                        onChange={(e) => handleUpdateOrderStatus(ticketOrder.id, e.target.value)}
+                        className="w-full h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none cursor-pointer"
+                      >
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Processing">Processing</option>
+                        <option value="In Transit">In Transit</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Exchange Approved">Exchange Approved</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+
+                    {/* Order Items Breakdown */}
+                    <div className="space-y-2 pt-2 border-t border-[#E6E2DA]/60 dark:border-[#2C2A26]/60">
+                      <span className="text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] uppercase tracking-wider block">
+                        Purchased Items ({ticketOrder.items?.length || 0}):
+                      </span>
+                      <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                        {ticketOrder.items?.map((it, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs bg-white dark:bg-[#191816] p-1.5 border border-[#E6E2DA] dark:border-[#2C2A26]">
+                            {it.product?.image && (
+                              <img
+                                src={it.product.image}
+                                alt={it.product.name}
+                                className="w-9 h-9 object-cover border border-[#E6E2DA] dark:border-[#2C2A26] shrink-0"
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-medium truncate text-[#141413] dark:text-[#F3F1EC]">
+                                {it.product?.name || "BTNX Garment"}
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-[#66625B] dark:text-[#A7A299] font-mono">
+                                <span>{it.size} / {it.color} · Qty {it.quantity}</span>
+                                <span>{formatNaira(it.product?.price || 0)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Financial Summary */}
+                    <div className="pt-2 border-t border-[#E6E2DA]/60 dark:border-[#2C2A26]/60 flex items-center justify-between font-mono text-xs">
+                      <span className="text-[#66625B] dark:text-[#A7A299]">Total Paid:</span>
+                      <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                        {formatNaira(ticketOrder.total)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-dashed border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-2 text-center">
+                    <p className="text-xs text-[#66625B] dark:text-[#A7A299]">
+                      No order currently linked to this ticket.
+                    </p>
+                    {isLinkingOrder ? (
+                      <div className="space-y-2 text-left pt-1">
+                        <input
+                          type="text"
+                          placeholder="Search orders to link..."
+                          value={linkSearchQuery}
+                          onChange={(e) => setLinkSearchQuery(e.target.value)}
+                          className="w-full h-7 px-2 text-xs bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none"
+                        />
+                        <div className="max-h-32 overflow-y-auto space-y-1">
+                          {orders
+                            .filter(
+                              (o) =>
+                                !linkSearchQuery ||
+                                o.id.toLowerCase().includes(linkSearchQuery.toLowerCase()) ||
+                                o.status.toLowerCase().includes(linkSearchQuery.toLowerCase())
+                            )
+                            .slice(0, 4)
+                            .map((ord) => (
+                              <button
+                                key={ord.id}
+                                type="button"
+                                onClick={() => {
+                                  handleLinkOrderToTicket(ord.id);
+                                  setIsLinkingOrder(false);
+                                  setLinkSearchQuery("");
+                                }}
+                                className="w-full p-1.5 text-left bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#966830] text-[10px] font-mono flex items-center justify-between cursor-pointer"
+                              >
+                                <span>#{ord.id}</span>
+                                <span>{formatNaira(ord.total)}</span>
+                              </button>
+                            ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsLinkingOrder(false)}
+                          className="w-full py-1 text-[10px] text-[#66625B] hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsLinkingOrder(true)}
+                        className="text-[10px] font-mono uppercase tracking-wider text-[#966830] dark:text-[#C89B62] underline cursor-pointer"
+                      >
+                        + Link Existing Order
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Customer Order History Dossier */}
+              <div className="space-y-2 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] flex items-center justify-between">
+                  <span>Customer Orders ({clientOrderHistory.length})</span>
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                </span>
+
+                {clientOrderHistory.length === 0 ? (
+                  <p className="text-[11px] text-[#66625B] dark:text-[#A7A299]">
+                    No previous order records found for this client.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-0.5">
+                    {clientOrderHistory.map((ord) => (
+                      <div
+                        key={ord.id}
+                        className="p-2 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between text-xs font-mono"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                              #{ord.id}
+                            </span>
+                            <span className="text-[9px] text-[#66625B]">
+                              {ord.status}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-[#8C877D]">
+                            {formatNaira(ord.total)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setInspectingOrder(ord)}
+                            className="p-1 hover:text-[#966830] dark:hover:text-[#C89B62] cursor-pointer"
+                            title="Inspect order details"
+                          >
+                            <Eye className="w-3 h-3" />
+                          </button>
+                          {selectedTicket.orderId !== ord.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleLinkOrderToTicket(ord.id)}
+                              className="px-1.5 py-0.5 bg-[#966830] text-white text-[9px] uppercase tracking-wider cursor-pointer"
+                              title="Link this order to ticket"
+                            >
+                              Link
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Quick Actions for Staff */}
               <div className="space-y-2.5">
                 <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
                   Quick Actions
                 </span>
-                <div className="space-y-2 text-xs">
+                <div className="space-y-1.5 text-xs">
+                  {ticketOrder && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSendAgentReply(
+                            `Order #${ticketOrder.id} verified. Status: ${ticketOrder.status}. Total: ${formatNaira(ticketOrder.total)}.`,
+                            {
+                              order: {
+                                id: ticketOrder.id,
+                                status: ticketOrder.status,
+                                total: ticketOrder.total,
+                                date: ticketOrder.date,
+                                itemCount: ticketOrder.items?.length || 1,
+                                firstItemName: ticketOrder.items?.[0]?.product?.name || "BTNX Garment Piece",
+                                firstItemImage: ticketOrder.items?.[0]?.product?.image,
+                              },
+                            }
+                          );
+                        }}
+                        className="w-full h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#966830] text-[10px] font-mono uppercase tracking-wider flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Package className="w-3 h-3 text-[#966830]" />
+                          <span>Send Order Card to Chat</span>
+                        </span>
+                        <ChevronRight className="w-3 h-3 text-[#8C877D]" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSendAgentReply(
+                            `Here is the verified digital invoice for Order #${ticketOrder.id}: ${window.location.origin}/render/invoice/${ticketOrder.id}`
+                          );
+                        }}
+                        className="w-full h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#966830] text-[10px] font-mono uppercase tracking-wider flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <FileText className="w-3 h-3 text-[#966830]" />
+                          <span>Send Invoice Link</span>
+                        </span>
+                        <ChevronRight className="w-3 h-3 text-[#8C877D]" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleUpdateOrderStatus(ticketOrder.id, "Exchange Approved");
+                          handleSendAgentReply(
+                            `Your size exchange request for Order #${ticketOrder.id} has been reviewed and APPROVED by our customer care desk. Please keep the garment unworn with tags attached. Our courier will contact you for pickup.`
+                          );
+                        }}
+                        className="w-full h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#1D7A46] text-[10px] font-mono uppercase tracking-wider flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5 text-[#1D7A46]">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Approve Size Exchange</span>
+                        </span>
+                        <Check className="w-3 h-3 text-[#1D7A46]" />
+                      </button>
+                    </>
+                  )}
+
                   <a
                     href={`/render/support/${selectedTicket.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="w-full h-8 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider flex items-center justify-center gap-1.5"
+                    className="w-full h-8 px-2 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider flex items-center justify-between"
                   >
-                    <span>View Visual Card</span>
+                    <span className="flex items-center gap-1.5">
+                      <Eye className="w-3 h-3" />
+                      <span>View Visual Support Card</span>
+                    </span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
 
@@ -1193,9 +1885,12 @@ export default function SupportStaffPortal() {
                       href={`/render/track/${selectedTicket.orderId}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="w-full h-8 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider flex items-center justify-center gap-1.5"
+                      className="w-full h-8 px-2 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[10px] font-mono uppercase tracking-wider flex items-center justify-between"
                     >
-                      <span>Track Shipment</span>
+                      <span className="flex items-center gap-1.5">
+                        <Truck className="w-3 h-3" />
+                        <span>Track Shipment</span>
+                      </span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
@@ -1207,6 +1902,221 @@ export default function SupportStaffPortal() {
           )}
         </div>
       </div>
+
+      {/* COMPREHENSIVE ORDER INSPECTION MODAL */}
+      {inspectingOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between sticky top-0 bg-white dark:bg-[#191816] z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-[#F4EFE6] dark:bg-[#2A241A] flex items-center justify-center text-[#966830] dark:text-[#C89B62]">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-mono text-sm font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                      Order #{inspectingOrder.id}
+                    </h3>
+                    <span
+                      className={`px-2 py-0.5 rounded-xs text-[9px] font-mono uppercase tracking-wider ${
+                        inspectingOrder.status?.toLowerCase().includes("transit") || inspectingOrder.status?.toLowerCase().includes("ship")
+                          ? "bg-[#EDEAFE] text-[#6E56CF] dark:bg-[#261E4E] dark:text-[#BAA7FF]"
+                          : inspectingOrder.status?.toLowerCase().includes("deliver")
+                          ? "bg-[#EBF5EE] text-[#1D7A46] dark:bg-[#132A1C] dark:text-[#67E28E]"
+                          : inspectingOrder.status?.toLowerCase().includes("process")
+                          ? "bg-[#E6F4FE] text-[#0D74CE] dark:bg-[#0D2847] dark:text-[#70B8FF]"
+                          : "bg-[#F4EFE6] text-[#966830] dark:bg-[#2A241A] dark:text-[#C89B62]"
+                      }`}
+                    >
+                      {inspectingOrder.status}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#66625B] dark:text-[#A7A299]">
+                    Placed on {inspectingOrder.date}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setInspectingOrder(null)}
+                className="p-1.5 hover:bg-[#FAF9F7] dark:hover:bg-[#201F1D] text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 space-y-6 flex-1 text-xs">
+              {/* Order Status Controller */}
+              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#66625B] dark:text-[#A7A299]">
+                    Change Order Status
+                  </span>
+                  <p className="text-[11px] text-[#141413] dark:text-[#F3F1EC]">
+                    Updates customer tracker and syncs to Osogbo logistics board.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <select
+                    disabled={isUpdatingOrderStatus}
+                    value={inspectingOrder.status}
+                    onChange={(e) => handleUpdateOrderStatus(inspectingOrder.id, e.target.value)}
+                    className="h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none cursor-pointer"
+                  >
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Processing">Processing</option>
+                    <option value="In Transit">In Transit</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Exchange Approved">Exchange Approved</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Customer Destination / Address */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] space-y-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#966830] dark:text-[#C89B62] flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Shipping Destination</span>
+                  </span>
+                  <div className="space-y-1 text-xs text-[#141413] dark:text-[#F3F1EC]">
+                    <p className="font-medium">{(inspectingOrder as any).shippingAddress?.fullName || (inspectingOrder as any).recipientName || (inspectingOrder as any).customerName || "VIP BTNX Client"}</p>
+                    <p className="text-[#66625B] dark:text-[#A7A299]">
+                      {(inspectingOrder as any).shippingAddress?.address || "14 Victoria Island Boulevard, Lagos State"}
+                    </p>
+                    <p className="text-[#66625B] dark:text-[#A7A299]">Nigeria</p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] space-y-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#966830] dark:text-[#C89B62] flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>Customer Contact</span>
+                  </span>
+                  <div className="space-y-1 text-xs text-[#141413] dark:text-[#F3F1EC] font-mono">
+                    <p className="text-[#66625B] dark:text-[#A7A299]">
+                      Phone: {(inspectingOrder as any).shippingAddress?.phone || "+234 803 000 1234"}
+                    </p>
+                    <p className="text-[#66625B] dark:text-[#A7A299]">
+                      Email: {(inspectingOrder as any).userEmail || selectedTicket?.userEmail || "client@btnx.store"}
+                    </p>
+                    <div className="pt-1 flex items-center gap-1.5 text-[10px] text-[#1D7A46]">
+                      <Clock className="w-3 h-3" />
+                      <span>Standard Courier Delivery (2-4 Days)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Itemized Garments List */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62] block">
+                  Garments in this Order ({inspectingOrder.items?.length || 0})
+                </span>
+
+                <div className="border border-[#E6E2DA] dark:border-[#2C2A26] divide-y divide-[#E6E2DA] dark:divide-[#2C2A26]">
+                  {inspectingOrder.items?.map((item, idx) => (
+                    <div key={idx} className="p-3 flex items-center gap-3">
+                      {item.product?.image && (
+                        <img
+                          src={item.product.image}
+                          alt={item.product.name}
+                          className="w-14 h-14 object-cover border border-[#E6E2DA] dark:border-[#2C2A26] shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-medium text-xs text-[#141413] dark:text-[#F3F1EC]">
+                          {item.product?.name || "BTNX Luxury Piece"}
+                        </h4>
+                        <p className="text-[11px] text-[#66625B] dark:text-[#A7A299] font-mono">
+                          Size: {item.size} · Color: {item.color} · Qty: {item.quantity}
+                        </p>
+                        <p className="text-[11px] font-mono text-[#141413] dark:text-[#F3F1EC] mt-0.5">
+                          {formatNaira(item.product?.price || 0)} each
+                        </p>
+                      </div>
+                      <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                        {formatNaira((item.product?.price || 0) * (item.quantity || 1))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial Calculation Breakdown */}
+              <div className="p-4 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-2 font-mono text-xs">
+                <div className="flex justify-between text-[#66625B] dark:text-[#A7A299]">
+                  <span>Subtotal:</span>
+                  <span>{formatNaira(inspectingOrder.total)}</span>
+                </div>
+                <div className="flex justify-between text-[#66625B] dark:text-[#A7A299]">
+                  <span>Nationwide Express Logistics:</span>
+                  <span className="text-[#1D7A46]">Free (Complimentary)</span>
+                </div>
+                <div className="flex justify-between text-[#66625B] dark:text-[#A7A299]">
+                  <span>Value Added Tax (VAT):</span>
+                  <span>Included</span>
+                </div>
+                <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26] flex justify-between font-semibold text-sm text-[#141413] dark:text-[#F3F1EC]">
+                  <span>Total Amount Paid:</span>
+                  <span>{formatNaira(inspectingOrder.total)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 sm:p-5 border-t border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/render/invoice/${inspectingOrder.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-8 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[11px] font-mono uppercase tracking-wider inline-flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Invoice View</span>
+                </a>
+                <a
+                  href={`/track?order=${encodeURIComponent(inspectingOrder.id)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-8 px-3 border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC] text-[11px] font-mono uppercase tracking-wider inline-flex items-center gap-1.5"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Track Page</span>
+                </a>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selectedTicket && selectedTicket.orderId !== inspectingOrder.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleLinkOrderToTicket(inspectingOrder.id);
+                      setInspectingOrder(null);
+                    }}
+                    className="h-8 px-3.5 bg-[#966830] text-white text-[11px] font-mono uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer hover:opacity-90"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Link to Current Ticket</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setInspectingOrder(null)}
+                  className="h-8 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.12em] cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

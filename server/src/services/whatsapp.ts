@@ -44,7 +44,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     session.stage = "idle";
     return {
       replyText:
-        `*Welcome to BTNX Luxury Store Concierge* ✨\n\n` +
+        `*Welcome to BTNX Luxury Store Client Care* ✨\n\n` +
         `How may I assist your style journey today?\n\n` +
         `1️⃣ *Browse Collection* — Type *\"catalog\"* or ask for pieces (e.g., *\"show me jackets\"*)\n` +
         `2️⃣ *Latest Promo Codes* — Type *\"promos\"*\n` +
@@ -104,7 +104,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
       customerName: payload.senderName || "WhatsApp Client",
       customerPhone: customerId,
       customerEmail: "whatsapp-client@btnx.store",
-      topic: "WhatsApp Concierge & Human Escalation",
+      topic: "WhatsApp Support & Human Escalation",
       status: "open",
       mode: "human",
       messages: [
@@ -117,7 +117,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
         {
           id: `msg-${Date.now() + 1}`,
           sender: "bot",
-          senderName: "BTNX Concierge Desk",
+          senderName: "BTNX Support Desk",
           text: `Inquiry #${ticketId} transferred to our human support team at the Osun desk. An agent will respond shortly.`,
           timestamp: new Date().toISOString(),
         },
@@ -341,7 +341,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     try {
       const ai = new GoogleGenAI({ apiKey });
       const prompt =
-        `You are the luxury concierge for BTNX, a high-end Nigerian contemporary fashion store. ` +
+        `You are the customer care assistant for BTNX, a high-end Nigerian contemporary fashion store. ` +
         `Prices are in Nigerian Naira (₦). Active promo code is BTNX50 (50% off). ` +
         `Free shipping applies on orders over ₦150,000. ` +
         `Customer message: "${rawText}". ` +
@@ -362,7 +362,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     }
   }
 
-  // Default Luxury Concierge Response
+  // Default Customer Care Response
   return {
     replyText:
       `Thank you for messaging *BTNX*. 🏛️\n\n` +

@@ -7,7 +7,7 @@ const rl = readline.createInterface({
 });
 
 console.log("==================================================");
-console.log(" 📱 BTNX WhatsApp Concierge — Interactive Sandbox");
+console.log(" 📱 BTNX WhatsApp Customer Care — Interactive Sandbox");
 console.log(" Type messages below to test conversational orders.");
 console.log(" Try typing: 'hi', 'promos', 'size for 6ft 80kg', 'buy wool coat'");
 console.log(" Type 'exit' to quit.");
@@ -32,7 +32,7 @@ function promptUser() {
         senderName: clientName,
       });
 
-      console.log(`\n🤖 BTNX Concierge:\n${response.replyText}\n`);
+      console.log(`\n🤖 BTNX Customer Care:\n${response.replyText}\n`);
       if (response.suggestedActions?.length) {
         console.log(`[Suggested Quick Replies]: ${response.suggestedActions.join(" | ")}\n`);
       }

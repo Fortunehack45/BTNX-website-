@@ -383,7 +383,7 @@ app.post("/api/support/ticket", async (req: Request, res: Response) => {
         {
           id: `msg-${Date.now() + 1}`,
           sender: "bot",
-          senderName: "BTNX Concierge Bot",
+          senderName: "BTNX Support Bot",
           text: `Thank you for reaching out, ${customerName || "valued client"}. Your ticket #${ticketId} has been opened at our Osun desk. An agent is reviewing your inquiry.`,
           timestamp: new Date(Date.now() + 500).toISOString(),
         },

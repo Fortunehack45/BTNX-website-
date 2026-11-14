@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
-import { Plus, Trash2, Edit, X, Save, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Edit, X, Save, AlertCircle } from 'lucide-react';
 
 interface Product {
   id: string;

@@ -284,7 +284,7 @@ export function renderSupportTicketHtml(ticket: any): string {
     const isClient = m.sender === "client";
     return `
       <div style="display: flex; flex-direction: column; align-items: ${isClient ? "flex-end" : "flex-start"}; margin-bottom: 12px;">
-        <span style="font-size: 10px; color: #66625B; margin-bottom: 2px;">${isClient ? "You (Client)" : escapeHtml(m.senderName || "BTNX Concierge")} &middot; ${new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <span style="font-size: 10px; color: #66625B; margin-bottom: 2px;">${isClient ? "You (Client)" : escapeHtml(m.senderName || "BTNX Support Bot")} &middot; ${new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
         <div style="max-width: 80%; padding: 10px 14px; font-size: 12px; line-height: 1.4; border-radius: 2px; ${isClient ? "background: #141413; color: #FAF9F7;" : "background: #FAF9F7; border: 1px solid #E6E2DA; color: #141413;"}">
           ${escapeHtml(m.text)}
         </div>
@@ -310,7 +310,7 @@ export function renderSupportTicketHtml(ticket: any): string {
       <div style="text-align: right;">
         <span class="font-mono" style="font-size: 12px; font-weight: 600;">#${escapeHtml(ticketId)}</span>
         <div style="font-size: 10px; text-transform: uppercase; color: ${t.mode === "human" ? "#966830" : "#66625B"}; font-weight: 600; margin-top: 2px;">
-          ${t.mode === "human" ? "Human Specialist" : "Concierge AI"}
+          ${t.mode === "human" ? "Human Specialist" : "Automated Bot"}
         </div>
       </div>
     </div>

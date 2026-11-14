@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Shield, ShieldAlert, UserCheck, Trash2, Search, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Shield, ShieldAlert, UserCheck, Trash2, Search, RefreshCw } from 'lucide-react';
 
 interface User {
   id: string;

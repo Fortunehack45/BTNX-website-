@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
-import { Package, Users, ShoppingCart, DollarSign, ArrowUpRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Package, Users, ShoppingCart, DollarSign, ArrowUpRight, CheckCircle2 } from 'lucide-react';
 
 interface OrderItem {
   product?: {
@@ -20,13 +20,6 @@ interface Order {
   createdAt?: any;
   items?: OrderItem[];
   userId?: string;
-}
-
-interface Product {
-  id: string;
-  name?: string;
-  price?: number;
-  category?: string;
 }
 
 export default function Dashboard() {

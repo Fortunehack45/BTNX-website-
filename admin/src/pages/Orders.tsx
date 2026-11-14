@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
-import { Eye, X, Check, AlertCircle, ShoppingBag, Truck, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Eye, X, AlertCircle, ShoppingBag, RefreshCw } from 'lucide-react';
 
 interface OrderItem {
   product?: {
