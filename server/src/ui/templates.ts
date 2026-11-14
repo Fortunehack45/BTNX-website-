@@ -1,5 +1,7 @@
 import { NEW_YEAR_PRODUCTS } from "./productsData.js";
 
+export const BTNX_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750.7 370.9" fill="none" style="height: 100%; width: auto; max-height: 28px; display: inline-block;" role="img" aria-label="BTNX"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M512.9 3.3Q526.8 2.5 548.9 2.4Q571.0 2.3 586.0 3.3Q601.0 4.2 610.0 5.2Q619.0 6.3 630.5 8.2Q642.0 10.1 650.5 12.2Q659.0 14.2 669.0 17.3Q679.0 20.4 686.5 23.3Q694.0 26.3 701.5 30.2Q709.0 34.1 714.5 37.8Q720.0 41.4 724.3 44.9Q728.6 48.5 732.4 52.5Q736.2 56.5 739.8 62.0Q743.4 67.5 745.2 72.5Q747.1 77.5 747.9 82.5Q748.6 87.5 748.4 93.0L748.1 98.5L747.0 99.8L612.0 107.5L612.1 102.5Q612.3 97.5 611.9 94.0Q611.5 90.5 609.9 85.0Q608.2 79.5 604.1 73.1Q600.0 66.7 594.0 61.0Q588.0 55.4 580.0 50.3Q572.0 45.3 562.5 41.3Q553.0 37.2 542.5 34.2Q532.0 31.3 520.5 29.2Q509.0 27.2 498.5 26.2Q488.0 25.2 475.5 24.8Q463.0 24.4 440.5 25.4Q418.0 26.3 391.5 29.7Q365.0 33.2 342.0 38.0L319.0 42.9L318.3 42.5L323.1 40.8Q328.0 39.1 344.5 34.2Q361.0 29.3 377.0 25.2Q393.0 21.1 406.5 18.2Q420.0 15.3 445.0 11.2Q470.0 7.2 484.5 5.7Q499.0 4.2 512.9 3.3Z M402.5 44.9Q418.9 43.5 433.5 43.3Q448.0 43.2 460.5 44.2Q473.0 45.3 485.5 47.7Q498.0 50.2 508.5 53.7Q519.0 57.2 528.5 62.2Q538.0 67.3 544.0 72.6Q550.0 77.8 552.2 80.6Q554.3 83.5 556.4 87.5Q558.4 91.5 559.4 95.0Q560.4 98.5 560.6 101.0L560.8 103.5L560.0 104.2L554.5 98.2Q549.0 92.1 542.5 87.7Q536.0 83.3 528.0 79.7Q520.0 76.2 510.5 73.2Q501.0 70.3 490.5 68.2Q480.0 66.1 467.0 64.7Q454.0 63.2 438.5 62.7Q423.0 62.2 407.5 62.7Q392.0 63.2 380.0 64.2Q368.0 65.2 350.0 67.7Q332.0 70.2 319.0 72.7Q306.0 75.2 289.0 79.1Q272.0 83.1 243.0 91.7Q214.0 100.4 194.5 107.2Q175.0 114.1 157.0 121.5L139.0 128.8L137.5 128.5L151.8 120.9Q166.0 113.3 184.5 104.8Q203.0 96.3 219.5 89.7Q236.0 83.2 255.5 76.7Q275.0 70.2 291.5 65.7Q308.0 61.1 328.0 56.7Q348.0 52.3 367.0 49.3Q386.0 46.3 402.5 44.9Z M684.2 121.7Q707.4 120.5 713.7 120.2L720.0 119.9L720.8 120.5L636.6 186.5L657.0 237.5L610.0 239.3L608.8 238.5L599.0 212.1L560.0 240.4L501.0 243.5L584.8 180.5L563.1 127.5L564.0 126.6L609.0 125.3L619.8 153.5L621.0 154.2L661.0 122.9L684.2 121.7Z M519.5 128.5Q537.3 127.5 543.1 127.2L549.0 126.9L549.9 127.5L489.0 243.8L469.5 245.3Q450.0 246.8 445.0 247.0L440.0 247.3L439.0 246.5L424.0 184.2L390.6 250.5L342.4 253.5L401.0 134.6L449.0 132.4L454.4 149.4Q459.9 166.5 464.4 179.2L469.0 192.0L501.7 129.5L519.5 128.5Z M312.5 139.5Q382.8 135.5 384.9 135.4L387.0 135.4L386.9 135.9Q386.8 136.5 378.9 152.3L371.0 168.1L349.0 169.5Q327.0 170.8 326.5 171.2L325.9 171.5L284.0 257.1L233.7 260.5L275.7 174.5L275.0 173.9L226.7 176.5L227.3 174.5Q227.8 172.5 235.0 158.0L242.2 143.5L312.5 139.5Z M150.8 149.2Q209.6 145.5 213.8 145.4Q218.0 145.2 220.5 146.4L222.9 147.5L224.5 150.5L223.9 153.5Q223.4 156.5 218.3 168.0Q213.3 179.5 209.7 185.5Q206.1 191.5 202.1 195.7Q198.0 199.9 193.8 202.2L189.6 204.5L191.8 206.0Q194.0 207.6 195.3 209.5Q196.6 211.5 196.8 214.0Q197.1 216.5 196.2 220.5Q195.4 224.5 193.3 229.0Q191.3 233.5 188.3 238.5Q185.3 243.5 181.7 248.0Q178.1 252.5 174.6 255.7Q171.0 258.9 166.5 261.4Q162.0 263.8 155.5 265.2Q149.0 266.6 90.3 270.6L31.6 274.5L92.0 152.9L150.8 149.2Z M151.5 180.1Q144.0 180.5 134.5 181.2L125.0 182.0L117.6 196.5L118.0 197.3L132.5 196.4Q147.0 195.6 150.0 195.2Q153.0 194.8 155.5 193.9Q158.0 193.0 160.7 190.2L163.3 187.5L164.4 183.5L163.0 180.8L161.0 180.3Q159.0 179.7 151.5 180.1Z M135.0 221.3Q129.0 221.5 117.5 222.2L106.0 222.9L97.7 238.5L98.0 239.3L115.0 238.1Q132.0 237.0 135.5 235.7Q139.0 234.5 141.5 232.0Q144.1 229.5 144.8 227.5L145.5 225.5L145.0 223.0L141.0 221.0L135.0 221.3Z M510.6 262.8Q549.2 260.5 552.1 260.3L555.0 260.2L554.5 260.8Q554.0 261.5 536.5 270.7Q519.0 279.9 504.5 286.8Q490.0 293.8 465.0 304.2Q440.0 314.7 414.5 323.7Q389.0 332.7 372.0 337.7Q355.0 342.7 329.5 348.7Q304.0 354.8 277.5 359.3Q251.0 363.7 229.5 365.7Q208.0 367.8 186.5 368.3Q165.0 368.8 148.0 367.8Q131.0 366.7 112.5 363.7Q94.0 360.6 81.0 356.7Q68.0 352.8 61.0 349.8Q54.0 346.8 48.5 343.8Q43.0 340.8 38.5 337.7Q34.0 334.7 29.2 330.6Q24.4 326.5 19.6 321.0Q14.7 315.5 11.8 311.0Q8.9 306.5 6.9 302.5Q5.0 298.5 3.5 294.0L2.0 289.5L11.0 296.1Q20.0 302.8 28.5 307.3Q37.0 311.8 49.5 316.3Q62.0 320.8 74.0 323.7Q86.0 326.7 98.5 328.7Q111.0 330.7 123.0 331.8Q135.0 332.8 150.0 333.3Q165.0 333.8 186.0 333.3Q207.0 332.7 223.5 331.2Q240.0 329.8 255.0 327.8Q270.0 325.8 289.5 322.2Q309.0 318.7 328.0 314.2Q347.0 309.8 363.0 305.3Q379.0 300.8 398.5 294.3Q418.0 287.8 431.0 282.8Q444.0 277.8 458.0 271.5Q472.0 265.2 510.6 262.8Z" /></svg>`;
+
 function escapeHtml(str: any): string {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -59,6 +61,13 @@ export function renderProductCardHtml(product: any, storeOrigin = "http://localh
 </head>
 <body>
   <div style="max-width: 440px; margin: 0 auto;" class="btnx-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid #E6E2DA;">
+      <div style="height: 20px; width: auto; max-width: 64px; color: #141413;">
+        ${BTNX_LOGO_SVG}
+      </div>
+      <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 600;">Authentic Atelier</span>
+    </div>
+
     <div style="position: relative; aspect-ratio: 4/5; overflow: hidden; background: #EDEAE5;">
       <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(p.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='https://images.unsplash.com/photo-1544441893-675973e31985?w=800&q=80'" />
       ${p.badge ? `<span style="position: absolute; top: 12px; left: 12px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; background: #141413; color: #FAF9F7; padding: 4px 8px; border-radius: 1px;">${escapeHtml(p.badge)}</span>` : ""}
@@ -141,6 +150,9 @@ export function renderCatalogGridHtml(products: any[], storeOrigin = "http://loc
   <div style="max-width: 1000px; margin: 0 auto;">
     <div style="border-bottom: 1px solid #E6E2DA; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end;">
       <div>
+        <div style="height: 24px; width: auto; max-width: 80px; color: #141413; margin-bottom: 6px;">
+          ${BTNX_LOGO_SVG}
+        </div>
         <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: #966830; font-weight: 600;">BTNX Atelier Catalog</span>
         <h1 class="luxury-serif" style="font-size: 26px; font-weight: 600; margin-top: 4px;">Seasonal Ready-to-Wear</h1>
       </div>
@@ -197,7 +209,9 @@ export function renderInvoiceHtml(order: any): string {
   <div style="max-width: 680px; margin: 0 auto; background: #FFFFFF; border: 1px solid #E6E2DA; padding: 32px;" class="btnx-card">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #141413; padding-bottom: 18px; margin-bottom: 24px;">
       <div>
-        <h1 class="luxury-serif" style="font-size: 24px; font-weight: 700; letter-spacing: 0.16em;">BTNX STORE</h1>
+        <div style="height: 26px; width: auto; max-width: 90px; color: #141413; margin-bottom: 6px;">
+          ${BTNX_LOGO_SVG}
+        </div>
         <p style="font-size: 10px; color: #66625B; text-transform: uppercase; letter-spacing: 0.14em; margin-top: 3px;">Haute Tailoring &middot; Osun, Nigeria</p>
       </div>
       <div style="text-align: right;">
@@ -301,10 +315,15 @@ export function renderTrackingStepperHtml(order: any): string {
 </head>
 <body>
   <div style="max-width: 520px; margin: 0 auto; padding: 24px;" class="btnx-card">
-    <div style="border-bottom: 1px solid #E6E2DA; padding-bottom: 14px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: baseline;">
-      <div>
-        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 600;">Dispatch Intelligence</span>
-        <h2 class="luxury-serif" style="font-size: 20px; font-weight: 600; margin-top: 2px;">Shipment Tracking</h2>
+    <div style="border-bottom: 1px solid #E6E2DA; padding-bottom: 14px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="height: 22px; width: auto; max-width: 70px; color: #141413;">
+          ${BTNX_LOGO_SVG}
+        </div>
+        <div style="border-left: 1px solid #E6E2DA; padding-left: 12px;">
+          <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 600;">Dispatch Intelligence</span>
+          <h2 class="luxury-serif" style="font-size: 18px; font-weight: 600; margin-top: 1px;">Shipment Tracking</h2>
+        </div>
       </div>
       <div class="font-mono" style="font-size: 13px; font-weight: 700;">#${escapeHtml(orderId)}</div>
     </div>
@@ -363,9 +382,14 @@ export function renderSupportTicketHtml(ticket: any): string {
 <body>
   <div style="max-width: 600px; margin: 0 auto; height: 90vh; display: flex; flex-direction: column;" class="btnx-card">
     <div style="padding: 16px; border-bottom: 1px solid #E6E2DA; display: flex; justify-content: space-between; align-items: center; shrink-0;">
-      <div>
-        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #966830; font-weight: 600;">Client Care Thread</span>
-        <h3 class="luxury-serif" style="font-size: 16px; font-weight: 600;">${escapeHtml(t.topic || "Customer Assistance")}</h3>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="height: 20px; width: auto; max-width: 64px; color: #141413;">
+          ${BTNX_LOGO_SVG}
+        </div>
+        <div style="border-left: 1px solid #E6E2DA; padding-left: 12px;">
+          <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: #966830; font-weight: 600;">Client Care Thread</span>
+          <h3 class="luxury-serif" style="font-size: 15px; font-weight: 600;">${escapeHtml(t.topic || "Customer Assistance")}</h3>
+        </div>
       </div>
       <div style="text-align: right;">
         <span class="font-mono" style="font-size: 12px; font-weight: 600;">#${escapeHtml(ticketId)}</span>

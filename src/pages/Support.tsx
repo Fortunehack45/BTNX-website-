@@ -837,25 +837,25 @@ export default function Support({
                     isCustomer ? "items-end" : "items-start"
                   } space-y-1.5`}
                 >
-                  {/* Quiet Metadata Line */}
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.1em] text-[#66625B] dark:text-[#A7A299]">
-                    <span className="font-medium text-[#141413] dark:text-[#F3F1EC]">
+                  {/* Quiet Metadata Line (single-line protected with whitespace-nowrap against awkward mobile breaks) */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299]">
+                    <span className="font-medium text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
                       {isCustomer ? "You" : msg.senderName}
                     </span>
                     {msg.senderRole && (
                       <>
-                        <span>·</span>
+                        <span className="text-[#8C877D] select-none">·</span>
                         <span
-                          className={
+                          className={`whitespace-nowrap truncate max-w-[220px] sm:max-w-none ${
                             isHumanAgent ? "text-[#966830] dark:text-[#C89B62]" : ""
-                          }
+                          }`}
                         >
                           {msg.senderRole}
                         </span>
                       </>
                     )}
-                    <span>·</span>
-                    <span className="tabular-nums">
+                    <span className="text-[#8C877D] select-none">·</span>
+                    <span className="tabular-nums whitespace-nowrap">
                       {new Date(msg.createdAt).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -1898,17 +1898,17 @@ export default function Support({
                     className="w-full p-4 sm:p-5 text-left transition-colors cursor-pointer flex items-center justify-between gap-4 bg-white dark:bg-[#191816] hover:bg-[#FAF9F7] dark:hover:bg-[#22211E]/60 group"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299]">
-                        <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299]">
+                        <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
                           #{t.id}
                         </span>
-                        <span>·</span>
+                        <span className="text-[#8C877D] select-none">·</span>
                         <span
-                          className={
+                          className={`whitespace-nowrap ${
                             t.mode === "human"
                               ? "text-[#966830] dark:text-[#C89B62] font-medium"
                               : ""
-                          }
+                          }`}
                         >
                           {t.status === "resolved"
                             ? "Resolved"
@@ -1918,21 +1918,21 @@ export default function Support({
                         </span>
                         {t.orderId && (
                           <>
-                            <span>·</span>
-                            <span>Order #{t.orderId}</span>
+                            <span className="text-[#8C877D] select-none">·</span>
+                            <span className="whitespace-nowrap">Order #{t.orderId}</span>
                           </>
                         )}
                         {t.rating && (
                           <>
-                            <span>·</span>
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs font-semibold">
+                            <span className="text-[#8C877D] select-none">·</span>
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs font-semibold whitespace-nowrap">
                               <Star className="w-2.5 h-2.5 fill-current" />
                               <span>{t.rating}.0</span>
                             </span>
                           </>
                         )}
-                        <span className="tabular-nums">
-                          ·{" "}
+                        <span className="text-[#8C877D] select-none">·</span>
+                        <span className="tabular-nums whitespace-nowrap">
                           {new Date(t.updatedAt).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",

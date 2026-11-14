@@ -12,6 +12,7 @@ export interface WhatsAppResponse {
   replyText: string;
   suggestedActions?: string[];
   orderId?: string;
+  mediaUrl?: string;
 }
 
 // In-memory conversation state for multi-step order taking
@@ -52,6 +53,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
         `4️⃣ *Track Your Order* — Type *\"track [order-id]\"*\n` +
         `5️⃣ *Place An Order* — Type *\"buy [piece name]\"* to start express WhatsApp checkout`,
       suggestedActions: ["Browse Catalog", "Latest Promos", "Fit Consultation", "Track Order"],
+      mediaUrl: "http://localhost:4000/logo.png",
     };
   }
 

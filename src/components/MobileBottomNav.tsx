@@ -19,6 +19,15 @@ export default function MobileBottomNav({
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Hide bottom navigation bar completely on customer support chat and staff pages so it does not obstruct chat input
+  if (
+    location.pathname.startsWith("/support") ||
+    location.pathname.startsWith("/support-staff") ||
+    location.pathname.startsWith("/admin")
+  ) {
+    return null;
+  }
+
   const isHomeActive = !isOverlayProfileOpen && location.pathname === "/";
   const isShopActive = !isOverlayProfileOpen && location.pathname === "/shop";
   const isPromosActive = !isOverlayProfileOpen && location.pathname === "/promos";

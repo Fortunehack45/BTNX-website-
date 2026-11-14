@@ -47,13 +47,13 @@ try {
       savedRoute !== '/' &&
       savedRoute.startsWith('/') &&
       !savedRoute.startsWith('/admin') &&
-      !savedRoute.startsWith('/support')
+      !savedRoute.startsWith('/support-staff')
     ) {
       window.history.replaceState(null, '', savedRoute);
     }
   } else if (
     !window.location.pathname.startsWith('/admin') &&
-    !window.location.pathname.startsWith('/support')
+    !window.location.pathname.startsWith('/support-staff')
   ) {
     sessionStorage.setItem('btnx_last_route', currentFull);
     localStorage.setItem('btnx_last_route', currentFull);
@@ -63,7 +63,11 @@ try {
 }
 
 const currentPathname = window.location.pathname;
-const isSupportRoot = currentPathname === '/support' || currentPathname.startsWith('/support/');
+const isSupportStaffRoot =
+  currentPathname === '/support-staff' ||
+  currentPathname.startsWith('/support-staff/') ||
+  currentPathname === '/support/staff' ||
+  currentPathname.startsWith('/support/staff/');
 const isAdminRoot = currentPathname === '/admin' || currentPathname.startsWith('/admin/');
 
 createRoot(document.getElementById('root')!).render(
@@ -75,7 +79,7 @@ createRoot(document.getElementById('root')!).render(
         <ThemeProvider>
           <AuthProvider>
             <BrowserRouter>
-              {isSupportRoot ? <SupportPortalApp /> : <App />}
+              {isSupportStaffRoot ? <SupportPortalApp /> : <App />}
             </BrowserRouter>
           </AuthProvider>
         </ThemeProvider>

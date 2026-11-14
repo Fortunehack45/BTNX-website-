@@ -23,8 +23,14 @@ import {
   renderSupportTicketHtml,
 } from "./ui/templates.js";
 import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.resolve(__dirname, "../../public");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -32,6 +38,12 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(publicDir));
+
+// Serve official BTNX Brand Vectors & Icons
+app.get("/logo.svg", (_req: Request, res: Response) => res.sendFile(path.join(publicDir, "btnx-logo.svg")));
+app.get("/btnx-logo.svg", (_req: Request, res: Response) => res.sendFile(path.join(publicDir, "btnx-logo.svg")));
+app.get("/logo.png", (_req: Request, res: Response) => res.sendFile(path.join(publicDir, "favicon-512x512.png")));
 
 // Health Check
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -331,8 +343,10 @@ app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
     // Respond in Twilio TwiML or standard JSON depending on caller
     if (req.body.From) {
       res.setHeader("Content-Type", "text/xml");
+      const escapedText = result.replyText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const mediaTag = result.mediaUrl ? `<Media>${result.mediaUrl}</Media>` : "";
       return res.send(
-        `<Response><Message>${result.replyText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</Message></Response>`
+        `<Response><Message><Body>${escapedText}</Body>${mediaTag}</Message></Response>`
       );
     }
 

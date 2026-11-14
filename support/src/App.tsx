@@ -1292,12 +1292,12 @@ export default function SupportStaffPortal() {
                       key={m.id}
                       className={`flex flex-col ${isAgent ? "items-end" : "items-start"}`}
                     >
-                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] mb-1">
-                        <span>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] mb-1">
+                        <span className="whitespace-nowrap font-medium">
                           {isAgent ? `Staff · ${m.senderName}` : isCustomer ? m.senderName : "Virtual Assistant"}
                         </span>
-                        <span>·</span>
-                        <span>
+                        <span className="text-[#8C877D] select-none">·</span>
+                        <span className="whitespace-nowrap tabular-nums">
                           {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>

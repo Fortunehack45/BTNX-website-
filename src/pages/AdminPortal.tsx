@@ -27,8 +27,11 @@ import {
   Sparkles,
   Truck,
   Star,
+  Palette,
+  Upload,
 } from "lucide-react";
 import { Product, Order, StoreShippingSettings } from "../types";
+import { getSwatchHex } from "../utils/colors";
 import {
   auth,
   db,
@@ -102,6 +105,20 @@ const PRODUCT_CATEGORIES = [
 ];
 
 const SIZES_LIST = ["XS", "S", "M", "L", "XL", "XXL"];
+const PRESET_COLORS = [
+  "Noir Black",
+  "Off-White",
+  "Dusty Plum",
+  "Deep Navy",
+  "Olive",
+  "Charcoal",
+  "Sand",
+  "Deep Espresso",
+  "Oxblood",
+  "Cream",
+  "Forest Green",
+  "Burgundy",
+];
 const CANNED_AGENT_REPLIES = [
   {
     label: "Dispatched from Osun Hub",
@@ -215,10 +232,13 @@ export default function AdminPortal() {
     price: "",
     originalPrice: "",
     image: NEW_YEAR_PRODUCTS[0]?.image || "",
+    images: [] as string[],
+    customColorInput: "",
+    customImageUrl: "",
     badge: "",
     description: "",
     sizes: ["S", "M", "L", "XL"] as string[],
-    colors: ["Black", "Off-White"] as string[],
+    colors: ["Noir Black", "Off-White"] as string[],
     stock: "45",
     // Dynamic Attributes
     fabricAndCare: "",
@@ -819,17 +839,21 @@ export default function AdminPortal() {
   // Product Management Handlers
   const openAddProductModal = () => {
     setEditingProduct(null);
+    const defaultImg = NEW_YEAR_PRODUCTS[0]?.image || "";
     setProductForm({
       name: "",
       category: PRODUCT_CATEGORIES[0],
       price: "135000",
       originalPrice: "",
-      image: NEW_YEAR_PRODUCTS[0]?.image || "",
+      image: defaultImg,
+      images: defaultImg ? [defaultImg] : [],
+      customColorInput: "",
+      customImageUrl: "",
       badge: "NEW",
       description:
         "Crafted from heavyweight organic cotton with relaxed everyday tailoring.",
       sizes: ["S", "M", "L", "XL"],
-      colors: ["Black", "Off-White"],
+      colors: ["Noir Black", "Off-White"],
       stock: "45",
       fabricAndCare: "Brushed wool-blend check overshirt with a cropped boxy fit, horn buttons, and dual chest pockets. Built to layer easily over tees or knits.",
       fitDetails: "Relaxed, structured fit with reinforced seams. Machine wash cold inside out or dry clean.",
@@ -850,16 +874,25 @@ export default function AdminPortal() {
 
   const openEditProductModal = (prod: Product) => {
     setEditingProduct(prod);
+    const initialImages =
+      prod.images && prod.images.length > 0
+        ? [...prod.images]
+        : prod.image
+        ? [prod.image]
+        : [];
     setProductForm({
       name: prod.name,
       category: prod.category || PRODUCT_CATEGORIES[0],
       price: String(prod.price || 120000),
       originalPrice: prod.originalPrice ? String(prod.originalPrice) : "",
-      image: prod.image,
+      image: prod.image || initialImages[0] || "",
+      images: initialImages,
+      customColorInput: "",
+      customImageUrl: "",
       badge: prod.badge || "",
       description: prod.description || "",
-      sizes: prod.sizes || ["S", "M", "L"],
-      colors: prod.colors || ["Black"],
+      sizes: prod.sizes && prod.sizes.length > 0 ? [...prod.sizes] : ["S", "M", "L"],
+      colors: prod.colors && prod.colors.length > 0 ? [...prod.colors] : ["Noir Black"],
       stock: String(prod.stock ?? 45),
       fabricAndCare: prod.fabricAndCare || "",
       fitDetails: prod.fitDetails || "",
@@ -878,16 +911,100 @@ export default function AdminPortal() {
     setIsProductModalOpen(true);
   };
 
-  const handleProductImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleProductImageFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     try {
-      const dataUrl = await compressImageFile(file);
-      setProductForm((prev) => ({ ...prev, image: dataUrl }));
-      showToast("Product photo uploaded.");
+      const compressed: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const dataUrl = await compressImageFile(files[i]);
+        compressed.push(dataUrl);
+      }
+      setProductForm((prev) => {
+        const nextImages = [...prev.images, ...compressed];
+        return {
+          ...prev,
+          images: nextImages,
+          image: prev.image || nextImages[0] || "",
+        };
+      });
+      showToast(`Uploaded ${files.length} product photo(s).`);
     } catch {
       showToast("Could not read image file.");
     }
+  };
+
+  const handleAddImageUrl = () => {
+    const url = productForm.customImageUrl.trim();
+    if (!url) return;
+    setProductForm((prev) => {
+      const nextImages = [...prev.images, url];
+      return {
+        ...prev,
+        images: nextImages,
+        image: prev.image || nextImages[0] || "",
+        customImageUrl: "",
+      };
+    });
+    showToast("Added image URL to product gallery.");
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    setProductForm((prev) => {
+      const nextImages = prev.images.filter((_, i) => i !== indexToRemove);
+      const nextMain = nextImages[0] || "";
+      return {
+        ...prev,
+        images: nextImages,
+        image: prev.image === prev.images[indexToRemove] ? nextMain : prev.image,
+      };
+    });
+  };
+
+  const handleSetMainImage = (index: number) => {
+    setProductForm((prev) => {
+      const chosen = prev.images[index];
+      if (!chosen) return prev;
+      const reordered = [chosen, ...prev.images.filter((_, i) => i !== index)];
+      return {
+        ...prev,
+        images: reordered,
+        image: chosen,
+      };
+    });
+    showToast("Updated main showcase image.");
+  };
+
+  const handleToggleColor = (color: string) => {
+    setProductForm((prev) => {
+      const exists = prev.colors.includes(color);
+      return {
+        ...prev,
+        colors: exists ? prev.colors.filter((c) => c !== color) : [...prev.colors, color],
+      };
+    });
+  };
+
+  const handleAddCustomColor = () => {
+    const val = productForm.customColorInput.trim();
+    if (!val) return;
+    if (productForm.colors.includes(val)) {
+      showToast(`Color "${val}" is already added.`);
+      return;
+    }
+    setProductForm((prev) => ({
+      ...prev,
+      colors: [...prev.colors, val],
+      customColorInput: "",
+    }));
+    showToast(`Added colorway "${val}".`);
+  };
+
+  const handleRemoveColor = (colorToRemove: string) => {
+    setProductForm((prev) => ({
+      ...prev,
+      colors: prev.colors.filter((c) => c !== colorToRemove),
+    }));
   };
 
   const handleHeroImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -911,17 +1028,27 @@ export default function AdminPortal() {
       : undefined;
     const prodId = editingProduct ? editingProduct.id : `prod-${Date.now()}`;
 
+    const finalImages =
+      productForm.images.length > 0
+        ? productForm.images
+        : productForm.image
+        ? [productForm.image.trim()]
+        : [NEW_YEAR_PRODUCTS[0]?.image || ""];
+    const mainImage = productForm.image.trim() || finalImages[0] || NEW_YEAR_PRODUCTS[0]?.image || "";
+    const finalColors = productForm.colors.length > 0 ? productForm.colors : ["Noir Black"];
+
     const newProd: Product = {
       id: prodId,
       name: productForm.name.trim(),
       category: productForm.category,
       price: priceNum,
       originalPrice: origNum,
-      image: productForm.image.trim() || NEW_YEAR_PRODUCTS[0].image,
+      image: mainImage,
+      images: finalImages,
       badge: productForm.badge.trim() || undefined,
       description: productForm.description.trim(),
-      sizes: productForm.sizes,
-      colors: productForm.colors,
+      sizes: productForm.sizes.length > 0 ? productForm.sizes : ["M"],
+      colors: finalColors,
       stock: Number(productForm.stock) || 0,
       fabricAndCare: productForm.fabricAndCare.trim() || undefined,
       fitDetails: productForm.fitDetails.trim() || undefined,
@@ -957,6 +1084,7 @@ export default function AdminPortal() {
         price: newProd.price,
         originalPrice: newProd.originalPrice || null,
         image: newProd.image,
+        images: newProd.images || [newProd.image],
         badge: newProd.badge || null,
         description: newProd.description,
         sizes: newProd.sizes || [],
@@ -975,6 +1103,7 @@ export default function AdminPortal() {
         heroSubheadline: newProd.heroSubheadline || null,
         heroLookNumber: newProd.heroLookNumber || null,
         heroImage: newProd.heroImage || null,
+        updatedAt: new Date().toISOString(),
       });
     } catch {
       // Saved in local state seamlessly
@@ -1972,20 +2101,20 @@ export default function AdminPortal() {
                               isAgentOrBot ? "items-end" : "items-start"
                             } space-y-1.5`}
                           >
-                            <div className="flex items-center gap-2 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299]">
-                              <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] uppercase">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299]">
+                              <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] uppercase whitespace-nowrap">
                                 {msg.senderName}
                               </span>
-                              <span>·</span>
-                              <span>
+                              <span className="text-[#8C877D] select-none">·</span>
+                              <span className="whitespace-nowrap">
                                 {msg.sender === "customer"
                                   ? "Client"
                                   : msg.sender === "bot"
                                   ? "Automated Bot"
                                   : "Human Specialist"}
                               </span>
-                              <span>·</span>
-                              <span className="tabular-nums">
+                              <span className="text-[#8C877D] select-none">·</span>
+                              <span className="tabular-nums whitespace-nowrap">
                                 {new Date(msg.createdAt).toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -3628,33 +3757,212 @@ export default function AdminPortal() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
-                  Garment Image (URL or Device Upload)
-                </label>
+              {/* STUDIO GALLERY & MULTI-IMAGE UPLOADER */}
+              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
+                    Studio Gallery &amp; Product Images ({productForm.images.length})
+                  </span>
+                  <span className="text-[10px] font-mono text-[#66625B]">
+                    First image is thumbnail &middot; Supports multiple files
+                  </span>
+                </div>
+
                 <input
                   ref={productFileInputRef}
                   type="file"
+                  multiple
                   accept="image/*"
-                  onChange={handleProductImageFile}
+                  onChange={handleProductImageFiles}
                   className="hidden"
                 />
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={productForm.image}
-                    onChange={(e) =>
-                      setProductForm((p) => ({ ...p, image: e.target.value }))
-                    }
-                    className="flex-1 h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono outline-none"
-                  />
+
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
                     onClick={() => productFileInputRef.current?.click()}
-                    className="h-10 px-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase cursor-pointer"
+                    className="h-10 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[10px] font-mono uppercase tracking-[0.1em] inline-flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 shrink-0"
                   >
-                    Upload Photo
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Photo(s)</span>
                   </button>
+
+                  <div className="flex flex-1 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Or paste external image URL (https://...)"
+                      value={productForm.customImageUrl}
+                      onChange={(e) =>
+                        setProductForm((p) => ({ ...p, customImageUrl: e.target.value }))
+                      }
+                      className="flex-1 h-10 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddImageUrl}
+                      className="h-10 px-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase cursor-pointer hover:border-[#141413] dark:hover:border-[#F3F1EC] shrink-0"
+                    >
+                      Add URL
+                    </button>
+                  </div>
+                </div>
+
+                {/* Uploaded Gallery Thumbnails Strip */}
+                {productForm.images.length === 0 ? (
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] italic py-2">
+                    No gallery images added yet. Upload high-res studio photos or add image links.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 pt-2">
+                    {productForm.images.map((img, idx) => {
+                      const isMain = productForm.image === img || (idx === 0 && !productForm.image);
+                      return (
+                        <div
+                          key={idx}
+                          className={`relative aspect-[3/4] bg-white dark:bg-[#191816] border overflow-hidden rounded-xs group flex flex-col justify-between p-1 ${
+                            isMain
+                              ? "border-[#966830] ring-1 ring-[#966830]"
+                              : "border-[#E6E2DA] dark:border-[#2C2A26]"
+                          }`}
+                        >
+                          <img
+                            src={img}
+                            alt={`Piece upload ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute top-1 left-1">
+                            {isMain ? (
+                              <span className="px-1.5 py-0.5 bg-[#966830] text-white text-[9px] font-mono font-bold tracking-wider uppercase rounded-xs">
+                                Main
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSetMainImage(idx)}
+                                className="px-1.5 py-0.5 bg-black/75 hover:bg-black text-white text-[9px] font-mono uppercase rounded-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                              >
+                                Set Main
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="absolute top-1 right-1 w-6 h-6 bg-black/75 hover:bg-red-600 text-white flex items-center justify-center rounded-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Remove image"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* COLORWAY MANAGEMENT & ACTIVE SWATCHES */}
+              <div className="p-3.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-[#966830] dark:text-[#C89B62]" />
+                    <span className="block text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
+                      Available Colorways ({productForm.colors.length} Active)
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#66625B]">
+                    Real swatches synced to storefront
+                  </span>
+                </div>
+
+                {/* Active Selected Color Chips */}
+                <div className="flex flex-wrap gap-2">
+                  {productForm.colors.map((c) => (
+                    <span
+                      key={c}
+                      className="inline-flex items-center gap-2 px-2.5 py-1 bg-white dark:bg-[#191816] border border-[#141413] dark:border-[#F3F1EC] rounded-xs text-xs font-medium text-[#141413] dark:text-[#F3F1EC]"
+                    >
+                      <span
+                        className="w-3.5 h-3.5 rounded-full border border-black/15 dark:border-white/25 shrink-0"
+                        style={{ backgroundColor: getSwatchHex(c) }}
+                      />
+                      <span>{c}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveColor(c)}
+                        className="text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                        title="Remove colorway"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {productForm.colors.length === 0 && (
+                    <span className="text-xs text-[#66625B] dark:text-[#A7A299] italic">
+                      No colors assigned. Click a preset below or enter a custom shade.
+                    </span>
+                  )}
+                </div>
+
+                {/* Preset Palette Quick Toggles */}
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1.5">
+                    Quick-Add Preset Luxury Shades
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESET_COLORS.map((preset) => {
+                      const isActive = productForm.colors.includes(preset);
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => handleToggleColor(preset)}
+                          className={`px-2.5 py-1 text-xs border rounded-xs flex items-center gap-1.5 cursor-pointer transition-colors ${
+                            isActive
+                              ? "bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] border-[#141413] dark:border-[#F3F1EC]"
+                              : "bg-white dark:bg-[#191816] border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] dark:text-[#A7A299] hover:border-[#141413]"
+                          }`}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-black/15 dark:border-white/20 shrink-0"
+                            style={{ backgroundColor: getSwatchHex(preset) }}
+                          />
+                          <span>{preset}</span>
+                          {isActive && <Check className="w-3 h-3 ml-0.5" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Colorway Name Input */}
+                <div className="pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                  <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
+                    Bespoke / Custom Colorway Name
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Cognac Tan, Terracotta, Slate Blue"
+                      value={productForm.customColorInput}
+                      onChange={(e) =>
+                        setProductForm((p) => ({ ...p, customColorInput: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomColor();
+                        }
+                      }}
+                      className="flex-1 h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomColor}
+                      className="h-9 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] text-[10px] font-mono uppercase cursor-pointer"
+                    >
+                      Add Color
+                    </button>
+                  </div>
                 </div>
               </div>
 

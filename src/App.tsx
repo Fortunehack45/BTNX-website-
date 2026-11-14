@@ -823,18 +823,22 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {!isAuthOpen && !invoiceOrder && (
-        <MobileBottomNav
-          cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
-          wishlistCount={wishlist.length}
-          isOverlayProfileOpen={isProfileOpen}
-          onNavigatePage={() => {}}
-          onResetHome={() => {
-            setCategoryFilter("");
-            setSearchQuery("");
-          }}
-        />
-      )}
+      {!isAuthOpen &&
+        !invoiceOrder &&
+        !location.pathname.startsWith("/support") &&
+        !location.pathname.startsWith("/support-staff") &&
+        !location.pathname.startsWith("/admin") && (
+          <MobileBottomNav
+            cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+            wishlistCount={wishlist.length}
+            isOverlayProfileOpen={isProfileOpen}
+            onNavigatePage={() => {}}
+            onResetHome={() => {
+              setCategoryFilter("");
+              setSearchQuery("");
+            }}
+          />
+        )}
     </div>
     </MotionConfig>
   );
