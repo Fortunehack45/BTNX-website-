@@ -84,7 +84,7 @@ export default function SeoManager({ activeProduct }: SeoManagerProps) {
     const routeMeta = ROUTE_META[pathname] || DEFAULT_META;
     const origin = window.location.origin;
     const canonicalUrl = `${origin}${pathname}`;
-    const previewImageUrl = `${origin}/og-preview.jpg`;
+    const previewImageUrl = `${origin}/btnx-og-preview.jpg`;
 
     const title = activeProduct
       ? `${activeProduct.name} — BTNX Store`
@@ -102,6 +102,7 @@ export default function SeoManager({ activeProduct }: SeoManagerProps) {
     upsertMeta("property", "og:title", title);
     upsertMeta("property", "og:description", description);
     upsertMeta("property", "og:image", previewImageUrl);
+    upsertMeta("property", "og:image:secure_url", previewImageUrl);
     upsertMeta("name", "twitter:title", title);
     upsertMeta("name", "twitter:description", description);
     upsertMeta("name", "twitter:image", previewImageUrl);
