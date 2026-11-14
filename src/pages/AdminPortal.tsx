@@ -34,6 +34,7 @@ import {
   ZoomIn,
   Truck,
   Sliders,
+  Star,
 } from "lucide-react";
 import { Product, Order, StoreShippingSettings } from "../types";
 import {
@@ -1719,6 +1720,54 @@ export default function AdminPortal() {
               </div>
             </div>
 
+            {/* Live CSAT & Quality Metrics Banner */}
+            {(() => {
+              const ratedList = tickets.filter((t) => t.rating != null);
+              const avgScore = ratedList.length > 0
+                ? (ratedList.reduce((acc, t) => acc + (t.rating || 5), 0) / ratedList.length).toFixed(1)
+                : "5.0";
+              const positiveReviews = ratedList.filter((t) => (t.rating || 5) >= 4).length;
+              const positivePct = ratedList.length > 0
+                ? Math.round((positiveReviews / ratedList.length) * 100)
+                : 100;
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-1">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#66625B] dark:text-[#A7A299]">
+                      Average CSAT Rating
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-0.5 text-[#966830] dark:text-[#C89B62]">
+                        <Star className="w-4 h-4 fill-current" />
+                      </div>
+                      <span className="font-mono text-xl font-bold">{avgScore} / 5.0</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-1">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#66625B] dark:text-[#A7A299]">
+                      Client Satisfaction Rate
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xl font-bold text-[#1D7A46] dark:text-[#67E28E]">{positivePct}%</span>
+                      <span className="text-xs text-[#66625B] dark:text-[#A7A299]">Positive Ratings</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-1">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#66625B] dark:text-[#A7A299]">
+                      Reviews Logged
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xl font-bold">{ratedList.length}</span>
+                      <span className="text-xs text-[#66625B] dark:text-[#A7A299]">Total Client Reviews</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Left Thread Inbox (4 cols) */}
               <div className="lg:col-span-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-hidden">
@@ -1769,19 +1818,27 @@ export default function AdminPortal() {
                             <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
                               #{t.id}
                             </span>
-                            <span
-                              className={
-                                t.mode === "human"
-                                  ? "text-[#966830] dark:text-[#C89B62] font-semibold"
-                                  : ""
-                              }
-                            >
-                              {t.status === "resolved"
-                                ? "Resolved"
-                                : t.mode === "human"
-                                ? "Human Specialist"
-                                : "Automated Bot"}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {t.rating && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs font-semibold">
+                                  <Star className="w-2.5 h-2.5 fill-current" />
+                                  <span>{t.rating}.0</span>
+                                </span>
+                              )}
+                              <span
+                                className={
+                                  t.mode === "human"
+                                    ? "text-[#966830] dark:text-[#C89B62] font-semibold"
+                                    : ""
+                                }
+                              >
+                                {t.status === "resolved"
+                                  ? "Resolved"
+                                  : t.mode === "human"
+                                  ? "Human Specialist"
+                                  : "Automated Bot"}
+                              </span>
+                            </div>
                           </div>
 
                           <p className="text-xs font-semibold text-[#141413] dark:text-[#F3F1EC] truncate">
@@ -1876,6 +1933,42 @@ export default function AdminPortal() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Client Review Bar if Rated */}
+                    {selectedTicket.rating && (
+                      <div className="px-5 py-2.5 bg-[#FAF3EA] dark:bg-[#2C2318] border-b border-[#E6D4BE] dark:border-[#4A3925] flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-[#966830] dark:text-[#C89B62] font-semibold">
+                            Client Review:
+                          </span>
+                          <div className="flex items-center gap-0.5 text-[#966830] dark:text-[#C89B62]">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`w-3.5 h-3.5 ${
+                                  star <= (selectedTicket.rating || 5)
+                                    ? "fill-current"
+                                    : "text-[#D1CBC1] dark:text-[#4A3925]"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="font-mono font-medium text-[#141413] dark:text-[#F3F1EC]">
+                            {selectedTicket.rating}.0 / 5
+                          </span>
+                          {selectedTicket.feedbackComment && (
+                            <span className="italic text-[#66625B] dark:text-[#A7A299]">
+                              "{selectedTicket.feedbackComment}"
+                            </span>
+                          )}
+                        </div>
+                        {selectedTicket.feedbackSubmittedAt && (
+                          <span className="text-[10px] font-mono text-[#8C877D]">
+                            Submitted on {new Date(selectedTicket.feedbackSubmittedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Message Stream */}
                     <div className="flex-1 p-5 space-y-4 overflow-y-auto max-h-[440px]">

@@ -235,7 +235,8 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'id', 'userId', 'userEmail', 'userName', 'subject', 'topic', 'orderId', 'status', 'mode',
-          'assignedAgent', 'messages', 'createdAt', 'updatedAt', 'unreadByAdmin', 'unreadByCustomer'
+          'assignedAgent', 'messages', 'createdAt', 'updatedAt', 'unreadByAdmin', 'unreadByCustomer',
+          'rating', 'feedbackComment', 'feedbackSubmittedAt'
         ]) &&
         data.id is string && data.id == ticketId &&
         data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
@@ -251,7 +252,10 @@ service cloud.firestore {
         data.createdAt is string && data.createdAt.size() <= 64 &&
         data.updatedAt is string && data.updatedAt.size() <= 64 &&
         (!('unreadByAdmin' in data) || data.unreadByAdmin is bool) &&
-        (!('unreadByCustomer' in data) || data.unreadByCustomer is bool);
+        (!('unreadByCustomer' in data) || data.unreadByCustomer is bool) &&
+        (!('rating' in data) || data.rating == null || (data.rating is number && data.rating >= 1 && data.rating <= 5)) &&
+        (!('feedbackComment' in data) || data.feedbackComment == null || (data.feedbackComment is string && data.feedbackComment.size() <= 500)) &&
+        (!('feedbackSubmittedAt' in data) || data.feedbackSubmittedAt == null || (data.feedbackSubmittedAt is string && data.feedbackSubmittedAt.size() <= 64));
     }
 
     // Collection Rules

@@ -70,6 +70,9 @@ export interface SupportTicket {
   updatedAt: string;
   unreadByAdmin?: boolean;
   unreadByCustomer?: boolean;
+  rating?: number; // 1 to 5 star rating
+  feedbackComment?: string;
+  feedbackSubmittedAt?: string;
 }
 
 export const SUPPORT_TOPICS = [
@@ -224,6 +227,9 @@ export async function persistTicket(ticket: SupportTicket, syncFirestore = true)
       if (ticket.orderId) docData.orderId = ticket.orderId.slice(0, 120);
       if (ticket.assignedAgent) docData.assignedAgent = ticket.assignedAgent.slice(0, 115);
       if (ticket.unreadByCustomer != null) docData.unreadByCustomer = Boolean(ticket.unreadByCustomer);
+      if (ticket.rating != null) docData.rating = Number(ticket.rating);
+      if (ticket.feedbackComment) docData.feedbackComment = ticket.feedbackComment.slice(0, 500);
+      if (ticket.feedbackSubmittedAt) docData.feedbackSubmittedAt = ticket.feedbackSubmittedAt;
 
       await setDoc(doc(db, "supportTickets", ticket.id), docData, { merge: true });
     } catch {

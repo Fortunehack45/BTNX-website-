@@ -14,6 +14,7 @@ import {
   UserCheck,
   ArrowLeft,
   LogOut,
+  Star,
 } from "lucide-react";
 import BrandLogo from "../../src/components/BrandLogo";
 import { db, auth } from "../../src/lib/firebase";
@@ -255,6 +256,9 @@ export default function SupportStaffPortal() {
     if (ticket.orderId) docData.orderId = ticket.orderId.slice(0, 120);
     if (ticket.assignedAgent) docData.assignedAgent = ticket.assignedAgent.slice(0, 115);
     if (ticket.unreadByCustomer != null) docData.unreadByCustomer = Boolean(ticket.unreadByCustomer);
+    if (ticket.rating != null) docData.rating = Number(ticket.rating);
+    if (ticket.feedbackComment) docData.feedbackComment = ticket.feedbackComment.slice(0, 500);
+    if (ticket.feedbackSubmittedAt) docData.feedbackSubmittedAt = ticket.feedbackSubmittedAt;
 
     return docData;
   };
@@ -769,6 +773,12 @@ export default function SupportStaffPortal() {
                             Resolved
                           </span>
                         )}
+                        {t.rating && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs text-[9px] font-mono font-medium">
+                            <Star className="w-2.5 h-2.5 fill-current" />
+                            <span>{t.rating}.0</span>
+                          </span>
+                        )}
                       </div>
                       {t.orderId && (
                         <span className="text-[#66625B] dark:text-[#A7A299]">
@@ -804,6 +814,12 @@ export default function SupportStaffPortal() {
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {selectedTicket.rating && (
+                    <div className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] border border-[#E6D4BE] dark:border-[#4A3925] rounded-xs text-[10px] font-mono font-medium">
+                      <Star className="w-3 h-3 fill-current" />
+                      <span>{selectedTicket.rating}/5 Rated</span>
+                    </div>
+                  )}
                   {selectedTicket.mode === "bot" ? (
                     <button
                       type="button"
@@ -1103,6 +1119,57 @@ export default function SupportStaffPortal() {
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Client Rating & Review Dossier */}
+              <div className="space-y-2 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62]">
+                  Client Rating &amp; Review
+                </span>
+                {selectedTicket.rating ? (
+                  <div className="p-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-2 rounded-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-[#966830] dark:text-[#C89B62]">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`w-3.5 h-3.5 ${
+                              star <= (selectedTicket.rating || 5)
+                                ? "fill-[#966830] dark:fill-[#C89B62]"
+                                : "text-[#D1CBC1] dark:text-[#3E3A33]"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="font-mono text-xs font-semibold text-[#141413] dark:text-[#F3F1EC]">
+                        {selectedTicket.rating}.0 / 5
+                      </span>
+                    </div>
+                    {selectedTicket.feedbackComment && (
+                      <p className="text-xs text-[#66625B] dark:text-[#A7A299] italic leading-relaxed">
+                        "{selectedTicket.feedbackComment}"
+                      </p>
+                    )}
+                    {selectedTicket.feedbackSubmittedAt && (
+                      <span className="block text-[10px] text-[#8C877D] font-mono">
+                        Logged {new Date(selectedTicket.feedbackSubmittedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-[#FAF9F7]/70 dark:bg-[#141413]/70 border border-dashed border-[#E6E2DA] dark:border-[#2C2A26] text-center space-y-1.5 rounded-xs">
+                    <p className="text-[11px] text-[#66625B] dark:text-[#A7A299]">
+                      Awaiting client post-support review.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleSendAgentReply("We would appreciate your feedback! You can leave a quick rating on this conversation using the review card.")}
+                      className="text-[10px] text-[#966830] dark:text-[#C89B62] font-mono uppercase tracking-wider hover:underline cursor-pointer"
+                    >
+                      Prompt Client for Rating
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Quick Actions for Staff */}

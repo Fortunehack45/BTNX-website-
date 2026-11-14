@@ -26,6 +26,7 @@ import {
   Search,
   ZoomIn,
   MessageSquare,
+  Star,
 } from "lucide-react";
 import { Order, Product, CartItem } from "../types";
 import { NEW_YEAR_PRODUCTS } from "../data";
@@ -178,6 +179,13 @@ export default function Support({
 
   // Typing simulation indicator
   const [typingResponder, setTypingResponder] = useState<string | null>(null);
+
+  // Support Review & Rating State
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>("");
+  const [reviewHoverStar, setReviewHoverStar] = useState<number>(0);
+  const [isReviewOpen, setIsReviewOpen] = useState<boolean>(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState<boolean>(false);
 
   // Lightbox image preview
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -434,7 +442,7 @@ export default function Support({
       id: `msg-${Date.now()}-resolved`,
       sender: "system",
       senderName: "System",
-      text: "Conversation marked as Resolved",
+      text: "Conversation marked as Resolved · Please take a moment to rate your support experience below.",
       createdAt: nowIso,
     };
     const updated: SupportTicket = {
@@ -444,7 +452,40 @@ export default function Support({
       messages: [...activeTicket.messages, sysMsg],
     };
     await persistTicket(updated);
-    onAddToast(`Thread #${activeTicket.id} resolved.`, "success");
+    setIsReviewOpen(true);
+    onAddToast(`Thread #${activeTicket.id} marked as resolved.`, "success");
+  };
+
+  const handleSubmitReview = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeTicket) return;
+
+    setIsSubmittingReview(true);
+    const nowIso = new Date().toISOString();
+    const cleanScore = Math.max(1, Math.min(5, Math.round(reviewRating)));
+    const cleanComment = reviewComment.trim();
+
+    const reviewConfirmMsg: SupportMessage = {
+      id: `msg-${Date.now()}-review`,
+      sender: "system",
+      senderName: "System",
+      text: `Client rated service: ${cleanScore}/5 Stars${cleanComment ? ` · "${cleanComment}"` : ""}`,
+      createdAt: nowIso,
+    };
+
+    const updatedTicket: SupportTicket = {
+      ...activeTicket,
+      rating: cleanScore,
+      feedbackComment: cleanComment || undefined,
+      feedbackSubmittedAt: nowIso,
+      updatedAt: nowIso,
+      messages: [...activeTicket.messages, reviewConfirmMsg],
+    };
+
+    await persistTicket(updatedTicket);
+    setIsSubmittingReview(false);
+    setIsReviewOpen(false);
+    onAddToast("Thank you for your rating! Your review has been saved.", "success");
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -714,6 +755,26 @@ export default function Support({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTicket.rating) {
+                    setReviewRating(activeTicket.rating);
+                    setReviewComment(activeTicket.feedbackComment || "");
+                  }
+                  setIsReviewOpen((prev) => !prev);
+                }}
+                className={`h-8 px-2.5 border text-[10px] font-medium uppercase tracking-[0.12em] inline-flex items-center gap-1 cursor-pointer whitespace-nowrap transition-colors ${
+                  activeTicket.rating
+                    ? "border-[#E6D4BE] dark:border-[#4A3925] bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62]"
+                    : "border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#966830] text-[#966830] dark:text-[#C89B62]"
+                }`}
+                title="Rate your support experience"
+              >
+                <Star className={`w-3 h-3 ${activeTicket.rating ? "fill-current" : ""}`} />
+                <span>{activeTicket.rating ? `${activeTicket.rating}.0` : "Rate"}</span>
+              </button>
+
               {activeTicket.mode === "bot" ? (
                 <button
                   type="button"
@@ -1031,6 +1092,162 @@ export default function Support({
                 <span>{typingResponder} is typing...</span>
               </div>
             )}
+
+            {/* Interactive Customer Review / Rating Component */}
+            {(!activeTicket.rating || isReviewOpen) && (activeTicket.status === "resolved" || isReviewOpen) ? (
+              <div className="p-4 sm:p-5 border border-[#966830]/40 bg-white dark:bg-[#191816] shadow-sm rounded-xs space-y-4 my-2">
+                <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] block">
+                      Client Feedback &amp; Review
+                    </span>
+                    <h4 className="font-display text-base font-medium text-[#141413] dark:text-[#F3F1EC]">
+                      How was your support experience today?
+                    </h4>
+                  </div>
+                  {isReviewOpen && activeTicket.rating && (
+                    <button
+                      type="button"
+                      onClick={() => setIsReviewOpen(false)}
+                      className="text-xs text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] p-1 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Interactive 5-Star Rating */}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onMouseEnter={() => setReviewHoverStar(star)}
+                          onMouseLeave={() => setReviewHoverStar(0)}
+                          onClick={() => setReviewRating(star)}
+                          className="p-1 cursor-pointer transition-transform hover:scale-110"
+                          title={`${star} Star${star > 1 ? "s" : ""}`}
+                        >
+                          <Star
+                            className={`w-6 h-6 transition-colors ${
+                              star <= (reviewHoverStar || reviewRating)
+                                ? "fill-[#966830] text-[#966830] dark:fill-[#C89B62] dark:text-[#C89B62]"
+                                : "text-[#D1CBC1] dark:text-[#3E3A33]"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    <span className="font-mono text-xs font-semibold text-[#966830] dark:text-[#C89B62]">
+                      {reviewHoverStar || reviewRating} / 5 ·{" "}
+                      {(reviewHoverStar || reviewRating) === 5
+                        ? "Exceptional Service"
+                        : (reviewHoverStar || reviewRating) === 4
+                        ? "Very Good"
+                        : (reviewHoverStar || reviewRating) === 3
+                        ? "Satisfactory"
+                        : (reviewHoverStar || reviewRating) === 2
+                        ? "Needs Improvement"
+                        : "Poor Experience"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Sentiment Tags */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  {[
+                    "Super fast resolution",
+                    "Polite & knowledgeable agent",
+                    "Accurate order update",
+                    "Helpful sizing guidance",
+                    "Seamless exchange",
+                  ].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setReviewComment((prev) => (prev ? `${prev} · ${tag}` : tag))
+                      }
+                      className="h-6 px-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#966830] text-[10px] text-[#66625B] dark:text-[#A7A299] whitespace-nowrap cursor-pointer transition-colors"
+                    >
+                      +{tag}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Optional Comment Input */}
+                <div className="space-y-2">
+                  <textarea
+                    rows={2}
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Share a brief note about this resolution (optional)..."
+                    className="w-full p-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs text-[#141413] dark:text-[#F3F1EC] outline-none focus:border-[#966830] transition-colors resize-none"
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-[#66625B] dark:text-[#A7A299] font-mono">
+                      Feedback is shared with our Osogbo Client Care team.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSubmitReview()}
+                      disabled={isSubmittingReview}
+                      className="h-8 px-4 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:opacity-90 text-[10px] font-medium uppercase tracking-[0.14em] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-opacity"
+                    >
+                      {isSubmittingReview ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Check className="w-3 h-3" />
+                      )}
+                      <span>Submit Review</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : activeTicket.rating ? (
+              <div className="p-3.5 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#191816] rounded-xs space-y-2 my-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#966830] dark:text-[#C89B62]">
+                      Your Verified Review
+                    </span>
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-3 h-3 ${
+                            star <= (activeTicket.rating || 5)
+                              ? "fill-[#966830] text-[#966830] dark:fill-[#C89B62] dark:text-[#C89B62]"
+                              : "text-[#D1CBC1] dark:text-[#3E3A33]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="font-mono text-[11px] font-medium text-[#141413] dark:text-[#F3F1EC]">
+                      {activeTicket.rating}.0 / 5
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewRating(activeTicket.rating || 5);
+                      setReviewComment(activeTicket.feedbackComment || "");
+                      setIsReviewOpen(true);
+                    }}
+                    className="text-[10px] font-mono uppercase tracking-wider text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                  >
+                    Edit Review
+                  </button>
+                </div>
+                {activeTicket.feedbackComment && (
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] italic">
+                    "{activeTicket.feedbackComment}"
+                  </p>
+                )}
+              </div>
+            ) : null}
 
             <div ref={messagesEndRef} />
           </div>
@@ -1703,6 +1920,15 @@ export default function Support({
                           <>
                             <span>·</span>
                             <span>Order #{t.orderId}</span>
+                          </>
+                        )}
+                        {t.rating && (
+                          <>
+                            <span>·</span>
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62] rounded-xs font-semibold">
+                              <Star className="w-2.5 h-2.5 fill-current" />
+                              <span>{t.rating}.0</span>
+                            </span>
                           </>
                         )}
                         <span className="tabular-nums">
