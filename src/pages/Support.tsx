@@ -702,12 +702,12 @@ export default function Support({
     return (
       <section
         id="customer-service-chat-page"
-        className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 flex-1 flex flex-col py-3 sm:py-6"
+        className="w-full max-w-[1680px] mx-auto px-0 sm:px-4 lg:px-6 flex-1 flex flex-col py-0 sm:py-6"
       >
-        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-82px)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-82px)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
+        <div className="w-full flex-1 flex flex-col bg-white dark:bg-[#191816] border-0 sm:border border-[#E6E2DA] dark:border-[#2C2A26] min-h-[calc(100dvh-64px)] lg:min-h-[calc(100dvh-120px)] max-h-[calc(100dvh-64px)] lg:max-h-[calc(100dvh-120px)] overflow-hidden">
           {/* Clean Single-Row Editorial Chat Header */}
           <div className="px-3.5 sm:px-6 py-3 sm:py-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <button
                 type="button"
                 onClick={closeChatPageToHub}
@@ -720,16 +720,16 @@ export default function Support({
 
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-[#66625B] dark:text-[#A7A299] truncate">
-                  <span className="text-[#141413] dark:text-[#F3F1EC] font-medium">
+                  <span className="text-[#141413] dark:text-[#F3F1EC] font-semibold whitespace-nowrap">
                     #{activeTicket.id}
                   </span>
-                  <span>·</span>
+                  <span className="text-[#8C877D] select-none shrink-0">·</span>
                   <span
-                    className={
+                    className={`whitespace-nowrap truncate max-w-[120px] sm:max-w-none ${
                       activeTicket.mode === "human"
                         ? "text-[#966830] dark:text-[#C89B62]"
                         : ""
-                    }
+                    }`}
                   >
                     {activeTicket.mode === "human"
                       ? activeTicket.assignedAgent || "Human Specialist"
@@ -838,16 +838,16 @@ export default function Support({
                   } space-y-1.5`}
                 >
                   {/* Quiet Metadata Line (crisp single row with left sender info & right timestamp) */}
-                  <div className="flex items-center justify-between w-full max-w-[90%] sm:max-w-lg text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299] px-0.5 gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0 truncate">
-                      <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
+                  <div className="flex items-center justify-between w-full max-w-[92%] sm:max-w-lg text-[10px] font-mono uppercase tracking-[0.08em] text-[#66625B] dark:text-[#A7A299] px-0.5 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+                      <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap shrink-0">
                         {isCustomer ? "You" : msg.senderName}
                       </span>
                       {msg.senderRole && (
                         <>
                           <span className="text-[#8C877D] select-none shrink-0">·</span>
                           <span
-                            className={`truncate whitespace-nowrap ${
+                            className={`truncate whitespace-nowrap max-w-[130px] sm:max-w-none ${
                               isHumanAgent ? "text-[#966830] dark:text-[#C89B62] font-semibold" : ""
                             }`}
                           >
@@ -856,7 +856,7 @@ export default function Support({
                         </>
                       )}
                     </div>
-                    <span className="tabular-nums whitespace-nowrap shrink-0 text-[#8C877D]">
+                    <span className="tabular-nums whitespace-nowrap shrink-0 text-[#8C877D] text-[9px] sm:text-[10px]">
                       {new Date(msg.createdAt).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",

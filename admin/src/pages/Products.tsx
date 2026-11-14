@@ -33,10 +33,14 @@ const IMAGE_PLACEHOLDERS = [
 export default function Products() {
   const [products, setProducts] = useState<Product[]>(() => {
     try {
+      const delCached = localStorage.getItem("btnx_deleted_product_ids");
+      const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
       const cached = localStorage.getItem("btnx_cloud_products");
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((p: Product) => !deletedIds.includes(p.id));
+        }
       }
     } catch {}
     return [];
@@ -66,18 +70,23 @@ export default function Products() {
   useEffect(() => {
     // Load local cached products first
     try {
+      const delCached = localStorage.getItem("btnx_deleted_product_ids");
+      const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
       const cached = localStorage.getItem("btnx_cloud_products");
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed);
+          setProducts(parsed.filter((p: Product) => !deletedIds.includes(p.id)));
           setLoading(false);
         }
       }
     } catch {}
 
     const unsub = onSnapshot(query(collection(db, 'products')), (snap) => {
+      const delCached = localStorage.getItem("btnx_deleted_product_ids");
+      const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
       const prods = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Product[];
+      const validProds = prods.filter(p => !deletedIds.includes(p.id));
       setProducts(prev => {
         const map = new Map<string, Product>();
         try {
@@ -85,13 +94,17 @@ export default function Products() {
           if (cached) {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed)) {
-              parsed.forEach((p: Product) => map.set(p.id, p));
+              parsed
+                .filter((p: Product) => !deletedIds.includes(p.id))
+                .forEach((p: Product) => map.set(p.id, p));
             }
           }
         } catch {}
-        prev.forEach(p => map.set(p.id, p));
-        prods.forEach(p => map.set(p.id, { ...map.get(p.id), ...p }));
-        const merged = Array.from(map.values());
+        prev
+          .filter(p => !deletedIds.includes(p.id))
+          .forEach(p => map.set(p.id, p));
+        validProds.forEach(p => map.set(p.id, { ...map.get(p.id), ...p }));
+        const merged = Array.from(map.values()).filter(p => !deletedIds.includes(p.id));
         try {
           localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
         } catch {}
@@ -153,7 +166,20 @@ export default function Products() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
+    if (window.confirm("Are you sure you want to permanently delete this product?")) {
+      const currentDeleted: string[] = (() => {
+        try {
+          const raw = localStorage.getItem("btnx_deleted_product_ids");
+          return raw ? JSON.parse(raw) : [];
+        } catch {
+          return [];
+        }
+      })();
+      const nextDeleted = currentDeleted.includes(id) ? currentDeleted : [...currentDeleted, id];
+      try {
+        localStorage.setItem("btnx_deleted_product_ids", JSON.stringify(nextDeleted));
+      } catch {}
+
       setProducts(prev => {
         const next = prev.filter(p => p.id !== id);
         try {
@@ -168,6 +194,9 @@ export default function Products() {
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
       }
+      try {
+        await fetch(`/api/admin/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+      } catch {}
     }
   };
 
@@ -205,6 +234,18 @@ export default function Products() {
       stock: parseInt(formData.stock) || 0
     };
 
+    // Un-delete if previously deleted
+    try {
+      const delRaw = localStorage.getItem("btnx_deleted_product_ids");
+      if (delRaw) {
+        const delParsed: string[] = JSON.parse(delRaw);
+        if (delParsed.includes(prodId)) {
+          const nextDel = delParsed.filter(id => id !== prodId);
+          localStorage.setItem("btnx_deleted_product_ids", JSON.stringify(nextDel));
+        }
+      }
+    } catch {}
+
     setProducts(prev => {
       const exists = prev.some(p => p.id === prodId);
       const next = exists ? prev.map(p => p.id === prodId ? payload : p) : [payload, ...prev];
@@ -222,12 +263,18 @@ export default function Products() {
       } else {
         await setDoc(doc(db, 'products', prodId), payload as any);
       }
-      setIsModalOpen(false);
-      setEditingProduct(null);
-    } catch {
-      setIsModalOpen(false);
-      setEditingProduct(null);
-    }
+    } catch {}
+
+    try {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {}
+
+    setIsModalOpen(false);
+    setEditingProduct(null);
   };
 
   if (isModalOpen) {

@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -99,6 +100,67 @@ app.get("/api/products/:id", async (req: Request, res: Response) => {
     res.json({ product: { id: snap.id, ...snap.data() } });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to fetch product", details: err.message });
+  }
+});
+
+// ADMIN: DELETE PRODUCT (Authority Deletion from Firestore)
+app.delete("/api/admin/products/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await deleteDoc(doc(db, "products", id));
+    res.json({ success: true, message: `Product ${id} permanently removed.` });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete product", details: err.message });
+  }
+});
+
+// ADMIN: UPSERT PRODUCT (Authority Save to Firestore)
+app.post("/api/admin/products", async (req: Request, res: Response) => {
+  try {
+    const product = req.body;
+    if (!product || !product.id) {
+      return res.status(400).json({ error: "Product specification and ID are required" });
+    }
+    await setDoc(doc(db, "products", product.id), {
+      ...product,
+      updatedAt: new Date().toISOString(),
+    });
+    res.json({ success: true, product });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to save product", details: err.message });
+  }
+});
+
+// ADMIN: DELETE ORDER
+app.delete("/api/admin/orders/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await deleteDoc(doc(db, "orders", id));
+    res.json({ success: true, message: `Order ${id} deleted.` });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete order", details: err.message });
+  }
+});
+
+// ADMIN: DELETE PROMO CODE
+app.delete("/api/admin/promos/:code", async (req: Request, res: Response) => {
+  try {
+    const { code } = req.params;
+    await deleteDoc(doc(db, "promos", code));
+    res.json({ success: true, message: `Promo code ${code} deleted.` });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete promo", details: err.message });
+  }
+});
+
+// ADMIN: DELETE SUPPORT TICKET
+app.delete("/api/admin/support/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await deleteDoc(doc(db, "support_tickets", id));
+    res.json({ success: true, message: `Support ticket ${id} deleted.` });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete ticket", details: err.message });
   }
 });
 

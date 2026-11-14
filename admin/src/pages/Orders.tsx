@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
-import { Eye, X, AlertCircle, ShoppingBag, RefreshCw } from 'lucide-react';
+import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { Eye, X, AlertCircle, ShoppingBag, RefreshCw, Trash2 } from 'lucide-react';
 
 interface OrderItem {
   product?: {
@@ -39,14 +39,17 @@ export default function Orders() {
   useEffect(() => {
     const q = query(collection(db, 'orders'));
     const unsub = onSnapshot(q, (snap) => {
+      const delOrdCached = localStorage.getItem("btnx_deleted_order_ids");
+      const deletedOrdIds: string[] = delOrdCached ? JSON.parse(delOrdCached) : [];
       const fetchedOrders = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Order[];
+      const validOrders = fetchedOrders.filter(o => !deletedOrdIds.includes(o.id));
       // Sort locally by timestamp or default to newest
-      fetchedOrders.sort((a, b) => {
+      validOrders.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
         return timeB - timeA;
       });
-      setOrders(fetchedOrders);
+      setOrders(validOrders);
       setLoading(false);
     }, (err) => {
       setError("Failed to stream orders from database.");
@@ -56,6 +59,32 @@ export default function Orders() {
 
     return () => unsub();
   }, []);
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm(`Are you sure you want to delete Order #${orderId}?`)) return;
+    const currentDeleted: string[] = (() => {
+      try {
+        const raw = localStorage.getItem("btnx_deleted_order_ids");
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const nextDeleted = currentDeleted.includes(orderId) ? currentDeleted : [...currentDeleted, orderId];
+    try {
+      localStorage.setItem("btnx_deleted_order_ids", JSON.stringify(nextDeleted));
+    } catch {}
+
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    try {
+      await deleteDoc(doc(db, 'orders', orderId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `orders/${orderId}`);
+    }
+    try {
+      await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, { method: "DELETE" });
+    } catch {}
+  };
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     setSavingStatus(orderId);
@@ -183,13 +212,22 @@ export default function Orders() {
 
                       {/* Actions */}
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => setSelectedOrder(order)}
-                          className="p-2 text-slate-400 hover:text-slate-950 border border-transparent hover:border-slate-200 hover:bg-slate-50 rounded-lg transition-all flex items-center gap-1 text-xs font-mono font-bold uppercase ml-auto"
-                        >
-                          <Eye className="w-4 h-4" />
-                          Details
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="p-2 text-slate-400 hover:text-slate-950 border border-transparent hover:border-slate-200 hover:bg-slate-50 rounded-lg transition-all flex items-center gap-1 text-xs font-mono font-bold uppercase"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Details
+                          </button>
+                          <button
+                            onClick={() => handleDeleteOrder(order.id)}
+                            className="p-2 text-slate-400 hover:text-rose-600 border border-transparent hover:border-rose-200 hover:bg-rose-50 rounded-lg transition-all"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

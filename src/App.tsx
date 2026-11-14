@@ -168,7 +168,7 @@ export default function App() {
             });
           }
         }
-        setProducts(Array.from(map.values()));
+        setProducts(Array.from(map.values()).filter((p) => !deletedIds.includes(p.id)));
       } catch {}
     };
 
@@ -211,7 +211,7 @@ export default function App() {
             fetched.forEach((p) => {
               if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
             });
-            const merged = Array.from(map.values());
+            const merged = Array.from(map.values()).filter((p) => !deletedIds.includes(p.id));
             setProducts(merged);
             try {
               localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
@@ -826,14 +826,18 @@ export default function App() {
         )}
       </main>
 
-      <Footer
-        onAddToast={handleAddToast}
-        onNavigateHome={() => {
-          setCategoryFilter("");
-          setSearchQuery("");
-        }}
-        onOpenSupport={() => handleOpenSupport()}
-      />
+      {!location.pathname.startsWith("/support") &&
+        !location.pathname.startsWith("/support-staff") &&
+        !location.pathname.startsWith("/admin") && (
+          <Footer
+            onAddToast={handleAddToast}
+            onNavigateHome={() => {
+              setCategoryFilter("");
+              setSearchQuery("");
+            }}
+            onOpenSupport={() => handleOpenSupport()}
+          />
+        )}
 
       <AnimatePresence>
         {isAuthOpen && <AuthModal key="auth-modal" isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />}

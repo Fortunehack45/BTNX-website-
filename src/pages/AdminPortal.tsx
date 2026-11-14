@@ -211,6 +211,17 @@ export default function AdminPortal() {
     } catch {}
     return [];
   });
+  const [deletedOrderIds, setDeletedOrderIds] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem("btnx_deleted_order_ids");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [mobileSupportView, setMobileSupportView] = useState<"list" | "chat">("list");
   const [orders, setOrders] = useState<Order[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [promos, setPromos] = useState<PromoRecord[]>(DEFAULT_PROMOS);
@@ -402,29 +413,39 @@ export default function AdminPortal() {
       // ignore
     }
 
-    // Load local orders fallback
+    // Load local orders fallback (excluding deleted orders)
     try {
+      const delOrdCached = localStorage.getItem("btnx_deleted_order_ids");
+      const deletedOrdIds: string[] = delOrdCached ? JSON.parse(delOrdCached) : [];
       const localOrds =
         localStorage.getItem("btnx_orders") || localStorage.getItem("klamby_orders");
       if (localOrds) {
         const parsed = JSON.parse(localOrds);
-        if (Array.isArray(parsed) && parsed.length > 0) setOrders(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setOrders(parsed.filter((o: Order) => !deletedOrdIds.includes(o.id)));
+        }
       }
     } catch {
       // ignore
     }
 
-    // Load local cached products
+    // Load local cached products (excluding deleted products)
     try {
+      const delCached = localStorage.getItem("btnx_deleted_product_ids");
+      const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
       const cached = localStorage.getItem("btnx_cloud_products");
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setCloudProducts((prev) => {
             const map = new Map<string, Product>();
-            prev.forEach((p) => map.set(p.id, p));
-            parsed.forEach((p: Product) => map.set(p.id, { ...map.get(p.id), ...p }));
-            return Array.from(map.values());
+            prev
+              .filter((p) => !deletedIds.includes(p.id))
+              .forEach((p) => map.set(p.id, p));
+            parsed
+              .filter((p: Product) => !deletedIds.includes(p.id))
+              .forEach((p: Product) => map.set(p.id, { ...map.get(p.id), ...p }));
+            return Array.from(map.values()).filter((p) => !deletedIds.includes(p.id));
           });
         }
       }
@@ -437,10 +458,13 @@ export default function AdminPortal() {
         onSnapshot(
           query(collection(db, "products")),
           (snap) => {
+            const delCached = localStorage.getItem("btnx_deleted_product_ids");
+            const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
             const list = snap.docs.map((d) => ({
               id: d.id,
               ...d.data(),
             })) as Product[];
+            const validList = list.filter((p) => !deletedIds.includes(p.id));
             setCloudProducts((prev) => {
               const map = new Map<string, Product>();
               try {
@@ -448,13 +472,17 @@ export default function AdminPortal() {
                 if (cached) {
                   const parsed = JSON.parse(cached);
                   if (Array.isArray(parsed)) {
-                    parsed.forEach((p: Product) => map.set(p.id, p));
+                    parsed
+                      .filter((p: Product) => !deletedIds.includes(p.id))
+                      .forEach((p: Product) => map.set(p.id, p));
                   }
                 }
               } catch {}
-              prev.forEach((p) => map.set(p.id, p));
-              list.forEach((p) => map.set(p.id, { ...map.get(p.id), ...p }));
-              const merged = Array.from(map.values());
+              prev
+                .filter((p) => !deletedIds.includes(p.id))
+                .forEach((p) => map.set(p.id, p));
+              validList.forEach((p) => map.set(p.id, { ...map.get(p.id), ...p }));
+              const merged = Array.from(map.values()).filter((p) => !deletedIds.includes(p.id));
               try {
                 localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
               } catch {}
@@ -470,11 +498,14 @@ export default function AdminPortal() {
           query(collection(db, "orders")),
           (snap) => {
             if (!snap.empty) {
+              const delOrdCached = localStorage.getItem("btnx_deleted_order_ids");
+              const deletedOrdIds: string[] = delOrdCached ? JSON.parse(delOrdCached) : [];
               const list = snap.docs.map((d) => ({
                 id: d.id,
                 ...d.data(),
               })) as Order[];
-              list.sort((a: any, b: any) => {
+              const validOrders = list.filter((o) => !deletedOrdIds.includes(o.id));
+              validOrders.sort((a: any, b: any) => {
                 const tA = a.createdAt?.toMillis
                   ? a.createdAt.toMillis()
                   : a.date
@@ -487,7 +518,7 @@ export default function AdminPortal() {
                   : 0;
                 return tB - tA;
               });
-              setOrders(list);
+              setOrders(validOrders);
             }
           },
           () => {}
@@ -579,8 +610,9 @@ export default function AdminPortal() {
 
   // Combined Orders (with demo fallback if empty so Admin Orders table is immediately rich)
   const allOrders: Order[] = React.useMemo(() => {
-    if (orders.length > 0) return orders;
-    return [
+    const valid = orders.filter((o) => !deletedOrderIds.includes(o.id));
+    if (valid.length > 0) return valid;
+    const fallback: Order[] = [
       {
         id: "BX-849201",
         userId: "tunde.adeleke@example.com",
@@ -633,7 +665,8 @@ export default function AdminPortal() {
         ],
       },
     ];
-  }, [orders]);
+    return fallback.filter((o) => !deletedOrderIds.includes(o.id));
+  }, [orders, deletedOrderIds]);
 
   // KPI Metrics
   const totalRevenue = allOrders.reduce((acc, o) => {
@@ -1186,6 +1219,14 @@ export default function AdminPortal() {
       // Saved in local state seamlessly
     }
 
+    try {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newProd),
+      });
+    } catch {}
+
     setIsProductModalOpen(false);
     showToast(
       editingProduct
@@ -1195,6 +1236,21 @@ export default function AdminPortal() {
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to permanently remove "${name}" from the catalog?`)) return;
+    const currentDeleted: string[] = (() => {
+      try {
+        const raw = localStorage.getItem("btnx_deleted_product_ids");
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const nextDeleted = currentDeleted.includes(id) ? currentDeleted : [...currentDeleted, id];
+    try {
+      localStorage.setItem("btnx_deleted_product_ids", JSON.stringify(nextDeleted));
+    } catch {}
+    setDeletedProductIds(nextDeleted);
+
     setCloudProducts((prev) => {
       const next = prev.filter((p) => p.id !== id);
       try {
@@ -1202,21 +1258,78 @@ export default function AdminPortal() {
       } catch {}
       return next;
     });
-    setDeletedProductIds((prev) => {
-      const next = prev.includes(id) ? prev : [...prev, id];
+
+    try {
+      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new CustomEvent("btnx_products_updated"));
+    } catch {}
+
+    try {
+      await deleteDoc(doc(db, "products", id));
+    } catch {}
+
+    try {
+      await fetch(`/api/admin/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {}
+
+    showToast(`Removed "${name}" from catalog.`);
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm(`Are you sure you want to delete Order #${orderId} from dispatch manifests?`)) return;
+    const currentDeleted: string[] = (() => {
       try {
-        localStorage.setItem("btnx_deleted_product_ids", JSON.stringify(next));
-        window.dispatchEvent(new Event("storage"));
-        window.dispatchEvent(new CustomEvent("btnx_products_updated"));
+        const raw = localStorage.getItem("btnx_deleted_order_ids");
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const nextDeleted = currentDeleted.includes(orderId) ? currentDeleted : [...currentDeleted, orderId];
+    try {
+      localStorage.setItem("btnx_deleted_order_ids", JSON.stringify(nextDeleted));
+    } catch {}
+    setDeletedOrderIds(nextDeleted);
+
+    setOrders((prev) => {
+      const next = prev.filter((o) => o.id !== orderId);
+      try {
+        localStorage.setItem("btnx_orders", JSON.stringify(next));
+        localStorage.setItem("klamby_orders", JSON.stringify(next));
       } catch {}
       return next;
     });
+
     try {
-      await deleteDoc(doc(db, "products", id));
-    } catch {
-      // ignore
-    }
-    showToast(`Removed "${name}" from catalog.`);
+      await deleteDoc(doc(db, "orders", orderId));
+    } catch {}
+
+    try {
+      await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, { method: "DELETE" });
+    } catch {}
+
+    showToast(`Deleted Order #${orderId}.`);
+  };
+
+  const handleDeletePromo = async (promoId: string, promoCode: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete promo code "${promoCode}"?`)) return;
+    setPromos((prev) => {
+      const next = prev.filter((p) => p.id !== promoId && p.code !== promoCode);
+      try {
+        localStorage.setItem("klamby_promo_codes", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await deleteDoc(doc(db, "promos", promoCode));
+    } catch {}
+
+    try {
+      await fetch(`/api/admin/promos/${encodeURIComponent(promoCode)}`, { method: "DELETE" });
+    } catch {}
+
+    showToast(`Deleted promo code "${promoCode}".`);
   };
 
   const handleSeedCatalogToCloud = async () => {
@@ -2616,10 +2729,14 @@ export default function AdminPortal() {
               );
             })()}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:h-[760px] xl:h-[800px]">
               {/* Left Thread Inbox (4 cols) */}
-              <div className="lg:col-span-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-hidden">
-                <div className="grid grid-cols-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413]">
+              <div
+                className={`${
+                  mobileSupportView === "list" ? "block" : "hidden lg:flex"
+                } lg:col-span-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-hidden flex flex-col h-full`}
+              >
+                <div className="grid grid-cols-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] shrink-0">
                   {(
                     [
                       { id: "all", label: "All" },
@@ -2643,7 +2760,7 @@ export default function AdminPortal() {
                   ))}
                 </div>
 
-                <div className="divide-y divide-[#E6E2DA] dark:divide-[#2C2A26] max-h-[580px] overflow-y-auto">
+                <div className="divide-y divide-[#E6E2DA] dark:divide-[#2C2A26] flex-1 overflow-y-auto">
                   {filteredTickets.length === 0 ? (
                     <div className="p-8 text-center text-xs text-[#66625B] dark:text-[#A7A299]">
                       No support threads in this filter.
@@ -2655,7 +2772,10 @@ export default function AdminPortal() {
                       return (
                         <div
                           key={t.id}
-                          onClick={() => setSelectedTicketId(t.id)}
+                          onClick={() => {
+                            setSelectedTicketId(t.id);
+                            setMobileSupportView("chat");
+                          }}
                           className={`p-4 cursor-pointer transition-colors space-y-1.5 ${
                             active
                               ? "bg-[#FAF9F7] dark:bg-[#22211E]"
@@ -2708,24 +2828,37 @@ export default function AdminPortal() {
               </div>
 
               {/* Right Live Chat Console (8 cols) */}
-              <div className="lg:col-span-8 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] flex flex-col min-h-[600px]">
+              <div
+                className={`${
+                  mobileSupportView === "chat" ? "flex" : "hidden lg:flex"
+                } lg:col-span-8 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] flex-col h-full overflow-hidden`}
+              >
                 {selectedTicket ? (
                   <>
                     {/* Ticket Header */}
-                    <div className="px-5 py-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-[#66625B] dark:text-[#A7A299]">
-                          <span className="font-semibold text-[#141413] dark:text-[#F3F1EC]">
-                            Ticket #{selectedTicket.id}
-                          </span>
-                          <span>·</span>
-                          <span>{selectedTicket.userName}</span>
-                          <span>·</span>
-                          <span>{selectedTicket.userEmail}</span>
+                    <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6E2DA] dark:border-[#2C2A26] bg-[#FAF9F7] dark:bg-[#141413] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setMobileSupportView("list")}
+                          className="lg:hidden h-8 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase inline-flex items-center gap-1 text-[#141413] dark:text-[#F3F1EC] shrink-0"
+                          title="Back to Tickets"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                          <span>Threads</span>
+                        </button>
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] truncate">
+                            <span className="font-semibold text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
+                              #{selectedTicket.id}
+                            </span>
+                            <span className="text-[#8C877D] select-none shrink-0">·</span>
+                            <span className="truncate whitespace-nowrap">{selectedTicket.userName}</span>
+                          </div>
+                          <h2 className="font-display text-lg sm:text-xl font-medium truncate">
+                            {selectedTicket.subject}
+                          </h2>
                         </div>
-                        <h2 className="font-display text-xl sm:text-2xl font-medium">
-                          {selectedTicket.subject}
-                        </h2>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -2733,10 +2866,10 @@ export default function AdminPortal() {
                           <button
                             type="button"
                             onClick={() => handleAdminTakeOverTicket(selectedTicket)}
-                            className="h-9 px-4 bg-[#966830] dark:bg-[#C89B62] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] inline-flex items-center gap-1.5 cursor-pointer"
+                            className="h-8 sm:h-9 px-3 sm:px-4 bg-[#966830] dark:bg-[#C89B62] text-white dark:text-[#141413] text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.14em] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                           >
                             <UserCheck className="w-3.5 h-3.5" />
-                            <span>Join as Human Specialist</span>
+                            <span>Join as Human</span>
                           </button>
                         )}
 
@@ -2762,7 +2895,7 @@ export default function AdminPortal() {
                               });
                               showToast(`Resolved Ticket #${selectedTicket.id}.`);
                             }}
-                            className="h-9 px-3.5 border border-[#141413] dark:border-[#F3F1EC] text-[11px] font-medium uppercase tracking-[0.12em] cursor-pointer"
+                            className="h-8 sm:h-9 px-3 border border-[#141413] dark:border-[#F3F1EC] text-[10px] sm:text-[11px] font-medium uppercase tracking-[0.12em] cursor-pointer whitespace-nowrap"
                           >
                             Mark Resolved
                           </button>
@@ -2771,10 +2904,16 @@ export default function AdminPortal() {
                         <button
                           type="button"
                           onClick={async () => {
+                            if (!window.confirm(`Delete thread #${selectedTicket.id}?`)) return;
                             await removeTicket(selectedTicket.id);
+                            try {
+                              await fetch(`/api/admin/support/${encodeURIComponent(selectedTicket.id)}`, { method: "DELETE" });
+                            } catch {}
                             showToast(`Deleted Ticket #${selectedTicket.id}.`);
+                            setSelectedTicketId("");
+                            setMobileSupportView("list");
                           }}
-                          className="h-9 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] cursor-pointer"
+                          className="h-8 sm:h-9 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#D93025] dark:hover:text-[#FF6B6B] cursor-pointer"
                           title="Delete Thread"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -2819,7 +2958,7 @@ export default function AdminPortal() {
                     )}
 
                     {/* Message Stream */}
-                    <div className="flex-1 p-5 space-y-4 overflow-y-auto max-h-[440px]">
+                    <div className="flex-1 p-4 sm:p-5 space-y-4 overflow-y-auto">
                       {selectedTicket.messages.map((msg) => {
                         if (msg.sender === "system") {
                           return (
@@ -3158,8 +3297,14 @@ export default function AdminPortal() {
                     </div>
                   </>
                 ) : (
-                  <div className="p-12 text-center my-auto text-xs text-[#66625B]">
-                    Select a conversation on the left to inspect and reply.
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-[#66625B] dark:text-[#A7A299] space-y-2">
+                    <Headphones className="w-8 h-8 text-[#966830] dark:text-[#C89B62]" />
+                    <p className="font-semibold text-sm text-[#141413] dark:text-[#F3F1EC]">
+                      Select a conversation thread
+                    </p>
+                    <p className="max-w-xs text-[11px]">
+                      Choose any client care ticket from the inbox on the left to start live resolution.
+                    </p>
                   </div>
                 )}
               </div>
@@ -3206,7 +3351,98 @@ export default function AdminPortal() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-x-auto">
+            {/* Mobile Order Cards (Responsive Phone UX) */}
+            <div className="lg:hidden space-y-3">
+              {filteredOrdersList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#66625B] dark:text-[#A7A299] bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26]">
+                  No orders match this filter.
+                </div>
+              ) : (
+                filteredOrdersList.map((ord) => {
+                  const count =
+                    ord.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 1;
+                  return (
+                    <div
+                      key={ord.id}
+                      className="p-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-3"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-bold text-sm text-[#141413] dark:text-[#F3F1EC]">
+                          #{ord.id}
+                        </span>
+                        <span className="font-mono text-[11px] text-[#66625B] dark:text-[#A7A299]">
+                          {ord.date || "Recent"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#66625B] dark:text-[#A7A299] truncate max-w-[190px]">
+                          {ord.userId || "Guest Checkout"}
+                        </span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-[#141413] dark:text-[#F3F1EC] block tabular-nums">
+                            {formatNaira(ord.total)}
+                          </span>
+                          <span className="font-mono text-[10px] text-[#66625B] dark:text-[#A7A299]">
+                            {count} {count === 1 ? "piece" : "pieces"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                        <select
+                          value={ord.status || "Confirmed"}
+                          onChange={(e) =>
+                            handleOrderStatusUpdate(ord.id, e.target.value)
+                          }
+                          className="h-8 px-2 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-[11px] outline-none flex-1 min-w-0"
+                        >
+                          {ORDER_STATUSES.map((st) => (
+                            <option key={st} value={st}>
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setInspectedOrder(ord)}
+                            className="h-8 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase text-[#141413] dark:text-[#F3F1EC] cursor-pointer"
+                          >
+                            Invoice
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadOrderInvoice(ord, {
+                                email: ord.userId || "client@btnx.store",
+                              });
+                              showToast(`Downloaded Invoice-${ord.id}.html`);
+                            }}
+                            className="h-8 w-8 inline-flex items-center justify-center border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#141413] cursor-pointer"
+                            title="Download HTML Invoice"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOrder(ord.id)}
+                            className="h-8 w-8 inline-flex items-center justify-center border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#D93025] hover:border-[#D93025] cursor-pointer"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden lg:block bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-x-auto">
               <table className="w-full text-left text-xs whitespace-nowrap">
                 <thead className="bg-[#FAF9F7] dark:bg-[#141413] border-b border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
                   <tr>
@@ -3278,6 +3514,14 @@ export default function AdminPortal() {
                             title="Download HTML Invoice"
                           >
                             <Download className="w-3.5 h-3.5 inline" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOrder(ord.id)}
+                            className="p-1.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#D93025] hover:border-[#D93025] cursor-pointer"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 inline" />
                           </button>
                         </td>
                       </tr>
@@ -3353,8 +3597,72 @@ export default function AdminPortal() {
               </div>
             </div>
 
-            {/* Catalog Table */}
-            <div className="bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-x-auto">
+            {/* Mobile Garment Cards (Phone UX) */}
+            <div className="lg:hidden space-y-3">
+              {filteredProductsList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#66625B] dark:text-[#A7A299] bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26]">
+                  No garments match your filters.
+                </div>
+              ) : (
+                filteredProductsList.map((prod) => (
+                  <div
+                    key={prod.id}
+                    className="p-3.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] flex gap-3.5 items-center"
+                  >
+                    <div className="w-16 h-20 bg-[#F4F1EC] dark:bg-[#2A2824] shrink-0 overflow-hidden">
+                      <GalleryImage
+                        src={prod.image}
+                        alt={prod.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase text-[#966830] dark:text-[#C89B62]">
+                          {prod.category}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] tabular-nums">
+                          {prod.stock ?? 45} units
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold truncate text-[#141413] dark:text-[#F3F1EC]">
+                        {prod.name}
+                      </p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-mono font-bold text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                          {formatNaira(prod.price)}
+                        </span>
+                        {prod.originalPrice && (
+                          <span className="text-[10px] text-[#66625B] line-through tabular-nums">
+                            {formatNaira(prod.originalPrice)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => openEditProductModal(prod)}
+                          className="h-7 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase text-[#141413] dark:text-[#F3F1EC] cursor-pointer"
+                        >
+                          Edit Spec
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProduct(prod.id, prod.name)}
+                          className="h-7 w-7 inline-flex items-center justify-center border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#D93025] hover:border-[#D93025] cursor-pointer"
+                          title="Delete Piece"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Catalog Table */}
+            <div className="hidden lg:block bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-x-auto">
               <table className="w-full text-left text-xs whitespace-nowrap">
                 <thead className="bg-[#FAF9F7] dark:bg-[#141413] border-b border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
                   <tr>
@@ -3567,8 +3875,77 @@ export default function AdminPortal() {
                 </form>
               </div>
 
-              {/* Active Promos List (7 cols) */}
-              <div className="lg:col-span-7 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-x-auto">
+              {/* Mobile Promos Cards */}
+              <div className="lg:hidden space-y-3">
+                {promos.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[#66625B] dark:text-[#A7A299] bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26]">
+                    No active promo codes.
+                  </div>
+                ) : (
+                  promos.map((p) => (
+                    <div
+                      key={p.id}
+                      className="p-4 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-sm tracking-wider text-[#141413] dark:text-[#F3F1EC]">
+                          {p.code}
+                        </span>
+                        <span className="font-mono text-xs px-2 py-0.5 bg-[#FAF3EA] dark:bg-[#2C2318] text-[#966830] dark:text-[#C89B62]">
+                          {p.discountPercentage}% OFF
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-[#66625B] dark:text-[#A7A299]">
+                        <span>Expires {new Date(p.expiresAt).toLocaleDateString()}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = promos.map((item) =>
+                              item.id === p.id
+                                ? { ...item, isActive: item.isActive === false ? true : false }
+                                : item
+                            );
+                            setPromos(next);
+                            localStorage.setItem("klamby_promo_codes", JSON.stringify(next));
+                          }}
+                          className="font-mono uppercase underline text-[11px]"
+                        >
+                          {p.isActive !== false ? "Active" : "Paused"}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(p.code);
+                            setCopiedCode(p.code);
+                            setTimeout(() => setCopiedCode(null), 1500);
+                          }}
+                          className="h-7 px-2.5 border border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedCode === p.code ? (
+                            <Check className="w-3 h-3 text-[#966830]" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                          <span>{copiedCode === p.code ? "Copied" : "Copy"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePromo(p.id, p.code)}
+                          className="h-7 w-7 inline-flex items-center justify-center border border-[#E6E2DA] dark:border-[#2C2A26] text-[#66625B] hover:text-[#D93025] hover:border-[#D93025] cursor-pointer"
+                          title="Delete Promo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Active Promos List (7 cols Desktop) */}
+              <div className="hidden lg:block lg:col-span-7 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
                   <thead className="bg-[#FAF9F7] dark:bg-[#141413] border-b border-[#E6E2DA] dark:border-[#2C2A26] text-[10px] font-mono uppercase tracking-[0.14em] text-[#66625B] dark:text-[#A7A299]">
                     <tr>
@@ -3614,7 +3991,7 @@ export default function AdminPortal() {
                             onClick={() => {
                               const next = promos.map((item) =>
                                 item.id === p.id
-                                  ? {
+                                    ? {
                                       ...item,
                                       isActive: item.isActive === false ? true : false,
                                     }
@@ -3634,15 +4011,9 @@ export default function AdminPortal() {
                         <td className="px-5 py-3.5 text-right">
                           <button
                             type="button"
-                            onClick={() => {
-                              const next = promos.filter((item) => item.id !== p.id);
-                              setPromos(next);
-                              localStorage.setItem(
-                                "klamby_promo_codes",
-                                JSON.stringify(next)
-                              );
-                            }}
-                            className="text-[#66625B] hover:text-[#141413] cursor-pointer"
+                            onClick={() => handleDeletePromo(p.id, p.code)}
+                            className="text-[#66625B] hover:text-[#D93025] cursor-pointer"
+                            title="Delete Promo"
                           >
                             <Trash2 className="w-3.5 h-3.5 inline" />
                           </button>
