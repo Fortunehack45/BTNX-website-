@@ -22,13 +22,14 @@ try {
 const app = initializeApp(firebaseConfig);
 
 function createFirestore() {
+  const dbId = process.env.FIRESTORE_DATABASE_ID || (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)" ? firebaseConfig.firestoreDatabaseId : undefined);
   try {
-    return firebaseConfig.firestoreDatabaseId
-      ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, firebaseConfig.firestoreDatabaseId)
+    return dbId
+      ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, dbId)
       : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   } catch {
-    return firebaseConfig.firestoreDatabaseId
-      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    return dbId
+      ? getFirestore(app, dbId)
       : getFirestore(app);
   }
 }

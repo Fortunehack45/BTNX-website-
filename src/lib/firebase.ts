@@ -17,18 +17,22 @@ try {
 const app = initializeApp(firebaseConfig);
 
 function createFirestoreInstance() {
+  const dbId =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_FIRESTORE_DATABASE_ID) ||
+    (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+      ? firebaseConfig.firestoreDatabaseId
+      : undefined);
+
   try {
-    return firebaseConfig.firestoreDatabaseId
+    return dbId
       ? initializeFirestore(
           app,
           { experimentalAutoDetectLongPolling: true },
-          firebaseConfig.firestoreDatabaseId
+          dbId
         )
       : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   } catch {
-    return firebaseConfig.firestoreDatabaseId
-      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-      : getFirestore(app);
+    return dbId ? getFirestore(app, dbId) : getFirestore(app);
   }
 }
 
