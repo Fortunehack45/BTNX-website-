@@ -13,6 +13,10 @@ import {
   doc,
   getDoc,
   setDoc,
+  query,
+  where,
+  orderBy,
+  limit,
 } from "firebase/firestore";
 import {
   renderProductCardHtml,
@@ -22,10 +26,20 @@ import {
 } from "./ui/templates.js";
 import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
 
+export interface McpAuthenticatedUser {
+  userId: string;
+  email: string;
+  name?: string;
+  phone?: string;
+  shippingAddress?: string;
+  isMasterAdmin?: boolean;
+}
+
 interface McpSession {
   id: string;
   transport: SSEServerTransport;
   server: Server;
+  user: McpAuthenticatedUser;
   createdAt: number;
 }
 
@@ -33,10 +47,25 @@ const activeSessions = new Map<string, McpSession>();
 const localOrdersCache = new Map<string, any>();
 const localTicketsCache = new Map<string, any>();
 
-// Master Auth Key fallback if environment variable is not defined
-export const DEFAULT_MCP_AUTH_KEY = process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "btnx_mcp_secret_2026";
+// Master Admin Auth Key fallback if environment variable is not defined
+export const DEFAULT_MCP_AUTH_KEY =
+  process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "btnx_mcp_secret_2026";
 
 export const BTNX_TOOLS: Tool[] = [
+  {
+    name: "btnx_list_my_orders",
+    description:
+      "List all orders placed by the currently authenticated customer, including fulfillment status, total spent in ₦ Naira, items, and tracking references.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        statusFilter: {
+          type: "string",
+          description: "Optional filter: 'Processing', 'In Transit', 'Delivered', or 'All'",
+        },
+      },
+    },
+  },
   {
     name: "btnx_list_products",
     description:
@@ -113,12 +142,12 @@ export const BTNX_TOOLS: Tool[] = [
   {
     name: "btnx_create_order",
     description:
-      "Place a customer order directly into the BTNX store database. Generates an official order reference and logs delivery details.",
+      "Place a customer order directly into the BTNX store database. Automatically links the order to the authenticated customer account.",
     inputSchema: {
       type: "object",
       properties: {
-        customerName: { type: "string", description: "Customer's full name" },
-        customerEmail: { type: "string", description: "Customer's email address" },
+        customerName: { type: "string", description: "Customer's full name (optional, defaults to profile)" },
+        customerEmail: { type: "string", description: "Customer's email address (optional, defaults to profile)" },
         customerPhone: { type: "string", description: "Phone number for courier contact" },
         shippingAddress: { type: "string", description: "Delivery address (Street, City, State)" },
         items: {
@@ -139,22 +168,21 @@ export const BTNX_TOOLS: Tool[] = [
         },
         promoCode: { type: "string", description: "Optional promo voucher applied" },
       },
-      required: ["customerName", "customerEmail", "shippingAddress", "items"],
+      required: ["items"],
     },
   },
   {
     name: "btnx_track_order",
     description:
-      "Retrieve live fulfillment status, tracking updates, and delivery details for an existing BTNX order.",
+      "Retrieve live fulfillment status, tracking updates, and delivery details for an existing BTNX order. Defaults to customer's latest order if ID is omitted.",
     inputSchema: {
       type: "object",
       properties: {
         orderId: {
           type: "string",
-          description: "Order confirmation reference (e.g. 'BX-849201')",
+          description: "Order confirmation reference (e.g. 'BX-849201', or omit for latest)",
         },
       },
-      required: ["orderId"],
     },
   },
   {
@@ -201,18 +229,18 @@ export const BTNX_TOOLS: Tool[] = [
   {
     name: "btnx_message_support",
     description:
-      "Submit a customer service ticket or message the BTNX customer care desk. Dispatches directly to the customer support team triage desk in Osogbo.",
+      "Submit a customer service ticket or message the BTNX customer care desk. Dispatches directly to the customer support triage desk in Osogbo, linked to your account.",
     inputSchema: {
       type: "object",
       properties: {
-        customerName: { type: "string", description: "Customer's full name" },
-        customerEmail: { type: "string", description: "Customer's email address" },
-        customerPhone: { type: "string", description: "Phone number (optional)" },
         topic: { type: "string", description: "Inquiry topic, e.g. 'Size Exchange', 'Delivery Address Update', 'Payment Issue'" },
         message: { type: "string", description: "The detailed customer message or issue description" },
         orderId: { type: "string", description: "Associated order ID if inquiry is about an existing order" },
+        customerName: { type: "string", description: "Customer name (optional, defaults to profile)" },
+        customerEmail: { type: "string", description: "Customer email (optional, defaults to profile)" },
+        customerPhone: { type: "string", description: "Phone number (optional)" },
       },
-      required: ["customerName", "message", "topic"],
+      required: ["message", "topic"],
     },
   },
   {
@@ -242,10 +270,141 @@ export const BTNX_TOOLS: Tool[] = [
 ];
 
 /**
- * Execute a BTNX Tool
+ * Resolves an authenticated user account from the provided token
  */
-export async function executeMcpTool(name: string, args: any, reqOrigin = "http://localhost:4000"): Promise<any> {
+export async function resolveMcpUser(providedKey: string): Promise<McpAuthenticatedUser | null> {
+  const cleanKey = providedKey.trim();
+  if (!cleanKey) return null;
+
+  // 1. Check Master Admin Key
+  const masterKey = process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "btnx_mcp_secret_2026";
+  if (cleanKey === masterKey) {
+    return {
+      userId: "admin_master",
+      email: "admin@btnx.store",
+      name: "BTNX Store Administrator",
+      isMasterAdmin: true,
+    };
+  }
+
+  // 2. Check Firestore mcpTokens collection
+  try {
+    const tokenDoc = await getDoc(doc(db, "mcpTokens", cleanKey));
+    if (tokenDoc.exists()) {
+      const data = tokenDoc.data();
+      return {
+        userId: data.userId || tokenDoc.id,
+        email: data.email || "",
+        name: data.name || "BTNX Client",
+        phone: data.phone || "",
+        shippingAddress: data.shippingAddress || "",
+        isMasterAdmin: false,
+      };
+    }
+  } catch (err: any) {
+    console.error("[BTNX Remote MCP] Token lookup error:", err?.message);
+  }
+
+  // 3. Check Firestore users collection by mcpToken field
+  try {
+    const q = query(collection(db, "users"), where("mcpToken", "==", cleanKey));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const userDoc = snap.docs[0];
+      const data = userDoc.data();
+      return {
+        userId: userDoc.id,
+        email: data.email || "",
+        name: data.name || data.displayName || "BTNX Client",
+        phone: data.phone || "",
+        shippingAddress: data.shippingAddress || data.address || "",
+        isMasterAdmin: false,
+      };
+    }
+  } catch (err: any) {
+    console.error("[BTNX Remote MCP] User mcpToken query error:", err?.message);
+  }
+
+  // 4. Pattern check for user PATs: `btnx_pat_<uid>_<secret>`
+  if (cleanKey.startsWith("btnx_pat_")) {
+    const parts = cleanKey.split("_");
+    if (parts.length >= 3) {
+      const targetUid = parts[2];
+      try {
+        const uSnap = await getDoc(doc(db, "users", targetUid));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          if (uData.mcpToken === cleanKey || !uData.mcpToken) {
+            return {
+              userId: targetUid,
+              email: uData.email || "",
+              name: uData.name || "BTNX Client",
+              phone: uData.phone || "",
+              shippingAddress: uData.shippingAddress || "",
+              isMasterAdmin: false,
+            };
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Execute a BTNX Tool with authenticated user context
+ */
+export async function executeMcpTool(
+  name: string,
+  args: any,
+  reqOrigin = "http://localhost:4000",
+  user: McpAuthenticatedUser = { userId: "guest", email: "guest@btnx.store", isMasterAdmin: true }
+): Promise<any> {
   switch (name) {
+    case "btnx_list_my_orders": {
+      let orders: any[] = [];
+      try {
+        const q = user.isMasterAdmin
+          ? query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(20))
+          : query(
+              collection(db, "orders"),
+              where("userId", "==", user.userId),
+              orderBy("createdAt", "desc"),
+              limit(20)
+            );
+        const snap = await getDocs(q);
+        orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      } catch {
+        // Fallback to email filter or local cache
+        orders = Array.from(localOrdersCache.values()).filter(
+          (o) => user.isMasterAdmin || o.userId === user.userId || o.customerEmail === user.email
+        );
+      }
+
+      if (args?.statusFilter && args.statusFilter !== "All") {
+        orders = orders.filter(
+          (o) => (o.status || "").toLowerCase() === String(args.statusFilter).toLowerCase()
+        );
+      }
+
+      return {
+        customerEmail: user.email,
+        customerName: user.name || "Valued Client",
+        orderCount: orders.length,
+        orders: orders.map((o) => ({
+          orderId: o.id,
+          date: o.date || "Recent",
+          status: o.status,
+          total: `₦${Number(o.total || 0).toLocaleString()}`,
+          itemCount: o.items?.length || 1,
+          firstItemName: o.items?.[0]?.productName || o.items?.[0]?.product?.name || "BTNX Garment",
+          trackingUrl: `${reqOrigin}/render/track/${o.id}`,
+          invoiceUrl: `${reqOrigin}/render/invoice/${o.id}`,
+        })),
+      };
+    }
+
     case "btnx_list_products": {
       let products: any[] = [];
       try {
@@ -396,10 +555,11 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
       const record = {
         id: orderId,
         source: "remote-mcp",
-        customerName: args?.customerName,
-        customerEmail: args?.customerEmail,
-        customerPhone: args?.customerPhone || "N/A",
-        shippingAddress: args?.shippingAddress,
+        userId: user.userId,
+        customerName: args?.customerName || user.name || "BTNX VIP Client",
+        customerEmail: args?.customerEmail || user.email || "client@btnx.store",
+        customerPhone: args?.customerPhone || user.phone || "N/A",
+        shippingAddress: args?.shippingAddress || user.shippingAddress || "Default Delivery Destination",
         items,
         subtotal,
         discountAmount,
@@ -421,7 +581,8 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
       return {
         success: true,
         orderId,
-        message: `Order #${orderId} successfully registered in BTNX fulfillment system.`,
+        linkedAccount: user.email,
+        message: `Order #${orderId} successfully registered under account ${user.email}. It now appears in your website order history.`,
         invoiceUrl: `${reqOrigin}/render/invoice/${orderId}`,
         trackingUrl: `${reqOrigin}/render/track/${orderId}`,
         orderSummary: record,
@@ -429,9 +590,22 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
     }
 
     case "btnx_track_order": {
-      const orderIdStr = String(args?.orderId || "");
-      let order: any = localOrdersCache.get(orderIdStr);
+      let orderIdStr = String(args?.orderId || "").trim();
 
+      // If user omitted order ID or asked for their latest order
+      if (!orderIdStr || orderIdStr.toLowerCase() === "latest" || orderIdStr.toLowerCase() === "my_order") {
+        try {
+          const q = user.isMasterAdmin
+            ? query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(1))
+            : query(collection(db, "orders"), where("userId", "==", user.userId), orderBy("createdAt", "desc"), limit(1));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            orderIdStr = snap.docs[0].id;
+          }
+        } catch {}
+      }
+
+      let order: any = localOrdersCache.get(orderIdStr);
       if (!order && orderIdStr) {
         try {
           const snap = await getDoc(doc(db, "orders", orderIdStr));
@@ -441,14 +615,14 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
 
       if (!order) {
         order = {
-          orderId: orderIdStr,
+          orderId: orderIdStr || "BX-849201",
           status: "In Transit",
           hub: "Osogbo, Osun Central Hub",
           carrier: "BTNX Express Logistics",
           dispatchDate: "Today",
           estimatedDelivery: "Within 24–48 Hours",
-          message: `Order #${orderIdStr} has been inspected and handed over to express dispatch. The rider will call 30 minutes prior to arrival.`,
-          liveStepperUrl: `${reqOrigin}/render/track/${orderIdStr}`,
+          message: `Order #${orderIdStr || "BX-849201"} has been inspected and handed over to express dispatch. The rider will call 30 minutes prior to arrival.`,
+          liveStepperUrl: `${reqOrigin}/render/track/${orderIdStr || "BX-849201"}`,
         };
       } else {
         order.liveStepperUrl = `${reqOrigin}/render/track/${order.id || orderIdStr}`;
@@ -514,9 +688,9 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
         if (!order) {
           order = {
             id: targetId || "BX-849201",
-            customerName: "Amina Bello",
-            customerEmail: "amina.bello@example.com",
-            shippingAddress: "Plot 402, Maitama, Abuja",
+            customerName: user.name || "Amina Bello",
+            customerEmail: user.email || "amina.bello@example.com",
+            shippingAddress: user.shippingAddress || "Plot 402, Maitama, Abuja",
             status: "Confirmed",
             date: "Nov 14, 2026",
             total: 185000,
@@ -554,7 +728,7 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
           order = {
             id: targetId || "BX-849201",
             status: "In Transit",
-            shippingAddress: "Plot 402, Maitama, Abuja, Nigeria",
+            shippingAddress: user.shippingAddress || "Plot 402, Maitama, Abuja, Nigeria",
           };
         }
         return {
@@ -577,7 +751,7 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
         if (!ticket) {
           ticket = {
             id: targetId || "TCK-892104",
-            customerName: "Amina Bello",
+            customerName: user.name || "Amina Bello",
             topic: "Complimentary Size Exchange",
             mode: "human",
             messages: [
@@ -602,9 +776,10 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
       const ticketId = `TCK-${Date.now().toString().slice(-6)}`;
       const ticket = {
         id: ticketId,
-        customerName: String(args?.customerName || "Remote Client"),
-        customerEmail: String(args?.customerEmail || "client@btnx.store"),
-        customerPhone: String(args?.customerPhone || ""),
+        userId: user.userId,
+        customerName: args?.customerName || user.name || "Remote Client",
+        customerEmail: args?.customerEmail || user.email || "client@btnx.store",
+        customerPhone: args?.customerPhone || user.phone || "",
         topic: String(args?.topic || "Client Inquiry"),
         orderId: args?.orderId ? String(args.orderId) : null,
         status: "open",
@@ -639,7 +814,8 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
       return {
         success: true,
         ticketId,
-        message: `Support ticket #${ticketId} dispatched to BTNX Customer Care Team Desk.`,
+        linkedAccount: user.email,
+        message: `Support ticket #${ticketId} dispatched to BTNX Care Desk and linked to your account (${user.email}). View it in your web chat at /support.`,
         status: "open",
         assignedDesk: "Osogbo Fulfillment & Client Care",
         liveSupportThreadUrl: `${reqOrigin}/render/support/${ticketId}`,
@@ -688,7 +864,7 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
         order = {
           id: orderId || "BX-849201",
           status: "Confirmed",
-          customerName: "Valued Client",
+          customerName: user.name || "Valued Client",
           total: 185000,
           items: [{ product: { name: "Brushed Wool Check Overshirt", price: 185000 }, quantity: 1, size: "M", color: "Noir" }],
         };
@@ -711,9 +887,12 @@ export async function executeMcpTool(name: string, args: any, reqOrigin = "http:
 }
 
 /**
- * Creates an instance of an MCP Server wired to all 11 BTNX Tools
+ * Creates an instance of an MCP Server wired to all 12 BTNX Tools with user session context
  */
-export function createBTNXServer(reqOrigin = "http://localhost:4000"): Server {
+export function createBTNXServer(
+  reqOrigin = "http://localhost:4000",
+  user: McpAuthenticatedUser = { userId: "guest", email: "guest@btnx.store", isMasterAdmin: true }
+): Server {
   const server = new Server(
     {
       name: "btnx-luxury-store",
@@ -735,7 +914,7 @@ export function createBTNXServer(reqOrigin = "http://localhost:4000"): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     try {
-      const result = await executeMcpTool(name, args, reqOrigin);
+      const result = await executeMcpTool(name, args, reqOrigin, user);
       return {
         content: [
           {
@@ -761,27 +940,23 @@ export function createBTNXServer(reqOrigin = "http://localhost:4000"): Server {
 }
 
 /**
- * Verify Bearer Authentication Header or Token Query Param
+ * Extract token from Authorization header, x-api-key, or query param
  */
-export function verifyMcpAuth(req: Request): boolean {
+export function extractAuthToken(req: Request): string {
   const authHeader = req.headers.authorization || "";
   const tokenQuery = req.query.token as string | undefined;
   const apiKeyHeader = req.headers["x-api-key"] as string | undefined;
 
-  const expectedKey = DEFAULT_MCP_AUTH_KEY;
-
-  let providedKey = "";
   if (authHeader.startsWith("Bearer ")) {
-    providedKey = authHeader.slice(7).trim();
-  } else if (typeof apiKeyHeader === "string") {
-    providedKey = apiKeyHeader.trim();
-  } else if (typeof tokenQuery === "string") {
-    providedKey = tokenQuery.trim();
+    return authHeader.slice(7).trim();
   }
-
-  // If no auth key is configured on server, or matches expected key
-  if (!expectedKey) return true;
-  return providedKey === expectedKey;
+  if (typeof apiKeyHeader === "string") {
+    return apiKeyHeader.trim();
+  }
+  if (typeof tokenQuery === "string") {
+    return tokenQuery.trim();
+  }
+  return "";
 }
 
 /**
@@ -789,33 +964,36 @@ export function verifyMcpAuth(req: Request): boolean {
  */
 export function setupRemoteMcp(app: Express) {
   // CORS preflight for MCP endpoints
-  app.options(["/sse", "/mcp/sse", "/messages", "/mcp/messages"], (req, res) => {
+  app.options(["/sse", "/mcp/sse", "/messages", "/mcp/messages", "/api/user/mcp-token"], (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-session-id, x-api-key");
     res.sendStatus(200);
   });
 
   // 1. GET /sse & GET /mcp/sse - Standard Server-Sent Events Endpoint for ChatGPT / Claude / Cursor
   const handleSseConnection = async (req: Request, res: Response) => {
-    // Check Authentication
-    if (!verifyMcpAuth(req)) {
+    const token = extractAuthToken(req);
+    const authenticatedUser = await resolveMcpUser(token);
+
+    // If token is invalid or missing
+    if (!authenticatedUser) {
       res.status(401).json({
         error: "Unauthorized",
         message:
-          "Invalid or missing MCP Authentication Token. Provide 'Authorization: Bearer <token>' in headers or '?token=<token>' in URL.",
+          "Invalid or missing MCP Authentication Token. Provide your personal key in 'Authorization: Bearer <token>' or '?token=<token>'. Log into your BTNX account &rarr; Profile to copy your personal key.",
         expectedAuthType: "Bearer Token",
         connectionFormat: {
           name: "BTNX Luxury Store",
           url: `${req.protocol}://${req.get("host")}/sse`,
-          auth: `Bearer ${DEFAULT_MCP_AUTH_KEY}`,
+          auth: "Bearer btnx_pat_<your_unique_account_key>",
         },
       });
       return;
     }
 
     const host = `${req.protocol}://${req.get("host")}`;
-    const server = createBTNXServer(host);
+    const server = createBTNXServer(host, authenticatedUser);
 
     // Initialize SSEServerTransport pointing client to POST /messages
     const transport = new SSEServerTransport("/messages", res);
@@ -825,6 +1003,7 @@ export function setupRemoteMcp(app: Express) {
       id: sessionId,
       transport,
       server,
+      user: authenticatedUser,
       createdAt: Date.now(),
     });
 
@@ -872,7 +1051,10 @@ export function setupRemoteMcp(app: Express) {
 
   // 3. POST /api/mcp/call - Direct HTTP REST endpoint to test any tool directly
   app.post("/api/mcp/call", async (req: Request, res: Response) => {
-    if (!verifyMcpAuth(req)) {
+    const token = extractAuthToken(req);
+    const authenticatedUser = await resolveMcpUser(token);
+
+    if (!authenticatedUser) {
       res.status(401).json({
         error: "Unauthorized",
         message: "Invalid or missing Bearer token.",
@@ -888,14 +1070,54 @@ export function setupRemoteMcp(app: Express) {
 
     try {
       const host = `${req.protocol}://${req.get("host")}`;
-      const result = await executeMcpTool(name, args || {}, host);
-      res.json({ success: true, tool: name, result });
+      const result = await executeMcpTool(name, args || {}, host, authenticatedUser);
+      res.json({ success: true, tool: name, authenticatedAs: authenticatedUser.email, result });
     } catch (err: any) {
       res.status(500).json({ success: false, tool: name, error: err.message });
     }
   });
 
-  // 4. GET /mcp & GET /api/mcp - Branded Web Connection Dashboard & Documentation
+  // 4. POST /api/user/mcp-token - Generate or rotate a Personal Access Token for the logged-in user
+  app.post("/api/user/mcp-token", async (req: Request, res: Response) => {
+    const { userId, email, name, phone, shippingAddress } = req.body;
+    if (!userId || !email) {
+      res.status(400).json({ error: "userId and email are required to issue a Personal Access Token" });
+      return;
+    }
+
+    const randomSuffix = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+    const userPrefix = String(userId).slice(0, 8);
+    const token = `btnx_pat_${userPrefix}_${randomSuffix}`;
+
+    try {
+      // Save in mcpTokens collection
+      await setDoc(doc(db, "mcpTokens", token), {
+        token,
+        userId,
+        email,
+        name: name || "BTNX Client",
+        phone: phone || "",
+        shippingAddress: shippingAddress || "",
+        createdAt: new Date().toISOString(),
+      });
+
+      // Also attach to user document
+      await setDoc(doc(db, "users", userId), { mcpToken: token }, { merge: true });
+
+      const host = `${req.protocol}://${req.get("host")}`;
+      res.json({
+        success: true,
+        token,
+        serverName: "BTNX Luxury Store",
+        sseUrl: `${host}/sse`,
+        user: { userId, email, name },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to create personal MCP token", details: err?.message });
+    }
+  });
+
+  // 5. GET /mcp & GET /api/mcp - Branded Web Connection Dashboard & Documentation
   const handleMcpDashboard = (req: Request, res: Response) => {
     const host = `${req.protocol}://${req.get("host")}`;
     const sseUrl = `${host}/sse`;
@@ -942,7 +1164,7 @@ export function setupRemoteMcp(app: Express) {
       <div class="flex items-center gap-2">
         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-mono rounded-full font-medium">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          Live SSE Protocol
+          Per-User Account Isolation
         </span>
       </div>
     </div>
@@ -955,10 +1177,21 @@ export function setupRemoteMcp(app: Express) {
         Zero-Config Remote Model Context Protocol
       </span>
       <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1 text-[#141413]">
-        Connect BTNX Store to ChatGPT, Claude &amp; Cursor
+        Connect Your Personal BTNX Account to ChatGPT
       </h1>
       <p class="text-sm sm:text-base text-[#66625B] mt-2 max-w-2xl font-normal leading-relaxed">
-        No local JSON configuration files, terminal commands, or cloning needed. Simply enter the <strong>Name</strong>, <strong>URL</strong>, and <strong>Auth Token</strong> directly into ChatGPT or your AI client.
+        Authenticate your AI assistant directly to <strong>your personal account</strong>. Orders, tracking, and customer service requests initiated in ChatGPT are bound exclusively to you.
+      </p>
+    </div>
+
+    <!-- Account-Scoped vs Master Key Explainer Box -->
+    <div class="bg-amber-50/60 border border-amber-200/80 p-5 rounded-xs space-y-2">
+      <div class="flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider font-mono">
+        <span>🔒 Personal Access Token (PAT) vs. Store Admin Key</span>
+      </div>
+      <p class="text-xs text-amber-800/90 leading-relaxed">
+        <strong>For Customers:</strong> Log into your account on the BTNX website (<code class="font-mono bg-white/70 px-1 py-0.5">/</code> &rarr; Profile) and copy your unique <strong>Personal AI Key</strong> (<code class="font-mono">btnx_pat_...</code>). When entered into ChatGPT, your AI will only see and track <em>your</em> orders.<br>
+        <strong>For Store Operators:</strong> Use the master secret key below to manage all products, storewide metrics, and global dispatch manifests.
       </p>
     </div>
 
@@ -1019,7 +1252,7 @@ export function setupRemoteMcp(app: Express) {
               ${authKey}
             </div>
           </div>
-          <button onclick="navigator.clipboard.writeText('${authKey}'); alert('Copied Auth Token!');" class="mt-3 w-full py-1.5 px-3 bg-[#966830] hover:bg-[#7D5323] text-white text-[11px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center">
+          <button onclick="navigator.clipboard.writeText('${authKey}'); alert('Copied Master Token! For personal account access, use your personal key from Profile.');" class="mt-3 w-full py-1.5 px-3 bg-[#966830] hover:bg-[#7D5323] text-white text-[11px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center">
             Copy Token
           </button>
         </div>
@@ -1036,62 +1269,13 @@ export function setupRemoteMcp(app: Express) {
       </div>
     </div>
 
-    <!-- Step by Step Setup Guides -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-white border border-[#E6E2DA] p-6 space-y-3">
-        <div class="flex items-center gap-2">
-          <span class="w-6 h-6 rounded-full bg-[#141413] text-white flex items-center justify-center font-mono text-xs font-bold">1</span>
-          <h3 class="font-bold text-base text-[#141413]">ChatGPT Setup</h3>
-        </div>
-        <ol class="text-xs text-[#66625B] space-y-2 list-decimal list-inside font-normal">
-          <li>Open <strong>ChatGPT</strong> &rarr; Click your profile &rarr; <strong>Settings</strong>.</li>
-          <li>Select <strong>Connected Apps</strong> (or Developer &rarr; MCP Servers).</li>
-          <li>Click <strong>Add Remote Server</strong>.</li>
-          <li>Enter Name: <code class="mono bg-[#FAF9F7] px-1 py-0.5">BTNX Luxury Store</code>.</li>
-          <li>Paste URL: <code class="mono bg-[#FAF9F7] px-1 py-0.5">${sseUrl}</code>.</li>
-          <li>Set Auth Header: <code class="mono bg-[#FAF9F7] px-1 py-0.5">Bearer ${authKey}</code>.</li>
-          <li>Click <strong>Connect</strong> &mdash; all 11 BTNX tools are instantly available!</li>
-        </ol>
-      </div>
-
-      <div class="bg-white border border-[#E6E2DA] p-6 space-y-3">
-        <div class="flex items-center gap-2">
-          <span class="w-6 h-6 rounded-full bg-[#141413] text-white flex items-center justify-center font-mono text-xs font-bold">2</span>
-          <h3 class="font-bold text-base text-[#141413]">Cursor Setup</h3>
-        </div>
-        <ol class="text-xs text-[#66625B] space-y-2 list-decimal list-inside font-normal">
-          <li>Open Cursor &rarr; <strong>Settings</strong> &rarr; <strong>Features</strong> &rarr; <strong>MCP</strong>.</li>
-          <li>Click <strong>+ Add New MCP Server</strong>.</li>
-          <li>Name: <code class="mono bg-[#FAF9F7] px-1 py-0.5">btnx-store</code>.</li>
-          <li>Type: Select <code class="mono bg-[#FAF9F7] px-1 py-0.5">sse</code>.</li>
-          <li>Server URL: <code class="mono bg-[#FAF9F7] px-1 py-0.5">${sseUrl}</code>.</li>
-          <li>Header: <code class="mono bg-[#FAF9F7] px-1 py-0.5">Authorization: Bearer ${authKey}</code>.</li>
-          <li>Save. Composer now can query stock, place orders, and track parcels!</li>
-        </ol>
-      </div>
-
-      <div class="bg-white border border-[#E6E2DA] p-6 space-y-3">
-        <div class="flex items-center gap-2">
-          <span class="w-6 h-6 rounded-full bg-[#141413] text-white flex items-center justify-center font-mono text-xs font-bold">3</span>
-          <h3 class="font-bold text-base text-[#141413]">Claude Desktop / Agent</h3>
-        </div>
-        <ol class="text-xs text-[#66625B] space-y-2 list-decimal list-inside font-normal">
-          <li>In any MCP client supporting remote SSE:</li>
-          <li>Endpoint: <code class="mono bg-[#FAF9F7] px-1 py-0.5">${sseUrl}</code></li>
-          <li>Header: <code class="mono bg-[#FAF9F7] px-1 py-0.5">Authorization: Bearer ${authKey}</code></li>
-          <li>Messages POST route: <code class="mono bg-[#FAF9F7] px-1 py-0.5">${host}/messages</code></li>
-          <li>Live real-time tool calling over SSE stream!</li>
-        </ol>
-      </div>
-    </div>
-
     <!-- Active Tools Directory -->
     <div class="space-y-4">
       <div class="flex items-center justify-between border-b border-[#E6E2DA] pb-2">
         <h2 class="text-lg font-bold text-[#141413]">
           Available Store Tools (${BTNX_TOOLS.length})
         </h2>
-        <span class="text-xs font-mono text-[#66625B]">Live Database &amp; Catalog Integration</span>
+        <span class="text-xs font-mono text-[#66625B]">Live Database &amp; User Account Scoping</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

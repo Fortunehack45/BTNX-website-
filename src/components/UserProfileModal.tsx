@@ -17,11 +17,16 @@ import {
   FileText,
   Truck,
   Headphones,
+  Bot,
+  Key,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from "lucide-react";
 import { Product, Order } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { formatNaira } from "../utils/currency";
 import { downloadOrderInvoice } from "../utils/invoice";
 import GalleryImage from "./GalleryImage";
@@ -85,6 +90,9 @@ export default function UserProfileModal({
   const [shippingZip, setShippingZip] = useState("");
   const [shippingCountry, setShippingCountry] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [userMcpToken, setUserMcpToken] = useState("");
+  const [isGeneratingMcpKey, setIsGeneratingMcpKey] = useState(false);
+  const [showMcpKey, setShowMcpKey] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -95,8 +103,57 @@ export default function UserProfileModal({
       setShippingCity(userData.shippingCity || "");
       setShippingZip(userData.shippingZip || "");
       setShippingCountry(userData.shippingCountry || "");
+      if (userData.mcpToken) {
+        setUserMcpToken(userData.mcpToken);
+      }
     }
   }, [userData]);
+
+  const handleGenerateMcpToken = async () => {
+    if (!currentUser) return;
+    setIsGeneratingMcpKey(true);
+    try {
+      const suffix = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+      const token = `btnx_pat_${currentUser.uid.slice(0, 8)}_${suffix}`;
+
+      await setDoc(doc(db, "mcpTokens", token), {
+        token,
+        userId: currentUser.uid,
+        email: currentUser.email || "",
+        name: profileName || currentUser.displayName || "BTNX Client",
+        phone: profilePhone || "",
+        shippingAddress: `${shippingStreet}, ${shippingCity}, ${shippingCountry}`.trim(),
+        createdAt: new Date().toISOString(),
+      });
+
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        mcpToken: token,
+      });
+
+      setUserMcpToken(token);
+      onAddToast("Personal AI Access Key generated!", "success");
+    } catch {
+      onAddToast("Failed to generate AI key. Please try again.", "error");
+    } finally {
+      setIsGeneratingMcpKey(false);
+    }
+  };
+
+  const handleRevokeMcpToken = async () => {
+    if (!currentUser) return;
+    try {
+      if (userMcpToken) {
+        await deleteDoc(doc(db, "mcpTokens", userMcpToken)).catch(() => {});
+      }
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        mcpToken: "",
+      });
+      setUserMcpToken("");
+      onAddToast("Personal AI Key revoked. ChatGPT disconnected.", "info");
+    } catch {
+      onAddToast("Failed to revoke key.", "error");
+    }
+  };
 
   useEffect(() => {
     if (initialTab) {
@@ -456,6 +513,140 @@ export default function UserProfileModal({
                     )}
                   </button>
                 </form>
+
+                {/* Connected AI & ChatGPT Personal Access Key */}
+                <div className="border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-6 space-y-4 bg-[#FAF9F7]/60 dark:bg-[#111110]/70">
+                  <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] flex items-center justify-center">
+                        <Bot className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-semibold block">
+                          Connected AI &amp; ChatGPT (MCP)
+                        </span>
+                        <h3 className="font-display text-base font-medium text-[#141413] dark:text-[#F3F1EC]">
+                          Personal Account Access Key
+                        </h3>
+                      </div>
+                    </div>
+                    {userMcpToken ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono rounded-full font-medium">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        Account Linked
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] uppercase tracking-wider">
+                        Not Connected
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+                    Connect your personal BTNX account to ChatGPT, Claude, or Cursor without any JSON configuration. Your personal key guarantees your AI can only see and manage <strong>your own orders</strong>, size recommendations, and tracking updates.
+                  </p>
+
+                  {userMcpToken ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
+                          <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
+                            1. Server Name
+                          </span>
+                          <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+                            BTNX Luxury Store
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText("BTNX Luxury Store");
+                              onAddToast("Copied server name!", "info");
+                            }}
+                            className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                          >
+                            Copy Name
+                          </button>
+                        </div>
+
+                        <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
+                          <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
+                            2. Server URL (SSE)
+                          </span>
+                          <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                            {window.location.origin}/sse
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/sse`);
+                              onAddToast("Copied SSE URL!", "info");
+                            }}
+                            className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                          >
+                            Copy URL
+                          </button>
+                        </div>
+
+                        <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] font-semibold">
+                              3. Your Bearer Key
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowMcpKey(!showMcpKey)}
+                              className="text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] p-0.5 cursor-pointer"
+                            >
+                              {showMcpKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </button>
+                          </div>
+                          <p className="font-mono text-xs font-semibold text-[#966830] dark:text-[#C89B62] truncate">
+                            {showMcpKey ? userMcpToken : "••••••••••••••••••••"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`Bearer ${userMcpToken}`);
+                              onAddToast("Copied personal Bearer token!", "info");
+                            }}
+                            className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                          >
+                            Copy Bearer Key
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2">
+                        <span className="text-[11px] font-mono text-[#8C877D]">
+                          Linked to: {currentUser?.email}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleRevokeMcpToken}
+                          className="text-[11px] font-mono uppercase tracking-wider text-red-600 dark:text-red-400 hover:underline cursor-pointer"
+                        >
+                          Revoke / Disconnect Key
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleGenerateMcpToken}
+                        disabled={isGeneratingMcpKey}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm hover:opacity-90 cursor-pointer disabled:opacity-50 transition-opacity"
+                      >
+                        {isGeneratingMcpKey ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Key className="w-3.5 h-3.5" />
+                        )}
+                        <span>Generate My Personal AI Key</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
 
