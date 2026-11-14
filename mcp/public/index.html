@@ -23,7 +23,7 @@
       line-height: 1.5;
     }
     .card {
-      max-width: 680px;
+      max-width: 720px;
       width: 100%;
       background: #191816;
       border: 1px solid #2C2A26;
@@ -77,10 +77,14 @@
       letter-spacing: 0.16em;
       color: #A7A299;
       font-weight: 600;
-      margin-top: 20px;
+      margin-top: 24px;
       margin-bottom: 10px;
       border-bottom: 1px solid #2C2A26;
       padding-bottom: 6px;
+    }
+    .code-container {
+      position: relative;
+      margin-bottom: 16px;
     }
     .code-block {
       background: #111110;
@@ -91,12 +95,30 @@
       font-size: 12px;
       color: #FAF9F7;
       overflow-x: auto;
-      margin-bottom: 16px;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #2C2A26;
+      border: 1px solid #444;
+      color: #FAF9F7;
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 2px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-family: inherit;
+    }
+    .copy-btn:hover {
+      background: #C89B62;
+      color: #111110;
     }
     .tool-list {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 10px;
       margin-bottom: 20px;
     }
     @media (max-width: 600px) {
@@ -106,7 +128,7 @@
     .tool-item {
       background: #141413;
       border: 1px solid #2C2A26;
-      padding: 10px 12px;
+      padding: 12px 14px;
       border-radius: 2px;
       font-size: 12px;
       font-family: 'IBM Plex Mono', monospace;
@@ -114,14 +136,14 @@
     }
     .tool-desc {
       display: block;
-      font-size: 10px;
+      font-size: 11px;
       color: #A7A299;
       font-family: 'Plus Jakarta Sans', sans-serif;
-      margin-top: 2px;
+      margin-top: 3px;
     }
     .footer-link {
       display: inline-block;
-      margin-top: 12px;
+      margin-top: 16px;
       color: #C89B62;
       font-size: 12px;
       text-decoration: none;
@@ -135,11 +157,11 @@
   <div class="card">
     <div class="header-sub">BTNX Store · Osun Atelier &amp; Logistics</div>
     <h1>Remote Model Context Protocol (MCP) Server</h1>
-    <p class="lead">Connect your AI assistant (Claude, Cursor, ChatGPT) directly to the BTNX fashion inventory, real-time tracking, customer service desk, and order management engine.</p>
+    <p class="lead">Connect your AI assistants (Claude, Cursor, ChatGPT) directly to the BTNX fashion inventory, real-time tracking, customer service desk, and order management engine.</p>
     
     <div class="status-badge">
       <span class="status-dot"></span>
-      <span>READY &amp; OPERATIONAL · VERCEL SERVERLESS</span>
+      <span>ACTIVE &amp; OPERATIONAL · VERCEL SERVERLESS</span>
     </div>
 
     <div class="section-title">Available Agentic Tools</div>
@@ -160,21 +182,42 @@
         btnx_query_client_support
         <span class="tool-desc">Read and update live customer care tickets</span>
       </div>
+      <div class="tool-item">
+        btnx_get_invoice
+        <span class="tool-desc">Generate official VAT &amp; dispatch invoices</span>
+      </div>
+      <div class="tool-item">
+        btnx_check_promo_code
+        <span class="tool-desc">Validate vouchers &amp; eligible discounts</span>
+      </div>
     </div>
 
-    <div class="section-title">Cursor / Claude Desktop Config</div>
-    <div class="code-block">{
+    <div class="section-title">Claude Desktop &amp; Cursor Config</div>
+    <div class="code-container">
+      <button class="copy-btn" onclick="copyConfig()">Copy JSON</button>
+      <pre class="code-block" id="configJson">{
   "mcpServers": {
     "btnx-store": {
       "command": "npx",
       "args": ["-y", "btnx-mcp"]
     }
   }
-}</div>
+}</pre>
+    </div>
 
     <div style="text-align: center; margin-top: 16px;">
       <a href="/" class="footer-link">&larr; Return to BTNX Storefront</a>
     </div>
   </div>
+
+  <script>
+    function copyConfig() {
+      var text = document.getElementById('configJson').innerText;
+      navigator.clipboard.writeText(text);
+      var btn = document.querySelector('.copy-btn');
+      btn.innerText = 'COPIED!';
+      setTimeout(function() { btn.innerText = 'COPY JSON'; }, 2000);
+    }
+  </script>
 </body>
 </html>
