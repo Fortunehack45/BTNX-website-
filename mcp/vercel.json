@@ -13,19 +13,7 @@
   ],
   "rewrites": [
     {
-      "source": "/mcp",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/mcp/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/sse",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/api/(.*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
