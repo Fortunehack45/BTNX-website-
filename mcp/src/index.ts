@@ -510,8 +510,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         try {
           const snap = await getDoc(doc(db, "orders", orderIdStr));
           if (snap.exists()) {
+            const orderData: any = snap.data();
+            const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || "").toLowerCase().trim();
+            const callerEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+            const callerToken = String(args?.token || args?.authToken || "").trim();
+
+            const isAuthorized =
+              (callerEmail && callerEmail === orderOwnerEmail) ||
+              (callerToken && (callerToken === process.env.BTNX_ADMIN_API_KEY || callerToken === process.env.BTNX_PERSONAL_ACCESS_TOKEN));
+
+            if (!isAuthorized) {
+              return {
+                content: [{
+                  type: "text",
+                  text: JSON.stringify({
+                    error: "Authentication required",
+                    message: `To track order #${orderIdStr}, please provide your registered order email (email: "...") or an authenticated access token.`,
+                  }, null, 2)
+                }],
+                isError: true,
+              };
+            }
+
             return {
-              content: [{ type: "text", text: JSON.stringify(snap.data(), null, 2) }],
+              content: [{ type: "text", text: JSON.stringify(orderData, null, 2) }],
             };
           }
         } catch (err: any) {}
@@ -616,6 +638,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             };
           }
 
+          const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+          const callerEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+          const callerToken = String(args?.token || args?.authToken || "").trim();
+          const isAuthorized =
+            (callerEmail && callerEmail === orderOwnerEmail) ||
+            (callerToken && (callerToken === process.env.BTNX_ADMIN_API_KEY || callerToken === process.env.BTNX_PERSONAL_ACCESS_TOKEN));
+          if (!isAuthorized) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Access denied", message: "Registered order email or authentication required to render invoice." }, null, 2) }],
+              isError: true,
+            };
+          }
+
           const html = renderInvoiceHtml(order);
           return {
             content: [
@@ -657,6 +692,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             };
           }
 
+          const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+          const callerEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+          const callerToken = String(args?.token || args?.authToken || "").trim();
+          const isAuthorized =
+            (callerEmail && callerEmail === orderOwnerEmail) ||
+            (callerToken && (callerToken === process.env.BTNX_ADMIN_API_KEY || callerToken === process.env.BTNX_PERSONAL_ACCESS_TOKEN));
+          if (!isAuthorized) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Access denied", message: "Registered order email or authentication required to render tracking stepper." }, null, 2) }],
+              isError: true,
+            };
+          }
+
           const html = renderTrackingStepperHtml(order);
           return {
             content: [
@@ -694,6 +742,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (!ticket) {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Ticket not found", id: targetId }, null, 2) }],
+              isError: true,
+            };
+          }
+
+          const ticketOwnerEmail = String(ticket.customerEmail || "").toLowerCase().trim();
+          const callerEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+          const callerToken = String(args?.token || args?.authToken || "").trim();
+          const isAuthorized =
+            (callerEmail && callerEmail === ticketOwnerEmail) ||
+            (callerToken && (callerToken === process.env.BTNX_ADMIN_API_KEY || callerToken === process.env.BTNX_PERSONAL_ACCESS_TOKEN));
+          if (!isAuthorized) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Access denied", message: "Registered ticket email or authentication required to render support ticket." }, null, 2) }],
               isError: true,
             };
           }
@@ -784,12 +845,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "btnx_get_support_ticket": {
-        const ticketId = String(args?.ticketId);
+        const ticketId = String(args?.ticketId || "");
         try {
           const snap = await getDoc(doc(db, "supportTickets", ticketId));
           if (snap.exists()) {
+            const ticketData: any = snap.data();
+            const ticketOwnerEmail = String(ticketData.customerEmail || "").toLowerCase().trim();
+            const callerEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+            const callerToken = String(args?.token || args?.authToken || "").trim();
+            const isAuthorized =
+              (callerEmail && callerEmail === ticketOwnerEmail) ||
+              (callerToken && (callerToken === process.env.BTNX_ADMIN_API_KEY || callerToken === process.env.BTNX_PERSONAL_ACCESS_TOKEN));
+            if (!isAuthorized) {
+              return {
+                content: [{
+                  type: "text",
+                  text: JSON.stringify({
+                    error: "Authentication required",
+                    message: `To view support ticket #${ticketId}, please provide your registered ticket email (email: "...") or an authenticated token.`,
+                  }, null, 2)
+                }],
+                isError: true,
+              };
+            }
+
             return {
-              content: [{ type: "text", text: JSON.stringify({ id: snap.id, ...snap.data() }, null, 2) }],
+              content: [{ type: "text", text: JSON.stringify({ id: snap.id, ...ticketData }, null, 2) }],
             };
           }
         } catch {}
@@ -842,6 +923,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 ),
               },
             ],
+            isError: true,
+          };
+        }
+
+        const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+        const callerEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+        const callerToken = String(args?.token || args?.authToken || "").trim();
+        const isAuthorized =
+          (callerEmail && callerEmail === orderOwnerEmail) ||
+          (callerToken && (callerToken === process.env.BTNX_ADMIN_API_KEY || callerToken === process.env.BTNX_PERSONAL_ACCESS_TOKEN));
+        if (!isAuthorized) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: "Authentication required",
+                message: `To view invoice for order #${orderId}, please provide your registered order email (email: "...") or an authenticated token.`,
+              }, null, 2)
+            }],
             isError: true,
           };
         }

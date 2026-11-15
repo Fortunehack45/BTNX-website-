@@ -10,6 +10,7 @@ import {
   verifyPersonalAccessToken,
   verifyOAuthAccessToken,
 } from "./tokens.js";
+import { verifyFirebaseIdToken } from "../firebaseAdmin.js";
 
 /**
  * Resolves an authenticated customer context from HTTP request headers.
@@ -61,6 +62,11 @@ export async function resolveAuthenticatedCustomer(
   let resolvedUid: string | null = null;
   let authMethod: AuthMethod = "personal_access_token";
   let tokenId: string | undefined = undefined;
+  let profileName = "BTNX Customer";
+  let profileEmail = "";
+  let profilePhone: string | undefined = undefined;
+  let profileAddress: string | undefined = undefined;
+  let profileRole: CustomerRole = "customer";
 
   // Case A: Personal Access Token (PAT)
   if (bearerToken.startsWith("btnx_pat_")) {
@@ -79,17 +85,15 @@ export async function resolveAuthenticatedCustomer(
   }
   // Case C: Standard Firebase ID Token (JWT format: eyJ...)
   else if (bearerToken.startsWith("eyJ") && bearerToken.split(".").length === 3) {
-    try {
-      // Basic unverified decode to check structure; if Firebase Admin SDK available, verify ID token
-      const parts = bearerToken.split(".");
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-      if (payload.sub && payload.exp && payload.exp * 1000 > Date.now()) {
-        resolvedUid = payload.sub;
-        authMethod = "firebase_id_token";
-      }
-    } catch {
-      return null;
+    const verified = await verifyFirebaseIdToken(bearerToken);
+    if (!verified) {
+      return null; // Reject forged, tampered, expired, or invalid tokens!
     }
+    resolvedUid = verified.uid;
+    authMethod = "firebase_id_token";
+    if (verified.email) profileEmail = verified.email;
+    if (verified.name) profileName = verified.name;
+    if (verified.role) profileRole = verified.role;
   }
 
   if (!resolvedUid) {
@@ -97,12 +101,6 @@ export async function resolveAuthenticatedCustomer(
   }
 
   // 3. Load Canonical Customer Profile from Firestore: users/{uid}
-  let profileName = "BTNX Customer";
-  let profileEmail = "";
-  let profilePhone: string | undefined = undefined;
-  let profileAddress: string | undefined = undefined;
-  let profileRole: CustomerRole = "customer";
-
   try {
     const userDoc = await getDoc(doc(db, "users", resolvedUid));
     if (userDoc.exists()) {

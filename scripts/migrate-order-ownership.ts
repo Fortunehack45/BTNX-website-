@@ -128,18 +128,34 @@ async function runMigration() {
 
   console.log("Fetching users from Firestore for canonical UID lookup...");
   const usersSnap = await getDocs(collection(db, "users"));
-  const emailToUidMap = new Map<string, string>();
+  const emailToUidsMap = new Map<string, string[]>();
   for (const userDoc of usersSnap.docs) {
     const data = userDoc.data();
     if (data.email) {
-      emailToUidMap.set(String(data.email).toLowerCase().trim(), userDoc.id);
+      const em = String(data.email).toLowerCase().trim();
+      const list = emailToUidsMap.get(em) || [];
+      list.push(userDoc.id);
+      emailToUidsMap.set(em, list);
     }
   }
-  console.log(`Indexed ${emailToUidMap.size} user profiles with canonical UIDs.\n`);
+
+  const ambiguousDuplicateEmails = new Set<string>();
+  for (const [em, uids] of emailToUidsMap.entries()) {
+    if (uids.length > 1) {
+      ambiguousDuplicateEmails.add(em);
+      console.warn(`[Ambiguous] Duplicate user accounts found for email "${em}": [${uids.join(", ")}]. Orders with this email will be flagged for manual review.`);
+    }
+  }
+  console.log(`Indexed ${emailToUidsMap.size} unique user emails across ${usersSnap.docs.length} user records.`);
+  if (ambiguousDuplicateEmails.size > 0) {
+    console.warn(`[Warning] ${ambiguousDuplicateEmails.size} emails have multiple user profiles in database.\n`);
+  }
 
   const reconciliations: OrderMigrationRecord[] = [];
   let alreadyCanonicalCount = 0;
   let unmatchableCount = 0;
+  let flaggedAmbiguousCount = 0;
+  let mismatchedUserIdCount = 0;
 
   for (const orderDoc of ordersSnap.docs) {
     const data = orderDoc.data();
@@ -147,13 +163,27 @@ async function runMigration() {
     const currentUserId = data.userId || null;
     const email = (data.customerEmail || data.userEmail || data.email || "").toLowerCase().trim();
 
-    if (currentUserId && emailToUidMap.has(email) && emailToUidMap.get(email) === currentUserId) {
+    if (ambiguousDuplicateEmails.has(email)) {
+      console.warn(`[Manual Review Flagged] Order #${orderId} matches multiple user accounts for email "${email}". Skipping automatic reconciliation.`);
+      flaggedAmbiguousCount++;
+      continue;
+    }
+
+    const matchingUids = emailToUidsMap.get(email);
+
+    if (currentUserId && matchingUids && matchingUids[0] === currentUserId) {
       alreadyCanonicalCount++;
       continue;
     }
 
-    if (!currentUserId && email && emailToUidMap.has(email)) {
-      const canonicalUid = emailToUidMap.get(email)!;
+    if (currentUserId && matchingUids && matchingUids[0] !== currentUserId) {
+      console.warn(`[Ownership Mismatch] Order #${orderId} has userId "${currentUserId}" but registered email "${email}" belongs to canonical UID "${matchingUids[0]}". Flagging for manual review.`);
+      mismatchedUserIdCount++;
+      continue;
+    }
+
+    if (!currentUserId && email && matchingUids && matchingUids.length === 1) {
+      const canonicalUid = matchingUids[0];
       reconciliations.push({
         orderId,
         previousUserId: currentUserId,
@@ -169,7 +199,9 @@ async function runMigration() {
   console.log("-------------------------------------------------");
   console.log(`Already Canonical: ${alreadyCanonicalCount}`);
   console.log(`Unmatched / Anonymous: ${unmatchableCount}`);
-  console.log(`Orders to Reconcile: ${reconciliations.length}`);
+  console.log(`Flagged for Manual Review (Ambiguous Emails): ${flaggedAmbiguousCount}`);
+  console.log(`Flagged for Manual Review (UID Mismatch): ${mismatchedUserIdCount}`);
+  console.log(`Orders Eligible for Automatic Reconciliation: ${reconciliations.length}`);
   console.log("-------------------------------------------------");
 
   if (reconciliations.length === 0) {

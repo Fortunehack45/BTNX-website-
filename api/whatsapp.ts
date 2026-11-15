@@ -57,19 +57,22 @@ app.get("/api/whatsapp/webhook", (req: Request, res: Response) => {
 app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
   try {
     const metaAppSecret = process.env.META_APP_SECRET;
-    if (metaAppSecret) {
-      const signature = req.headers["x-hub-signature-256"] as string;
-      if (!signature) {
-        return res.status(401).json({ error: "Missing x-hub-signature-256 header" });
-      }
-      const rawBody = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
-      const expectedSig = "sha256=" + crypto.createHmac("sha256", metaAppSecret).update(rawBody).digest("hex");
-      try {
-        const match = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
-        if (!match) return res.status(401).json({ error: "Invalid webhook signature" });
-      } catch {
-        return res.status(401).json({ error: "Invalid webhook signature format" });
-      }
+    if (!metaAppSecret) {
+      console.error("[BTNX WhatsApp] META_APP_SECRET is not configured. Webhook rejected (fail-closed).");
+      return res.status(500).json({ error: "Server misconfiguration: META_APP_SECRET missing" });
+    }
+
+    const signature = req.headers["x-hub-signature-256"] as string;
+    if (!signature) {
+      return res.status(401).json({ error: "Missing x-hub-signature-256 header" });
+    }
+    const rawBody = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
+    const expectedSig = "sha256=" + crypto.createHmac("sha256", metaAppSecret).update(rawBody).digest("hex");
+    try {
+      const match = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
+      if (!match) return res.status(401).json({ error: "Invalid webhook signature" });
+    } catch {
+      return res.status(401).json({ error: "Invalid webhook signature format" });
     }
 
     const body = req.body;

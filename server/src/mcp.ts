@@ -712,20 +712,22 @@ export async function executeMcpTool(
       }
 
       // Check ownership
-      if (
-        user.userId !== "guest" &&
-        !user.isMasterAdmin &&
-        order.userId &&
-        order.userId !== user.userId &&
-        order.customerEmail !== user.email
-      ) {
+      const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+      const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+      const isOwner =
+        user.isMasterAdmin ||
+        (user.userId && user.userId !== "guest" && order.userId === user.userId) ||
+        (user.email && user.email !== "guest@btnx.store" && orderOwnerEmail === user.email.toLowerCase().trim()) ||
+        (providedEmail && providedEmail === orderOwnerEmail);
+
+      if (!isOwner) {
         return {
           error: "Access denied",
-          message: `Order #${orderIdStr} does not belong to your authenticated account.`,
+          message: `Order #${orderIdStr} does not belong to your account. Please authenticate or provide the registered order email to verify ownership.`,
         };
       }
 
-      const signedTrack = generateSignedResourceToken(order.id, "track", 7 * 24 * 3600);
+      const signedTrack = generateSignedResourceToken("track", order.id, 7 * 24 * 3600);
       order.liveStepperUrl = `${reqOrigin}/render/track/${order.id}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`;
 
       return order;
@@ -791,7 +793,22 @@ export async function executeMcpTool(
           return { error: "Order not found", message: `Order #${targetId} not found in database.` };
         }
 
-        const signedInvoice = generateSignedResourceToken(order.id, "invoice", 7 * 24 * 3600);
+        const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+        const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+        const isOwner =
+          user.isMasterAdmin ||
+          (user.userId && user.userId !== "guest" && order.userId === user.userId) ||
+          (user.email && user.email !== "guest@btnx.store" && orderOwnerEmail === user.email.toLowerCase().trim()) ||
+          (providedEmail && providedEmail === orderOwnerEmail);
+
+        if (!isOwner) {
+          return {
+            error: "Access denied",
+            message: `Invoice for Order #${targetId} does not belong to your account.`,
+          };
+        }
+
+        const signedInvoice = generateSignedResourceToken("invoice", order.id, 7 * 24 * 3600);
         return {
           widgetType: "invoice",
           orderId: order.id,
@@ -815,7 +832,22 @@ export async function executeMcpTool(
           return { error: "Order not found", message: `Order #${targetId} not found in database.` };
         }
 
-        const signedTrack = generateSignedResourceToken(order.id, "track", 7 * 24 * 3600);
+        const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+        const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+        const isOwner =
+          user.isMasterAdmin ||
+          (user.userId && user.userId !== "guest" && order.userId === user.userId) ||
+          (user.email && user.email !== "guest@btnx.store" && orderOwnerEmail === user.email.toLowerCase().trim()) ||
+          (providedEmail && providedEmail === orderOwnerEmail);
+
+        if (!isOwner) {
+          return {
+            error: "Access denied",
+            message: `Tracking for Order #${targetId} does not belong to your account.`,
+          };
+        }
+
+        const signedTrack = generateSignedResourceToken("track", order.id, 7 * 24 * 3600);
         return {
           widgetType: "tracking_stepper",
           orderId: order.id,
@@ -839,10 +871,23 @@ export async function executeMcpTool(
           return { error: "Ticket not found", message: `Ticket #${targetId} not found in database.` };
         }
 
+        const ticketOwnerEmail = String(ticket.customerEmail || "").toLowerCase().trim();
+        const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+        const isTicketOwner =
+          user.isMasterAdmin ||
+          (user.userId && user.userId !== "guest" && ticket.userId === user.userId) ||
+          (user.email && user.email !== "guest@btnx.store" && ticketOwnerEmail === user.email.toLowerCase().trim()) ||
+          (providedEmail && providedEmail === ticketOwnerEmail);
+
+        if (!isTicketOwner) {
+          return { error: "Access denied", message: `Support ticket #${targetId} does not belong to your account.` };
+        }
+
+        const signedTicket = generateSignedResourceToken("support", ticket.id, 7 * 24 * 3600);
         return {
           widgetType: "support_ticket",
           ticketId: ticket.id,
-          livePreviewUrl: `${reqOrigin}/render/support/${ticket.id}`,
+          livePreviewUrl: `${reqOrigin}/render/support/${ticket.id}?sig=${signedTicket.sig}&exp=${signedTicket.exp}`,
           ticket,
           htmlSnippet: renderSupportTicketHtml(ticket),
         };
@@ -918,7 +963,23 @@ export async function executeMcpTool(
         };
       }
 
-      ticket.liveSupportThreadUrl = `${reqOrigin}/render/support/${ticket.id || ticketId}`;
+      const ticketOwnerEmail = String(ticket.customerEmail || "").toLowerCase().trim();
+      const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+      const isTicketOwner =
+        user.isMasterAdmin ||
+        (user.userId && user.userId !== "guest" && ticket.userId === user.userId) ||
+        (user.email && user.email !== "guest@btnx.store" && ticketOwnerEmail === user.email.toLowerCase().trim()) ||
+        (providedEmail && providedEmail === ticketOwnerEmail);
+
+      if (!isTicketOwner) {
+        return {
+          error: "Access denied",
+          message: `Ticket #${ticketId} does not belong to your account.`,
+        };
+      }
+
+      const signedTicket = generateSignedResourceToken("support", ticket.id || ticketId, 7 * 24 * 3600);
+      ticket.liveSupportThreadUrl = `${reqOrigin}/render/support/${ticket.id || ticketId}?sig=${signedTicket.sig}&exp=${signedTicket.exp}`;
       return ticket;
     }
 
@@ -942,20 +1003,22 @@ export async function executeMcpTool(
       }
 
       // Check ownership
-      if (
-        user.userId !== "guest" &&
-        !user.isMasterAdmin &&
-        order.userId &&
-        order.userId !== user.userId &&
-        order.customerEmail !== user.email
-      ) {
+      const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
+      const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
+      const isOwner =
+        user.isMasterAdmin ||
+        (user.userId && user.userId !== "guest" && order.userId === user.userId) ||
+        (user.email && user.email !== "guest@btnx.store" && orderOwnerEmail === user.email.toLowerCase().trim()) ||
+        (providedEmail && providedEmail === orderOwnerEmail);
+
+      if (!isOwner) {
         return {
           error: "Access denied",
           message: `Order #${orderId} does not belong to your authenticated account.`,
         };
       }
 
-      const signedInvoice = generateSignedResourceToken(order.id, "invoice", 7 * 24 * 3600);
+      const signedInvoice = generateSignedResourceToken("invoice", order.id, 7 * 24 * 3600);
       const liveInvoiceUrl = `${reqOrigin}/render/invoice/${order.id}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`;
 
       return {

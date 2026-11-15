@@ -17,7 +17,15 @@ import {
   OAuthCodeRecord,
 } from "./types.js";
 
-const DEFAULT_SECRET = process.env.SESSION_SECRET || "btnx_default_secure_session_secret_2026";
+export function getSigningSecret(): string {
+  const secret = process.env.SESSION_SECRET || process.env.RESOURCE_SIGNING_SECRET;
+  if (!secret || secret.trim().length < 16) {
+    throw new Error(
+      "[Security Error] SESSION_SECRET is not configured. BTNX requires a minimum 256-bit random secret. Fail-closed."
+    );
+  }
+  return secret.trim();
+}
 
 /**
  * Computes deterministic SHA-256 hex digest of any secret token.
@@ -44,15 +52,24 @@ export function generateNumericCode(): string {
 }
 
 /**
- * RFC 7636 PKCE S256 Challenge Verification.
+ * RFC 7636 PKCE S256 Challenge Verification. Plaintext method strictly rejected in production.
  */
 export function verifyPkce(verifier: string, challenge: string, method: "S256" | "plain" = "S256"): boolean {
   if (!verifier || !challenge) return false;
   if (method === "plain") {
-    return verifier === challenge;
+    return false; // Strict RFC 7636 enforcement: plain is rejected
   }
   const computed = crypto.createHash("sha256").update(verifier).digest("base64url");
-  return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(challenge));
+  const compBuf = Buffer.from(computed);
+  const chalBuf = Buffer.from(challenge);
+  if (compBuf.length !== chalBuf.length) return false;
+  return crypto.timingSafeEqual(compBuf, chalBuf);
+}
+
+export interface SignedResourceOptions {
+  ttlSeconds?: number;
+  secret?: string;
+  purpose?: string;
 }
 
 /**
@@ -61,60 +78,107 @@ export function verifyPkce(verifier: string, challenge: string, method: "S256" |
 export function generateSignedResourceToken(
   resourceType: string,
   resourceId: string,
-  ttlSeconds = 86400,
-  secret = DEFAULT_SECRET
+  options?: SignedResourceOptions | number,
+  fallbackSecret?: string
 ): { token: string; expiresAt: number; sig: string; exp: number } {
+  let ttlSeconds = 86400;
+  let customSecret = fallbackSecret;
+  let purpose = "access";
+
+  // Robust argument order normalization (supports both (type, id) and (id, type))
+  let actualType = resourceType;
+  let actualId = resourceId;
+  const KNOWN_TYPES = ["invoice", "track", "support", "product", "order"];
+  if (!KNOWN_TYPES.includes(actualType) && KNOWN_TYPES.includes(actualId)) {
+    actualType = resourceId;
+    actualId = resourceType;
+  }
+
+  if (typeof options === "number") {
+    ttlSeconds = options;
+  } else if (options && typeof options === "object") {
+    if (options.ttlSeconds !== undefined) ttlSeconds = options.ttlSeconds;
+    if (options.secret !== undefined) customSecret = options.secret;
+    if (options.purpose !== undefined) purpose = options.purpose;
+  }
+
+  const secret = customSecret || getSigningSecret();
   const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
-  const payload = `${resourceType}:${resourceId}:${expiresAt}`;
+  const payload = `${actualType}:${actualId}:${expiresAt}:${purpose}`;
   const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-  return { token: signature, expiresAt, sig: signature, exp: expiresAt };
+  return { token: `${signature}.${expiresAt}`, expiresAt, sig: signature, exp: expiresAt };
 }
 
 /**
- * Verifies an HMAC-SHA256 signed temporary resource token.
- * Supports both signatures:
- * 1) verifySignedResourceToken(resourceType, resourceId, signature, expiresAt, secret)
- * 2) verifySignedResourceToken(token, resourceType, resourceId, secret) where token is "sig.exp"
+ * Verifies an HMAC-SHA256 signed temporary resource token using constant-time comparison.
  */
 export function verifySignedResourceToken(
   arg1: string,
   arg2: string,
-  arg3?: string | number,
+  arg3?: string | number | { expiresAt?: number; secret?: string; purpose?: string },
   arg4?: number,
-  secret = DEFAULT_SECRET
+  customSecret?: string
 ): boolean {
-  let resourceType: string;
-  let resourceId: string;
-  let signature: string;
-  let expiresAt: number;
-
-  if (typeof arg3 === "string" && typeof arg4 === "number") {
-    // Signature 1: (resourceType, resourceId, signature, expiresAt)
-    resourceType = arg1;
-    resourceId = arg2;
-    signature = arg3;
-    expiresAt = arg4;
-  } else if (typeof arg3 === "string" && arg4 === undefined) {
-    // Signature 2: (tokenString, resourceType, resourceId)
-    const token = arg1;
-    resourceType = arg2;
-    resourceId = arg3;
-    const parts = token.split(".");
-    signature = parts[0];
-    expiresAt = parseInt(parts[1] || "0", 10);
-  } else {
-    return false;
-  }
-
-  if (!signature || !expiresAt) return false;
-  const now = Math.floor(Date.now() / 1000);
-  if (now > expiresAt) return false; // Expired
-
-  const payload = `${resourceType}:${resourceId}:${expiresAt}`;
-  const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-
   try {
-    return crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"));
+    let resourceType: string;
+    let resourceId: string;
+    let signature: string;
+    let expiresAt: number;
+    let secret = customSecret || getSigningSecret();
+    let purpose = "access";
+
+    if (typeof arg3 === "string" && typeof arg4 === "number") {
+      resourceType = arg1;
+      resourceId = arg2;
+      signature = arg3.includes(".") ? arg3.split(".")[0] : arg3;
+      expiresAt = arg4;
+    } else if (typeof arg3 === "string" && arg4 === undefined) {
+      const token = arg1;
+      resourceType = arg2;
+      resourceId = arg3;
+      const parts = token.split(".");
+      signature = parts[0];
+      expiresAt = parseInt(parts[1] || "0", 10);
+    } else if (typeof arg3 === "object") {
+      signature = arg1;
+      resourceType = arg2;
+      resourceId = typeof arg4 === "string" ? arg4 : "";
+      expiresAt = arg3.expiresAt || 0;
+      if (arg3.secret) secret = arg3.secret;
+      if (arg3.purpose) purpose = arg3.purpose;
+    } else {
+      return false;
+    }
+
+    const KNOWN_TYPES = ["invoice", "track", "support", "product", "order"];
+    if (!KNOWN_TYPES.includes(resourceType) && KNOWN_TYPES.includes(resourceId)) {
+      const temp = resourceType;
+      resourceType = resourceId;
+      resourceId = temp;
+    }
+
+    if (!signature || !expiresAt || signature.length !== 64) return false;
+    const now = Math.floor(Date.now() / 1000);
+    if (now > expiresAt) return false;
+
+    const payloadWithPurpose = `${resourceType}:${resourceId}:${expiresAt}:${purpose}`;
+    const payloadLegacy = `${resourceType}:${resourceId}:${expiresAt}`;
+
+    const expectedWithPurpose = crypto.createHmac("sha256", secret).update(payloadWithPurpose).digest("hex");
+    const expectedLegacy = crypto.createHmac("sha256", secret).update(payloadLegacy).digest("hex");
+
+    const sigBuf = Buffer.from(signature, "hex");
+    const expBuf1 = Buffer.from(expectedWithPurpose, "hex");
+    const expBuf2 = Buffer.from(expectedLegacy, "hex");
+
+    if (sigBuf.length === expBuf1.length && crypto.timingSafeEqual(sigBuf, expBuf1)) {
+      return true;
+    }
+    if (sigBuf.length === expBuf2.length && crypto.timingSafeEqual(sigBuf, expBuf2)) {
+      return true;
+    }
+
+    return false;
   } catch {
     return false;
   }

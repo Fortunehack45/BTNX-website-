@@ -242,4 +242,37 @@ describe("BTNX Authentication & Authorization Security Suite", () => {
       assert.equal(isValid, false);
     });
   });
+
+  // 7. Fail-Closed Secret Resolution & Cryptographic Verification
+  describe("Cryptographic Fail-Closed Integrity & Token Verification", () => {
+    it("should reject forged or unsigned JWT tokens in Firebase Token verification", async () => {
+      const { verifyFirebaseIdToken } = await import("../server/src/firebaseAdmin.js");
+      // Malformed or forged tokens
+      const forgedToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvZSBEb2UiLCJpYXQiOjE1MTYyMzkwMjJ9.forged_signature";
+      const result = await verifyFirebaseIdToken(forgedToken);
+      assert.equal(result, null);
+
+      assert.equal(await verifyFirebaseIdToken(""), null);
+      assert.equal(await verifyFirebaseIdToken("not.a.valid.jwt"), null);
+    });
+
+    it("should reject OAuth 2.1 'plain' PKCE method", () => {
+      const verifier = "secret_verifier_1234567890";
+      // Even if verifier === challenge, plain PKCE must be rejected under OAuth 2.1
+      const isPlainAllowed = verifyPkce(verifier, verifier, "plain");
+      assert.equal(isPlainAllowed, false);
+    });
+
+    it("should normalize argument order in generateSignedResourceToken (orderId, type) vs (type, orderId)", () => {
+      const testSecret = "btnx_canonical_test_secret_777";
+      const orderId = "BX-998877";
+
+      const token1 = generateSignedResourceToken("invoice", orderId, 3600, testSecret);
+      const token2 = generateSignedResourceToken(orderId, "invoice", 3600, testSecret);
+
+      assert.equal(token1.sig, token2.sig);
+      assert.equal(verifySignedResourceToken("invoice", orderId, token1.sig, token1.exp, testSecret), true);
+      assert.equal(verifySignedResourceToken("invoice", orderId, token2.sig, token2.exp, testSecret), true);
+    });
+  });
 });

@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import { db } from "./firebase.js";
 import { doc, getDoc, getDocs, collection } from "firebase/firestore";
@@ -50,9 +51,14 @@ app.get("/api/whatsapp/webhook", (req: Request, res: Response) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "btnx_secret_token";
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  if (!verifyToken || !token || !challenge) {
+    return res.status(403).send("Forbidden: WHATSAPP_VERIFY_TOKEN not configured or invalid challenge.");
+  }
 
-  if (mode === "subscribe" && token === verifyToken) {
+  const tokenBuf = Buffer.from(String(token));
+  const expectedBuf = Buffer.from(verifyToken);
+  if (mode === "subscribe" && tokenBuf.length === expectedBuf.length && crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
     console.log("[BTNX WhatsApp] Webhook verified successfully with Meta Cloud API.");
     return res.status(200).send(challenge);
   }
@@ -62,6 +68,29 @@ app.get("/api/whatsapp/webhook", (req: Request, res: Response) => {
 // Meta WhatsApp Cloud API incoming message handler
 app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
   try {
+    const appSecret = process.env.META_APP_SECRET;
+    if (!appSecret) {
+      console.error("[WhatsApp] Webhook rejected: META_APP_SECRET is not configured. Fail-closed.");
+      return res.status(500).json({ error: "Server security configuration incomplete: META_APP_SECRET required." });
+    }
+
+    const sigHeader = (req.headers["x-hub-signature-256"] || "") as string;
+    if (!sigHeader.startsWith("sha256=")) {
+      console.warn("[WhatsApp] Webhook rejected: missing or malformed x-hub-signature-256 header.");
+      return res.status(401).json({ error: "Missing or malformed signature header." });
+    }
+
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    const expectedSig = crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
+    const providedSig = sigHeader.slice(7);
+
+    const sigBuf = Buffer.from(providedSig, "hex");
+    const expBuf = Buffer.from(expectedSig, "hex");
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.warn("[WhatsApp] Webhook rejected: invalid HMAC signature.");
+      return res.status(401).json({ error: "Invalid webhook signature." });
+    }
+
     const body = req.body;
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
