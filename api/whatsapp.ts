@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import * as crypto from "crypto";
 import { db } from "../server/src/firebase.js";
-import { doc, getDoc, getDocs, collection } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, collection } from "firebase/firestore";
 import { processWhatsAppMessage } from "../server/src/services/whatsapp.js";
 import { verifySignedResourceToken } from "../server/src/auth/tokens.js";
 import {
@@ -83,6 +83,24 @@ app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
 
     if (!message) {
       return res.status(200).send("EVENT_RECEIVED");
+    }
+
+    const messageId = message.id;
+    if (messageId) {
+      try {
+        const eventDoc = await getDoc(doc(db, "processed_webhook_events", messageId));
+        if (eventDoc.exists()) {
+          console.log(`[WhatsApp Webhook] Event ${messageId} already processed (idempotent ignore).`);
+          return res.status(200).send("EVENT_RECEIVED");
+        }
+        await setDoc(doc(db, "processed_webhook_events", messageId), {
+          eventId: messageId,
+          processedAt: new Date().toISOString(),
+          status: "success",
+        });
+      } catch (e: any) {
+        console.warn("[WhatsApp Webhook] Idempotency record warning:", e?.message);
+      }
     }
 
     const hostHeader = req.get("host") || "";

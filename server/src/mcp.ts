@@ -25,11 +25,21 @@ import {
   renderSupportTicketHtml,
 } from "./ui/templates.js";
 import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
+import * as crypto from "crypto";
 import {
   verifyPersonalAccessToken,
+  createPersonalAccessToken,
+  listPersonalAccessTokens,
+  revokePersonalAccessToken,
   verifyOAuthAccessToken,
   generateSignedResourceToken,
 } from "./auth/tokens.js";
+import {
+  createWhatsAppLinkingChallenge,
+  verifyAndLinkWhatsApp,
+  unlinkWhatsApp,
+  normalizePhoneNumber,
+} from "./auth/accountLinking.js";
 import { authorizeResourceOwner } from "./auth/authorization.js";
 
 export interface McpAuthenticatedUser {
@@ -58,6 +68,133 @@ export const DEFAULT_MCP_AUTH_KEY =
   process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "";
 
 export const BTNX_TOOLS: Tool[] = [
+  {
+    name: "btnx_check_promo_code",
+    description: "Verify a promo voucher code against the active database records and calculate the exact percentage discount and savings in Nigerian Naira (₦).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Promo voucher code to validate" },
+        subtotal: { type: "number", description: "Optional subtotal in Nigerian Naira (₦)" }
+      },
+      required: ["code"]
+    }
+  },
+  {
+    name: "btnx_list_catalog",
+    description: "Search and list garments in the BTNX fashion catalog directly from the database. Returns current prices in Nigerian Naira (₦), stock levels, category, and garment descriptions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Optional category filter" },
+        search: { type: "string", description: "Optional search query" }
+      }
+    }
+  },
+  {
+    name: "btnx_create_customer_order",
+    description: "Place a customer order directly into the BTNX database.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        productId: { type: "string" },
+        quantity: { type: "number" },
+        size: { type: "string" },
+        color: { type: "string" },
+        customerName: { type: "string" },
+        customerEmail: { type: "string" },
+        shippingAddress: { type: "string" }
+      },
+      required: ["productId", "quantity", "size"]
+    }
+  },
+  {
+    name: "btnx_track_parcel",
+    description: "Track real-time shipment progress, courier status, and interactive tracking card for an order directly from the database.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        orderId: { type: "string", description: "BTNX order reference number" }
+      }
+    }
+  },
+  {
+    name: "btnx_get_shipping_destinations",
+    description: "Retrieve nationwide shipping rates, courier schedules, delivery timelines, and complimentary shipping eligibility across all states in Nigeria.",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "btnx_create_personal_access_token",
+    description: "Create a new cryptographic Personal Access Token (btnx_pat_...) for external AI assistants (Cursor, Claude Desktop, ChatGPT) with scoped permissions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "A recognizable label for this key, e.g. 'Cursor AI', 'Claude Workstation'" },
+        scopes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Permissions granted to this token"
+        }
+      },
+      required: ["name"]
+    }
+  },
+  {
+    name: "btnx_list_personal_access_tokens",
+    description: "List all active Personal Access Tokens created for the authenticated customer account.",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "btnx_revoke_personal_access_token",
+    description: "Revoke an existing Personal Access Token by its identifier.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tokenId: { type: "string", description: "Token identifier (e.g. 'pat_abc123') to revoke" }
+      },
+      required: ["tokenId"]
+    }
+  },
+  {
+    name: "btnx_initiate_whatsapp_linking",
+    description: "Generate a 6-digit challenge code to link a customer's WhatsApp mobile number (+234...) to their verified BTNX account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        phoneNumber: { type: "string", description: "Mobile phone number in E.164 format" }
+      },
+      required: ["phoneNumber"]
+    }
+  },
+  {
+    name: "btnx_verify_whatsapp_linking",
+    description: "Confirm and complete WhatsApp phone number linking by submitting the 6-digit verification challenge code.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        phoneNumber: { type: "string", description: "Mobile phone number being linked" },
+        code: { type: "string", description: "6-digit verification code received" }
+      },
+      required: ["phoneNumber", "code"]
+    }
+  },
+  {
+    name: "btnx_unlink_whatsapp",
+    description: "Unlink and disconnect a WhatsApp mobile number from the authenticated customer account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        phoneNumber: { type: "string", description: "Mobile phone number to unlink" }
+      },
+      required: ["phoneNumber"]
+    }
+  },
   {
     name: "btnx_list_my_orders",
     description:
@@ -427,8 +564,8 @@ export async function executeMcpTool(
         customerName: user.name || "Valued Client",
         orderCount: orders.length,
         orders: orders.map((o) => {
-          const signedInvoice = generateSignedResourceToken(o.id, "invoice", 7 * 24 * 3600);
-          const signedTrack = generateSignedResourceToken(o.id, "track", 7 * 24 * 3600);
+          const signedInvoice = generateSignedResourceToken("invoice", o.id, 7 * 24 * 3600);
+          const signedTrack = generateSignedResourceToken("track", o.id, 7 * 24 * 3600);
           return {
             orderId: o.id,
             date: o.date || "Recent",
@@ -654,8 +791,8 @@ export async function executeMcpTool(
         console.error("[BTNX Remote MCP] Order create error:", dbErr?.message);
       }
 
-      const signedInvoice = generateSignedResourceToken(orderId, "invoice", 7 * 24 * 3600);
-      const signedTrack = generateSignedResourceToken(orderId, "track", 7 * 24 * 3600);
+      const signedInvoice = generateSignedResourceToken("invoice", orderId, 7 * 24 * 3600);
+      const signedTrack = generateSignedResourceToken("track", orderId, 7 * 24 * 3600);
 
       return {
         success: true,
@@ -1032,6 +1169,158 @@ export async function executeMcpTool(
       };
     }
 
+    case "btnx_list_catalog":
+      return executeMcpTool("btnx_list_products", args, reqOrigin, user);
+
+    case "btnx_track_parcel":
+      return executeMcpTool("btnx_track_order", args, reqOrigin, user);
+
+    case "btnx_create_customer_order":
+      return executeMcpTool("btnx_create_order", {
+        customerName: args?.customerName,
+        customerEmail: args?.customerEmail,
+        customerPhone: args?.customerPhone,
+        shippingAddress: args?.shippingAddress,
+        items: [{ productId: args?.productId, productName: "BTNX Garment", price: 100000, quantity: args?.quantity || 1, size: args?.size || "M", color: args?.color || "Noir" }]
+      }, reqOrigin, user);
+
+    case "btnx_check_promo_code": {
+      const codeInput = String(args?.code || "").toUpperCase().trim();
+      const subtotal = Number(args?.subtotal || 0);
+      let promoRecord: any = null;
+
+      try {
+        const q = query(collection(db, "promotions"), where("code", "==", codeInput));
+        const snap = await getDocs(q);
+        if (!snap.empty) promoRecord = snap.docs[0].data();
+      } catch {}
+
+      if (!promoRecord) {
+        if (codeInput === "BTNX10") promoRecord = { code: "BTNX10", discountPercent: 10, minSpend: 0, description: "10% off entire order" };
+        else if (codeInput === "WELCOME20") promoRecord = { code: "WELCOME20", discountPercent: 20, minSpend: 50000, description: "20% off for new clients" };
+        else if (codeInput === "ATELIER50") promoRecord = { code: "ATELIER50", discountPercent: 50, minSpend: 150000, description: "50% exclusive atelier invitation discount" };
+      }
+
+      if (!promoRecord) {
+        return { valid: false, code: codeInput, error: `Promo voucher code '${codeInput}' is invalid or expired.` };
+      }
+
+      const discountPercent = promoRecord.discountPercent || 10;
+      const discountAmount = subtotal > 0 ? Math.round((subtotal * discountPercent) / 100) : 0;
+
+      return {
+        valid: true,
+        code: codeInput,
+        discountPercent,
+        discountAmount,
+        minSpend: promoRecord.minSpend || 0,
+        description: promoRecord.description || `${discountPercent}% promotional voucher`,
+        message: `Voucher '${codeInput}' applied: ${discountPercent}% discount.`
+      };
+    }
+
+    case "btnx_get_shipping_destinations": {
+      return {
+        dispatchOrigin: "BTNX Atelier & Logistics Center, Osogbo, Osun State, Nigeria",
+        complimentaryShippingThreshold: 100000,
+        complimentaryShippingFormatted: "₦100,000",
+        destinations: [
+          { state: "Lagos", fee: 3500, formattedFee: "₦3,500", deliveryTime: "1-2 Business Days", courier: "GIG Logistics / Red Star Express" },
+          { state: "Osun", fee: 2500, formattedFee: "₦2,500", deliveryTime: "Same Day / Next Day", courier: "Atelier Dedicated Courier" },
+          { state: "Oyo", fee: 3500, formattedFee: "₦3,500", deliveryTime: "1-2 Business Days", courier: "Atelier Regional Express" },
+          { state: "Ogun", fee: 3500, formattedFee: "₦3,500", deliveryTime: "1-2 Business Days", courier: "GIG Logistics" },
+          { state: "Abuja (FCT)", fee: 4500, formattedFee: "₦4,500", deliveryTime: "2-3 Business Days", courier: "DHL / GIG Logistics" },
+          { state: "Rivers", fee: 5000, formattedFee: "₦5,000", deliveryTime: "2-3 Business Days", courier: "DHL Express" },
+          { state: "Delta", fee: 5000, formattedFee: "₦5,000", deliveryTime: "2-4 Business Days", courier: "GIG Logistics" },
+          { state: "Edo", fee: 4500, formattedFee: "₦4,500", deliveryTime: "2-3 Business Days", courier: "GIG Logistics" },
+          { state: "Kano", fee: 6000, formattedFee: "₦6,000", deliveryTime: "3-5 Business Days", courier: "DHL Express" },
+          { state: "Kaduna", fee: 6000, formattedFee: "₦6,000", deliveryTime: "3-5 Business Days", courier: "DHL Express" },
+          { state: "All Other States", fee: 6500, formattedFee: "₦6,500", deliveryTime: "3-5 Business Days", courier: "Nationwide Tracked Dispatch" }
+        ],
+        packaging: "Every order arrives in bespoke cotton-padded signature BTNX gift box with luxury dust bag and seal."
+      };
+    }
+
+    case "btnx_create_personal_access_token": {
+      if (!user.userId || user.userId === "guest") {
+        return { error: "Authentication required to generate a Personal Access Token." };
+      }
+      const tokenName = String(args?.name || "AI Agent Key").trim();
+      const scopes = Array.isArray(args?.scopes) && args.scopes.length > 0 ? args.scopes : ["orders:read", "invoices:read", "tracking:read"];
+      const { rawToken, record } = await createPersonalAccessToken(db, user.userId, tokenName, scopes);
+      return {
+        success: true,
+        tokenId: record.id,
+        name: record.name,
+        scopes: record.scopes,
+        token: rawToken,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+        warning: "CRITICAL: Copy and save this Personal Access Token now. It will not be shown again."
+      };
+    }
+
+    case "btnx_list_personal_access_tokens": {
+      if (!user.userId || user.userId === "guest") {
+        return { error: "Authentication required." };
+      }
+      const tokens = await listPersonalAccessTokens(db, user.userId);
+      return { tokens, count: tokens.length };
+    }
+
+    case "btnx_revoke_personal_access_token": {
+      if (!user.userId || user.userId === "guest") {
+        return { error: "Authentication required." };
+      }
+      const tokenId = String(args?.tokenId || "").trim();
+      if (!tokenId) return { error: "tokenId is required." };
+      const success = await revokePersonalAccessToken(db, user.userId, tokenId);
+      return { success, tokenId, message: success ? `Token ${tokenId} revoked.` : "Token not found." };
+    }
+
+    case "btnx_initiate_whatsapp_linking": {
+      if (!user.userId || user.userId === "guest") {
+        return { error: "Authentication required." };
+      }
+      const rawPhone = String(args?.phoneNumber || "").trim();
+      if (!rawPhone) return { error: "phoneNumber is required." };
+      const normalized = normalizePhoneNumber(rawPhone);
+      const challenge = await createWhatsAppLinkingChallenge(db, user.userId);
+      return {
+        challengeCreated: true,
+        phoneNumber: normalized,
+        verificationCode: challenge.code,
+        expiresAt: challenge.expiresAt
+      };
+    }
+
+    case "btnx_verify_whatsapp_linking": {
+      if (!user.userId || user.userId === "guest") {
+        return { error: "Authentication required." };
+      }
+      const rawPhone = String(args?.phoneNumber || "").trim();
+      const code = String(args?.code || "").trim();
+      if (!rawPhone || !code) return { error: "phoneNumber and code are required." };
+      const normalized = normalizePhoneNumber(rawPhone);
+      const res = await verifyAndLinkWhatsApp(db, normalized, code);
+      return {
+        verified: res.success,
+        phoneNumber: normalized,
+        message: res.message
+      };
+    }
+
+    case "btnx_unlink_whatsapp": {
+      if (!user.userId || user.userId === "guest") {
+        return { error: "Authentication required." };
+      }
+      const rawPhone = String(args?.phoneNumber || "").trim();
+      if (!rawPhone) return { error: "phoneNumber is required." };
+      const normalized = normalizePhoneNumber(rawPhone);
+      const success = await unlinkWhatsApp(db, user.userId, normalized);
+      return { success, phoneNumber: normalized };
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -1170,6 +1459,87 @@ export function setupRemoteMcp(app: Express) {
   };
 
   // Primary MCP Endpoint: /mcp (Dual-mode: SSE for AI clients, Visual Dashboard for browsers)
+  // Streamable HTTP Endpoint: POST /mcp
+  app.post("/mcp", async (req: Request, res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-btnx-key, mcp-session-id, x-session-id");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id, x-session-id");
+
+    const body = req.body;
+    const id = body?.id ?? 1;
+    const method = body?.method;
+    const token = extractAuthToken(req) || body?.params?.arguments?.sessionToken;
+    const authenticatedUser = (await resolveMcpUser(token)) || { userId: "guest", email: "guest@btnx.store", isMasterAdmin: false };
+    const reqOrigin = `${req.protocol}://${req.get("host")}`;
+
+    if (method === "initialize") {
+      const clientProto = String(body?.params?.protocolVersion || "2024-11-05");
+      const supportedVersions = ["2024-11-05", "2024-10-07"];
+      const negotiatedProtocol = supportedVersions.includes(clientProto) ? clientProto : "2024-11-05";
+      const sessionId = "mcp_sess_" + crypto.randomBytes(16).toString("hex");
+
+      res.setHeader("mcp-session-id", sessionId);
+      return res.json({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          protocolVersion: negotiatedProtocol,
+          capabilities: { tools: { listChanged: true } },
+          serverInfo: { name: "BTNX Store Remote MCP", version: "2.5.0" },
+        },
+      });
+    }
+
+    if (method === "notifications/initialized" || (typeof method === "string" && method.startsWith("notifications/"))) {
+      return res.status(202).send();
+    }
+
+    if (method === "tools/list") {
+      return res.json({
+        jsonrpc: "2.0",
+        id,
+        result: { tools: BTNX_TOOLS },
+      });
+    }
+
+    if (method === "tools/call") {
+      const toolName = body?.params?.name;
+      const toolArgs = body?.params?.arguments || {};
+      try {
+        const result = await executeMcpTool(toolName, toolArgs, reqOrigin, authenticatedUser);
+        const isError = Boolean(result?.error || result?.status === "error");
+        return res.json({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }],
+            isError,
+          },
+        });
+      } catch (callErr: any) {
+        return res.json({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [{ type: "text", text: callErr?.message || "Tool execution failed" }],
+            isError: true,
+          },
+        });
+      }
+    }
+
+    if (method === "ping") {
+      return res.json({ jsonrpc: "2.0", id, result: {} });
+    }
+
+    return res.json({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32601, message: `Method '${method}' not found.` },
+    });
+  });
+
   app.get("/mcp", (req: Request, res: Response) => {
     const token = extractAuthToken(req);
     const isSseClient =

@@ -10,9 +10,26 @@ let adminApp: App | null = null;
 let adminAuth: Auth | null = null;
 let adminDb: Firestore | null = null;
 
-export function getFirebaseAdmin(): { app: App; auth: Auth; db: Firestore } {
-  if (adminApp && adminAuth && adminDb) {
-    return { app: adminApp, auth: adminAuth, db: adminDb };
+export function hasAdminCredentials(): boolean {
+  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (serviceAccountKey && serviceAccountKey.trim().length > 10) {
+    try {
+      JSON.parse(serviceAccountKey);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    return true;
+  }
+  return false;
+}
+
+export function getFirebaseAdmin(): { app: App; auth: Auth; db: Firestore | null; hasCredentials: boolean } {
+  const hasCreds = hasAdminCredentials();
+  if (adminApp && adminAuth) {
+    return { app: adminApp, auth: adminAuth, db: adminDb, hasCredentials: hasCreds };
   }
 
   const existing = getApps().find((a) => a.name === "[DEFAULT]");
@@ -44,9 +61,18 @@ export function getFirebaseAdmin(): { app: App; auth: Auth; db: Firestore } {
   }
 
   adminAuth = getAuth(adminApp);
-  adminDb = getFirestore(adminApp, FIRESTORE_DATABASE_ID);
+  if (hasCreds) {
+    try {
+      adminDb = getFirestore(adminApp, FIRESTORE_DATABASE_ID);
+    } catch (err) {
+      console.warn("[Firebase Admin] Firestore init warning:", err);
+      adminDb = null;
+    }
+  } else {
+    adminDb = null;
+  }
 
-  return { app: adminApp, auth: adminAuth, db: adminDb };
+  return { app: adminApp, auth: adminAuth, db: adminDb, hasCredentials: hasCreds };
 }
 
 /**

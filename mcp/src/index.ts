@@ -33,8 +33,7 @@ const server = new Server(
   }
 );
 
-const localOrdersCache = new Map<string, any>();
-const localTicketsCache = new Map<string, any>();
+const BASE_URL = process.env.BTNX_APP_URL || "https://btnx-website-k3he.vercel.app";
 
 // Register Tools List
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -606,7 +605,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 text: JSON.stringify(
                   {
                     widgetType: "product_card",
-                    livePreviewUrl: `http://localhost:4000/render/product/${prod.id}`,
+                    livePreviewUrl: `${BASE_URL}/render/product/${prod.id}`,
                     product: prod,
                     htmlSnippet: html,
                   },
@@ -660,7 +659,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   {
                     widgetType: "invoice",
                     orderId: order.id,
-                    livePreviewUrl: `http://localhost:4000/render/invoice/${order.id}`,
+                    livePreviewUrl: `${BASE_URL}/render/invoice/${order.id}`,
                     order,
                     htmlSnippet: html,
                   },
@@ -714,7 +713,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   {
                     widgetType: "tracking_stepper",
                     orderId: order.id,
-                    livePreviewUrl: `http://localhost:4000/render/track/${order.id}`,
+                    livePreviewUrl: `${BASE_URL}/render/track/${order.id}`,
                     status: order.status,
                     htmlSnippet: html,
                   },
@@ -768,7 +767,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   {
                     widgetType: "support_ticket",
                     ticketId: ticket.id,
-                    livePreviewUrl: `http://localhost:4000/render/support/${ticket.id}`,
+                    livePreviewUrl: `${BASE_URL}/render/support/${ticket.id}`,
                     ticket,
                     htmlSnippet: html,
                   },
@@ -833,7 +832,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   message: `Ticket #${ticketId} dispatched to BTNX Customer Service Team Desk.`,
                   status: "open",
                   assignedDesk: "Osogbo Fulfillment & Client Care",
-                  liveSupportThreadUrl: `http://localhost:4000/render/support/${ticketId}`,
+                  liveSupportThreadUrl: `${BASE_URL}/render/support/${ticketId}`,
                   ticketSummary: ticket,
                 },
                 null,
@@ -957,7 +956,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   orderId: order.id,
                   total: order.total,
                   status: order.status,
-                  liveInvoiceUrl: `http://localhost:4000/render/invoice/${order.id}`,
+                  liveInvoiceUrl: `${BASE_URL}/render/invoice/${order.id}`,
                   htmlSnippet: html,
                   orderSummary: order,
                 },
