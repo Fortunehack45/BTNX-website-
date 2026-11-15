@@ -1065,9 +1065,107 @@ const MCP_TOOLS = [
   }
 ];
 
-// 5. Tool Execution Handler
+// 5. Safe Firestore Query Helpers for MCP Tool Execution
+async function fetchCustomerOrders(email?: string, uid?: string): Promise<any[]> {
+  try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      const ordersMap = new Map<string, any>();
+      if (uid) {
+        const snapUid = await admin.db.collection("orders").where("userId", "==", uid).get();
+        snapUid.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
+      }
+      if (email) {
+        const snap1 = await admin.db.collection("orders").where("customerEmail", "==", email).get();
+        snap1.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
+        const snap2 = await admin.db.collection("orders").where("userEmail", "==", email).get();
+        snap2.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
+      }
+      return Array.from(ordersMap.values()).sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
+    }
+  } catch (err: any) {
+    console.warn("[Admin Orders Fetch Notice]:", err?.message);
+  }
+
+  try {
+    const ordersMap = new Map<string, any>();
+    if (uid) {
+      try {
+        const snapUid = await getDocs(query(collection(db, "orders"), where("userId", "==", uid)));
+        snapUid.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
+      } catch {}
+    }
+    if (email) {
+      try {
+        const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", email)));
+        snap1.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
+      } catch {}
+      try {
+        const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", email)));
+        snap2.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
+      } catch {}
+    }
+    return Array.from(ordersMap.values()).sort((a, b) => {
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tB - tA;
+    });
+  } catch (err: any) {
+    console.warn("[Client Orders Fetch Notice]:", err?.message);
+    return [];
+  }
+}
+
+async function fetchOrderById(orderId: string): Promise<any | null> {
+  try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      const snap = await admin.db.collection("orders").doc(orderId).get();
+      if (snap.exists) return { id: snap.id, ...snap.data() };
+    }
+  } catch {}
+
+  try {
+    const snap = await getDoc(doc(db, "orders", orderId));
+    if (snap.exists()) return { id: snap.id, ...snap.data() };
+  } catch {}
+  return null;
+}
+
+async function fetchUserProfile(uid?: string, email?: string): Promise<any | null> {
+  try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      if (uid) {
+        const snap = await admin.db.collection("users").doc(uid).get();
+        if (snap.exists) return { id: snap.id, ...snap.data() };
+      }
+      if (email) {
+        const snap = await admin.db.collection("users").where("email", "==", email).limit(1).get();
+        if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() };
+      }
+    }
+  } catch {}
+
+  try {
+    if (uid) {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) return { id: snap.id, ...snap.data() };
+    }
+    if (email) {
+      const snap = await getDocs(query(collection(db, "users"), where("email", "==", email), limit(1)));
+      if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() };
+    }
+  } catch {}
+  return null;
+}
+
+// 6. Tool Execution Handler
 async function executeTool(name: string, args: any, sessionId: string, reqUser: any | null, reqHost = "https://btnx-website-mcp.vercel.app") {
-  await ensureAdminAuth();
 
   switch (name) {
     case "btnx_sign_in": {
@@ -1095,19 +1193,10 @@ async function executeTool(name: string, args: any, sessionId: string, reqUser: 
       }
 
       // Load user profile from Firestore
-      let profile: any = null;
-      try {
-        const uDoc = await getDoc(doc(db, "users", cred.user.uid));
-        if (uDoc.exists()) profile = uDoc.data();
-      } catch {}
-      if (!profile) {
-        const uSnap = await getDocs(query(collection(db, "users"), where("email", "==", inputEmail)));
-        if (!uSnap.empty) profile = uSnap.docs[0].data();
-      }
+      const profile = await fetchUserProfile(cred.user.uid, inputEmail);
 
       // Load user orders from Firestore
-      const oSnap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", inputEmail)));
-      const orders: any[] = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const orders = await fetchCustomerOrders(inputEmail, cred.user.uid);
 
       const customerName = profile?.name || cred.user.displayName || "BTNX Customer";
       const address = profile?.shippingStreet
@@ -1260,8 +1349,7 @@ You are connected to the BTNX Atelier, but no customer account is signed in for 
         };
       }
 
-      const oSnap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
-      const orders = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const orders = await fetchCustomerOrders(user.email, user.uid);
 
       const displayMarkdown = `### 👤 VERIFIED BTNX CUSTOMER SESSION
 - **Customer Name:** **${user.name}**  
@@ -1307,18 +1395,7 @@ Use \`btnx_sign_in\` with your email and password.`,
         };
       }
 
-      const snapUid = user.uid ? await getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))) : null;
-      const snap1 = user.email ? await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email))) : null;
-      const snap2 = user.email ? await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email))) : null;
-      const map = new Map<string, any>();
-      snapUid?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-      snap1?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-      snap2?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-      const orders = Array.from(map.values()).sort((a, b) => {
-        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tB - tA;
-      });
+      const orders = await fetchCustomerOrders(user.email, user.uid);
 
       if (orders.length === 0) {
         return {
@@ -1385,18 +1462,7 @@ Please pass your \`sessionToken\` from \`btnx_sign_in\`, sign in using \`btnx_si
         }
 
         // Pull the latest order for the authenticated user
-        const snapUid = user.uid ? await getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))) : null;
-        const snap1 = user.email ? await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email))) : null;
-        const snap2 = user.email ? await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email))) : null;
-        const map = new Map<string, any>();
-        snapUid?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-        snap1?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-        snap2?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-        const orders = Array.from(map.values()).sort((a, b) => {
-          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return tB - tA;
-        });
+        const orders = await fetchCustomerOrders(user.email, user.uid);
 
         if (orders.length === 0) {
           return {
@@ -1411,12 +1477,10 @@ No orders or invoices were found for account \`${user.email}\`. Browse the catal
       }
 
       // Fetch target order from Firestore
-      const snap = await getDoc(doc(db, "orders", targetId));
-      if (!snap.exists()) {
+      const order = await fetchOrderById(targetId);
+      if (!order) {
         return { error: `Invoice for order #${targetId} was not found in the database.` };
       }
-
-      const order: any = { id: snap.id, ...snap.data() };
 
       // SECURITY CHECK: Verify ownership!
       const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase();
@@ -1501,10 +1565,8 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
       let targetId = String(args?.orderId || "").trim();
 
       if (!targetId && user) {
-        const snapUid = user.uid ? await getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))) : null;
-        const snap1 = user.email ? await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email))) : null;
-        if (snapUid && !snapUid.empty) targetId = snapUid.docs[0].id;
-        else if (snap1 && !snap1.empty) targetId = snap1.docs[0].id;
+        const orders = await fetchCustomerOrders(user.email, user.uid);
+        if (orders.length > 0) targetId = orders[0].id;
       }
 
       if (!targetId) {
@@ -1515,12 +1577,10 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
         };
       }
 
-      const snap = await getDoc(doc(db, "orders", targetId));
-      if (!snap.exists()) {
+      const order = await fetchOrderById(targetId);
+      if (!order) {
         return { error: `Order #${targetId} was not found in the database.` };
       }
-
-      const order: any = { id: snap.id, ...snap.data() };
 
       // SECURITY CHECK: Verify order ownership before disclosing logistics and delivery details
       const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase().trim();
