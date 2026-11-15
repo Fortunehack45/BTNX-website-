@@ -2888,7 +2888,12 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 5) Handle SSE Endpoint (GET /sse, GET /mcp/sse, or GET /mcp with Accept: text/event-stream)
+  // 5) Resolve Session Context early
+  const explicitToken = body?.params?.arguments?.sessionToken || body?.params?.arguments?.sessionId;
+  const sessionId = resolveSessionId(req, explicitToken);
+  const sessionUser = await resolveSessionUser(req, explicitToken);
+
+  // 6) Handle SSE Endpoint (GET /sse, GET /mcp/sse, or GET /mcp with Accept: text/event-stream)
   const acceptHeader = String(req.headers["accept"] || "");
   const isSseRequest =
     pathname === "/sse" ||
@@ -2913,7 +2918,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 6) Handle GET /mcp (Claude Connector Health & Discovery JSON)
+  // 7) Handle GET /mcp (Claude Connector Health & Discovery JSON)
   if (req.method === "GET" && (pathname === "/mcp" || pathname === "/api/mcp")) {
     res.setHeader("Link", `<${reqHost}/.well-known/oauth-protected-resource>; rel="oauth-protected-resource"`);
     res.setHeader("WWW-Authenticate", `Bearer realm="BTNX", resource_metadata="${reqHost}/.well-known/oauth-protected-resource"`);
@@ -2936,11 +2941,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 7) Handle JSON-RPC 2.0 (Claude Custom Connector, Cursor, and ChatGPT)
-  const explicitToken = body?.params?.arguments?.sessionToken || body?.params?.arguments?.sessionId;
-  const sessionId = resolveSessionId(req, explicitToken);
-  const sessionUser = await resolveSessionUser(req, explicitToken);
-
+  // 8) Handle JSON-RPC 2.0 (Claude Custom Connector, Cursor, and ChatGPT)
   if (req.method === "POST") {
     const id = body?.id ?? 1;
     const method = body?.method;
