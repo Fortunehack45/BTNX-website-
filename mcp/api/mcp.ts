@@ -2888,10 +2888,9 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 5) Resolve Session Context early
+  // 5) Resolve Session Context early (synchronous)
   const explicitToken = body?.params?.arguments?.sessionToken || body?.params?.arguments?.sessionId;
   const sessionId = resolveSessionId(req, explicitToken);
-  const sessionUser = await resolveSessionUser(req, explicitToken);
 
   // 6) Handle SSE Endpoint (GET /sse, GET /mcp/sse, or GET /mcp with Accept: text/event-stream)
   const acceptHeader = String(req.headers["accept"] || "");
@@ -3009,7 +3008,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       const toolArgs = body?.params?.arguments || {};
       const callToken = toolArgs.sessionToken || toolArgs.sessionId || explicitToken;
       const effectiveSessionId = resolveSessionId(req, callToken) || sessionId;
-      const effectiveUser = (callToken ? await resolveSessionUser(req, callToken) : null) || sessionUser;
+      const effectiveUser = await resolveSessionUser(req, callToken);
 
       const resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
 
@@ -3083,7 +3082,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       const toolArgs = body?.params?.arguments || {};
       const callToken = toolArgs.sessionToken || toolArgs.sessionId || explicitToken;
       const effectiveSessionId = resolveSessionId(req, callToken) || qSessionId || sessionId;
-      const effectiveUser = (callToken ? await resolveSessionUser(req, callToken) : null) || sessionUser;
+      const effectiveUser = await resolveSessionUser(req, callToken);
       const resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
       const isError = Boolean(resultData?.error || resultData?.status === "error");
       jsonRpcResp = {
