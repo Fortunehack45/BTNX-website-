@@ -2342,12 +2342,12 @@ const HTML_DASHBOARD = `<!DOCTYPE html>
 export default async function handler(req: IncomingMessage & { body?: any }, res: ServerResponse) {
   // Global CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD, DELETE");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, x-btnx-key, mcp-session-id, x-btnx-session"
+    "Content-Type, Authorization, x-btnx-key, mcp-session-id, x-btnx-session, x-session-id, baggage, sentry-trace, traceparent"
   );
-  res.setHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id, x-btnx-session");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id, x-btnx-session, x-session-id");
 
   // Handle Preflight
   if (req.method === "OPTIONS") {
@@ -2888,10 +2888,35 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 6) Handle GET /mcp (Claude Connector Health & Check)
+  // 5) Handle SSE Endpoint (GET /sse, GET /mcp/sse, or GET /mcp with Accept: text/event-stream)
+  const acceptHeader = String(req.headers["accept"] || "");
+  const isSseRequest =
+    pathname === "/sse" ||
+    pathname === "/mcp/sse" ||
+    ((pathname === "/mcp" || pathname === "/api/mcp") && acceptHeader.includes("text/event-stream"));
+
+  if (isSseRequest && req.method === "GET") {
+    const sseSessionId = (sessionId && sessionId.length >= 8) ? sessionId : ("mcp_sess_" + crypto.randomBytes(16).toString("hex"));
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "mcp-session-id": sseSessionId,
+    });
+    res.write(`event: endpoint\ndata: ${reqHost}/mcp/messages?sessionId=${sseSessionId}\n\n`);
+    res.write(`: keepalive\n\n`);
+    globalSseStreams.set(sseSessionId, res);
+    req.on("close", () => {
+      globalSseStreams.delete(sseSessionId);
+    });
+    return;
+  }
+
+  // 6) Handle GET /mcp (Claude Connector Health & Discovery JSON)
   if (req.method === "GET" && (pathname === "/mcp" || pathname === "/api/mcp")) {
     res.setHeader("Link", `<${reqHost}/.well-known/oauth-protected-resource>; rel="oauth-protected-resource"`);
-    res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${reqHost}/.well-known/oauth-protected-resource"`);
+    res.setHeader("WWW-Authenticate", `Bearer realm="BTNX", resource_metadata="${reqHost}/.well-known/oauth-protected-resource"`);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       status: "healthy",
@@ -2911,7 +2936,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 5) Handle JSON-RPC 2.0 (Claude Custom Connector, Cursor, and ChatGPT)
+  // 7) Handle JSON-RPC 2.0 (Claude Custom Connector, Cursor, and ChatGPT)
   const explicitToken = body?.params?.arguments?.sessionToken || body?.params?.arguments?.sessionId;
   const sessionId = resolveSessionId(req, explicitToken);
   const sessionUser = await resolveSessionUser(req, explicitToken);
@@ -2922,8 +2947,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
     if (method === "initialize") {
       const clientProto = String(body?.params?.protocolVersion || "2024-11-05");
-      const supportedVersions = ["2024-11-05", "2024-10-07"];
-      const negotiatedProtocol = supportedVersions.includes(clientProto) ? clientProto : "2024-11-05";
+      const negotiatedProtocol = clientProto.startsWith("202") ? clientProto : "2024-11-05";
 
       const establishedSessionId = (sessionId && sessionId.length >= 8)
         ? sessionId
@@ -2931,7 +2955,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
       // Set headers required by MCP Streamable HTTP specification
       res.setHeader("mcp-session-id", establishedSessionId);
-      res.setHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id, x-btnx-session");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id, x-btnx-session, x-session-id");
 
       const response = {
         jsonrpc: "2.0",
@@ -2940,17 +2964,21 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           protocolVersion: negotiatedProtocol,
           capabilities: {
             tools: { listChanged: true },
+            resources: { subscribe: false, listChanged: false },
+            prompts: { listChanged: false },
+            logging: {},
           },
           serverInfo: {
             name: "BTNX Store Remote MCP",
             version: "2.5.0",
           },
+          instructions: "BTNX Store MCP Server for luxury fashion catalog, client orders, tracking, and concierge care.",
         },
       };
       res.writeHead(200, {
         "Content-Type": "application/json",
         "mcp-session-id": establishedSessionId,
-        "Access-Control-Expose-Headers": "Content-Type, mcp-session-id, x-btnx-session",
+        "Access-Control-Expose-Headers": "Content-Type, mcp-session-id, x-btnx-session, x-session-id",
       });
       res.end(JSON.stringify(response));
       return;
@@ -3021,27 +3049,6 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         error: { code: -32601, message: `Method '${method}' not found.` },
       })
     );
-    return;
-  }
-
-  // 6) Handle SSE Endpoint & POST /mcp/messages
-  const acceptHeader = req.headers["accept"] || "";
-  const isSseRequest = acceptHeader.includes("text/event-stream") || pathname === "/sse" || pathname === "/mcp/sse";
-  if (isSseRequest && req.method === "GET") {
-    const sseSessionId = (sessionId && sessionId.length >= 8) ? sessionId : ("mcp_sess_" + crypto.randomBytes(16).toString("hex"));
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-      "Access-Control-Allow-Origin": "*",
-      "mcp-session-id": sseSessionId,
-    });
-    res.write(`event: endpoint\ndata: ${reqHost}/mcp/messages?sessionId=${sseSessionId}\n\n`);
-    res.write(`: keepalive\n\n`);
-    globalSseStreams.set(sseSessionId, res);
-    req.on("close", () => {
-      globalSseStreams.delete(sseSessionId);
-    });
     return;
   }
 

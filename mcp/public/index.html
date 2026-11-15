@@ -193,16 +193,29 @@
     </div>
 
     <div class="section-title">Claude Desktop &amp; Cursor Config</div>
+    <p style="font-size: 11px; color: #A7A299; margin-bottom: 8px;">Add to your <code>claude_desktop_config.json</code> (%APPDATA%\Claude\claude_desktop_config.json):</p>
     <div class="code-container">
       <button class="copy-btn" onclick="copyConfig()">Copy JSON</button>
       <pre class="code-block" id="configJson">{
   "mcpServers": {
     "btnx-store": {
       "command": "npx",
-      "args": ["-y", "btnx-mcp"]
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://btnx-website-mcp.vercel.app/sse"
+      ]
     }
   }
 }</pre>
+    </div>
+
+    <div class="section-title">Claude.ai (Web) Custom Connector</div>
+    <p style="font-size: 11px; color: #A7A299; margin-bottom: 8px;">In Claude.ai &rarr; Settings &rarr; Connectors &rarr; Add Custom Connector:</p>
+    <div class="code-block" style="margin-bottom: 16px;">
+      <span style="color: #A7A299;">Name:</span> BTNX Store<br />
+      <span style="color: #A7A299;">Server URL:</span> <strong style="color: #C89B62;">https://btnx-website-mcp.vercel.app/mcp</strong><br />
+      <span style="color: #A7A299;">Transport:</span> Streamable HTTP or SSE (<code>https://btnx-website-mcp.vercel.app/sse</code>)
     </div>
 
     <div style="text-align: center; margin-top: 16px;">
