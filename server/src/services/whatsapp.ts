@@ -14,6 +14,13 @@ import {
 import { GoogleGenAI } from "@google/genai";
 import { resolveMcpUser, McpAuthenticatedUser } from "../mcp.js";
 import { NEW_YEAR_PRODUCTS } from "../ui/productsData.js";
+import {
+  verifyAndLinkWhatsApp,
+  resolveWhatsAppSender,
+  unlinkWhatsApp,
+  normalizePhoneNumber,
+} from "../auth/accountLinking.js";
+import { generateSignedResourceToken } from "../auth/tokens.js";
 
 export interface WhatsAppMessagePayload {
   from: string; // Customer phone number (e.g. "whatsapp:+2348012345678" or "+2348012345678")
@@ -50,7 +57,7 @@ const localWhatsAppOrders = new Map<string, any>();
  * Clean and normalize a phone number
  */
 function cleanPhoneNumber(raw: string): string {
-  return raw.replace(/^whatsapp:/i, "").trim();
+  return normalizePhoneNumber(raw.replace(/^whatsapp:/i, "").trim());
 }
 
 /**
@@ -68,53 +75,38 @@ function extractTokenFromText(text: string): string | null {
     return t;
   }
 
-  // Pattern: Raw master key
-  if (t === (process.env.MCP_AUTH_KEY || "btnx_mcp_secret_2026")) {
-    return t;
-  }
-
   return null;
 }
 
 /**
- * Resolves the authenticated user for this WhatsApp sender
+ * Resolves the authenticated user for this WhatsApp sender using verified WhatsApp identities
  */
 async function resolveSenderAccount(phone: string): Promise<McpAuthenticatedUser | null> {
-  // 1. Check in Firestore whatsappUsers collection (explicitly linked via Bearer key)
-  try {
-    const waDoc = await getDoc(doc(db, "whatsappUsers", phone));
-    if (waDoc.exists()) {
-      const data = waDoc.data();
-      return {
-        userId: data.userId || waDoc.id,
-        email: data.email || "",
-        name: data.name || "BTNX VIP Client",
-        phone: data.phone || phone,
-        shippingAddress: data.shippingAddress || "",
-        isMasterAdmin: Boolean(data.isMasterAdmin),
-      };
-    }
-  } catch {}
+  const normalized = normalizePhoneNumber(phone);
+  if (!normalized) return null;
 
-  // 2. Check if a registered user in Firestore has this phone number
   try {
-    const q = query(collection(db, "users"), where("phone", "==", phone));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const uDoc = snap.docs[0];
-      const data = uDoc.data();
-      return {
-        userId: uDoc.id,
-        email: data.email || "",
-        name: data.name || data.displayName || "BTNX VIP Client",
-        phone: data.phone || phone,
-        shippingAddress: data.shippingStreet
-          ? `${data.shippingStreet}, ${data.shippingCity || ""}, ${data.shippingCountry || "Nigeria"}`.trim()
-          : data.shippingAddress || "",
-        isMasterAdmin: false,
-      };
+    // 1. Resolve canonical UID from verified whatsapp_identities mapping
+    const uid = await resolveWhatsAppSender(db, normalized);
+    if (uid) {
+      const uSnap = await getDoc(doc(db, "users", uid));
+      if (uSnap.exists()) {
+        const data = uSnap.data();
+        return {
+          userId: uid,
+          email: data.email || "",
+          name: data.name || data.displayName || "BTNX VIP Client",
+          phone: normalized,
+          shippingAddress: data.shippingStreet
+            ? `${data.shippingStreet}, ${data.shippingCity || ""}, ${data.shippingCountry || "Nigeria"}`.trim()
+            : data.shippingAddress || "",
+          isMasterAdmin: data.role === "admin" || Boolean(data.isAdmin),
+        };
+      }
     }
-  } catch {}
+  } catch (err: any) {
+    console.warn("[WhatsApp Auth] Identity resolution error:", err?.message);
+  }
 
   return null;
 }
@@ -149,7 +141,53 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
   }
 
   // =========================================================================
-  // 1. BEARER API KEY AUTHENTICATION IN CHAT (NO LOGIN SCREEN REQUIRED)
+  // 1. ACCOUNT LINKING VIA 6-DIGIT CHALLENGE CODE (SECURE WEB LINKING)
+  // =========================================================================
+  const linkMatch = rawText.match(/^(?:link|verify|code)\s+([0-9]{6})/i) || rawText.match(/^([0-9]{6})$/);
+  if (linkMatch) {
+    const code = linkMatch[1];
+    const linkResult = await verifyAndLinkWhatsApp(db, customerPhone, code);
+    if (linkResult.success && linkResult.uid) {
+      const uSnap = await getDoc(doc(db, "users", linkResult.uid));
+      const uData = uSnap.exists() ? uSnap.data() : {};
+      session.user = {
+        userId: linkResult.uid,
+        email: uData.email || "",
+        name: uData.name || uData.displayName || "BTNX VIP Client",
+        phone: customerPhone,
+        shippingAddress: uData.shippingStreet
+          ? `${uData.shippingStreet}, ${uData.shippingCity || ""}, ${uData.shippingCountry || "Nigeria"}`.trim()
+          : uData.shippingAddress || "",
+        isMasterAdmin: uData.role === "admin" || Boolean(uData.isAdmin),
+      };
+
+      return {
+        replyText:
+          `✅ *WhatsApp Successfully Linked to Your BTNX Account!* ✨\n\n` +
+          `Welcome back, *${session.user.name}* (${session.user.email}).\n\n` +
+          `Your WhatsApp is now authenticated directly to your canonical BTNX customer profile.\n\n` +
+          `• Type *\"my orders\"* to view your actual purchase history\n` +
+          `• Type *\"track\"* to check your active parcel dispatch\n` +
+          `• Type *\"buy [item]\"* for instant express checkout with your saved delivery address\n` +
+          `• Type *\"unlink\"* at any time to disconnect your WhatsApp.`,
+        suggestedActions: ["My Orders", "Track Parcel", "Browse Catalog"],
+        authenticatedAs: session.user.email,
+      };
+    } else {
+      return {
+        replyText:
+          `❌ *Linking Failed*\n\n` +
+          `${linkResult.message}\n\n` +
+          `To link your account:\n` +
+          `1. Open your BTNX website profile (${host})\n` +
+          `2. Under *Link WhatsApp*, generate a 6-digit verification code\n` +
+          `3. Reply here with: *LINK <code>*`,
+      };
+    }
+  }
+
+  // =========================================================================
+  // 1B. BEARER PAT AUTHENTICATION IN CHAT
   // =========================================================================
   const explicitToken = extractTokenFromText(rawText);
   if (explicitToken) {
@@ -157,39 +195,27 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     if (resolved) {
       session.user = resolved;
 
-      // Persist WhatsApp phone <-> User Account mapping in Firestore
-      try {
-        await setDoc(doc(db, "whatsappUsers", customerPhone), {
-          ...resolved,
-          token: explicitToken,
-          linkedPhone: customerPhone,
-          linkedAt: new Date().toISOString(),
-        });
-      } catch (err: any) {
-        console.error("[WhatsApp Auth] Failed to save linked account:", err?.message);
-      }
-
       return {
         replyText:
-          `✅ *Account Successfully Authenticated via Bearer API Key!* ✨\n\n` +
+          `✅ *Account Successfully Authenticated via Personal AI Key!* ✨\n\n` +
           `Welcome back, *${resolved.name || "VIP Client"}* (${resolved.email}).\n\n` +
-          `Your WhatsApp is now authenticated directly to your personal BTNX account. No web login required!\n\n` +
-          `• Type *\"my orders\"* to view your actual purchase history\n` +
+          `Your WhatsApp is now authenticated directly to your personal BTNX account.\n\n` +
+          `• Type *\"my orders\"* to view your purchase history\n` +
           `• Type *\"track\"* to check your active parcel dispatch\n` +
-          `• Type *\"buy [item]\"* for instant express checkout with your saved delivery address\n` +
-          `• Type *\"support [issue]\"* to dispatch a priority request to Osogbo`,
+          `• Type *\"buy [item]\"* for instant express checkout with your saved address\n` +
+          `• Type *\"unlink\"* to disconnect at any time.`,
         suggestedActions: ["My Orders", "Track Latest Order", "Browse Collection"],
         authenticatedAs: resolved.email,
       };
     } else {
       return {
         replyText:
-          `❌ *Invalid Bearer API Key.*\n\n` +
+          `❌ *Invalid Personal Access Token.*\n\n` +
           `The key provided could not be matched to an active BTNX account.\n\n` +
-          `To get your Personal Key:\n` +
+          `To link your account:\n` +
           `1. Open your BTNX website profile (${host})\n` +
-          `2. Under *Connected AI (MCP)*, tap *Copy Bearer Key*\n` +
-          `3. Reply here with: *auth Bearer btnx_pat_...*`,
+          `2. Tap *Link WhatsApp* or copy your *Personal AI Key*\n` +
+          `3. Reply here with: *LINK <code>* or *auth Bearer btnx_pat_...*`,
       };
     }
   }
@@ -204,26 +230,29 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
           `• *Email:* ${session.user.email}\n` +
           `• *Phone:* ${customerPhone}\n` +
           `• *Saved Address:* ${session.user.shippingAddress || "None on file"}\n` +
-          `• *Status:* Authenticated via Bearer API Key 🔐\n\n` +
-          `To unlink your WhatsApp, reply *\"disconnect\"*.`,
+          `• *Status:* Authenticated via Canonical BTNX Profile 🔐\n\n` +
+          `To unlink your WhatsApp, reply *\"unlink\"*.`,
         suggestedActions: ["My Orders", "Track Parcel", "Browse Catalog"],
       };
     } else {
       return {
         replyText:
           `🔒 *You are currently browsing as a Guest.*\n\n` +
-          `To link your BTNX account and access your orders without logging into the website, reply with your personal Bearer key:\n\n` +
-          `*auth Bearer btnx_pat_...*\n\n` +
-          `(Find your key on the BTNX website under Profile &rarr; Connected AI).`,
+          `To link your BTNX account and access your orders without logging into the website:\n\n` +
+          `1. Log in to the BTNX website (${host})\n` +
+          `2. Go to Profile &rarr; *Link WhatsApp*\n` +
+          `3. Reply here with: *LINK <code>*`,
         suggestedActions: ["Browse Catalog", "Latest Promos"],
       };
     }
   }
 
   if (lowerText === "disconnect" || lowerText === "unlink" || lowerText === "logout") {
-    try {
-      await deleteDoc(doc(db, "whatsappUsers", customerPhone)).catch(() => {});
-    } catch {}
+    if (session.user?.userId) {
+      await unlinkWhatsApp(db, session.user.userId, customerPhone).catch(() => {});
+    } else {
+      await unlinkWhatsApp(db, "", customerPhone).catch(() => {});
+    }
     session.user = undefined;
     return {
       replyText: `🔓 *Your WhatsApp has been unlinked from your account.* You are now browsing as a Guest.`,
@@ -244,7 +273,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     const greetingName = session.user?.name ? `, *${session.user.name.split(" ")[0]}*` : "";
     const authNote = session.user
       ? `🔒 *Authenticated Account:* ${session.user.email}`
-      : `💡 *Tip:* Reply with *\"auth Bearer [your-key]\"* to link your account.`;
+      : `💡 *Tip:* Reply with *\"LINK [code]\"* from your BTNX profile to link your account.`;
 
     return {
       replyText:
@@ -270,45 +299,43 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     lowerText === "my purchases" ||
     lowerText === "order history"
   ) {
+    if (!session.user) {
+      return {
+        replyText:
+          `🔒 *Private Order History Protected*\n\n` +
+          `To view your orders directly in WhatsApp, please link your BTNX account:\n\n` +
+          `1. Log into your account on the BTNX website (${host})\n` +
+          `2. Open your Profile and tap *Link WhatsApp*\n` +
+          `3. Reply here with: *LINK <code>*\n\n` +
+          `Or check a specific parcel with your order reference by typing: *track BX-XXXXXX*`,
+        suggestedActions: ["Browse Catalog", "Latest Promos"],
+      };
+    }
+
     let orders: any[] = [];
-
-    if (session.user) {
-      try {
-        const q = session.user.isMasterAdmin
-          ? query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(5))
-          : query(
-              collection(db, "orders"),
-              where("userId", "==", session.user.userId),
-              orderBy("createdAt", "desc"),
-              limit(5)
-            );
-        const snap = await getDocs(q);
-        orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      } catch {}
-
-      if (!orders.length) {
-        try {
-          const q2 = query(
+    try {
+      const q = session.user.isMasterAdmin
+        ? query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(5))
+        : query(
             collection(db, "orders"),
-            where("customerEmail", "==", session.user.email),
+            where("userId", "==", session.user.userId),
             orderBy("createdAt", "desc"),
             limit(5)
           );
-          const snap2 = await getDocs(q2);
-          orders = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
-        } catch {}
-      }
-    } else {
-      // Look up by WhatsApp phone number
+      const snap = await getDocs(q);
+      orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    } catch {}
+
+    if (!orders.length && session.user.email) {
       try {
-        const q = query(
+        const q2 = query(
           collection(db, "orders"),
-          where("customerPhone", "==", customerPhone),
+          where("customerEmail", "==", session.user.email),
           orderBy("createdAt", "desc"),
           limit(5)
         );
-        const snap = await getDocs(q);
-        orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const snap2 = await getDocs(q2);
+        orders = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
       } catch {}
     }
 
@@ -318,11 +345,15 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
           const itemName =
             o.items?.[0]?.productName || o.items?.[0]?.product?.name || "BTNX Garment Piece";
           const count = (o.items?.length || 1) > 1 ? ` + ${o.items.length - 1} more` : "";
+          const signedToken = generateSignedResourceToken(o.id, "invoice", 7 * 24 * 3600);
+          const invoiceUrl = `${host}/render/invoice/${o.id}?sig=${signedToken.sig}&exp=${signedToken.exp}`;
+
           return (
             `${idx + 1}️⃣ *Order #${o.id}* — ₦${Number(o.total || 0).toLocaleString()}\n` +
             `   • *Item:* ${itemName}${count}\n` +
             `   • *Status:* 🚚 ${o.status || "Processing"}\n` +
             `   • *Date:* ${o.date || "Recent"}\n` +
+            `   • *Receipt:* ${invoiceUrl}\n` +
             `   • *Track:* Reply *\"track ${o.id}\"*`
           );
         })
@@ -338,9 +369,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     }
 
     return {
-      replyText: session.user
-        ? `You do not have any active orders under *${session.user.email}*. Type *\"catalog\"* to explore our latest pieces!`
-        : `To view your orders directly in WhatsApp without logging in on the web, please link your account with your Bearer API key:\n\n*auth Bearer btnx_pat_...*\n\nOr check a specific parcel by typing: *track BX-849201*`,
+      replyText: `You do not have any active orders under *${session.user.email}*. Type *\"catalog\"* to explore our latest pieces!`,
       suggestedActions: ["Browse Catalog", "Latest Promos"],
     };
   }
@@ -389,6 +418,19 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     }
 
     if (orderData) {
+      // Check customer ownership if authenticated
+      if (
+        session.user &&
+        !session.user.isMasterAdmin &&
+        orderData.userId &&
+        orderData.userId !== session.user.userId &&
+        orderData.customerEmail !== session.user.email
+      ) {
+        return {
+          replyText: `🔒 *Access Denied*\n\nOrder #${orderId} does not belong to your authenticated account.`,
+        };
+      }
+
       const itemsList =
         orderData.items
           ?.map(
@@ -396,6 +438,11 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
               `${it.productName || it.product?.name || "Garment"} (${it.size || "M"} · ${it.color || "Black"})`
           )
           .join(", ") || "Fashion items";
+
+      const signedInvoice = generateSignedResourceToken(orderId, "invoice", 7 * 24 * 3600);
+      const signedTrack = generateSignedResourceToken(orderId, "track", 7 * 24 * 3600);
+      const invoiceUrl = `${host}/render/invoice/${orderId}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`;
+      const trackUrl = `${host}/render/track/${orderId}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`;
 
       return {
         replyText:
@@ -405,21 +452,23 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
           `• *Total:* ₦${Number(orderData.total || 0).toLocaleString()}\n` +
           `• *Fulfillment Desk:* Osogbo Central Hub, Osun State\n` +
           `• *Delivery Destination:* ${orderData.shippingAddress || "On file"}\n` +
-          `• *Courier Note:* Our rider is on route and will call 30 minutes prior to arrival.\n\n` +
-          `📄 *Official Invoice Link:* ${host}/render/invoice/${orderId}`,
+          `• *Courier Note:* Our rider will call 30 minutes prior to delivery arrival.\n\n` +
+          `📄 *Official Invoice:* ${invoiceUrl}\n` +
+          `🗺️ *Live Visual Tracker:* ${trackUrl}`,
         suggestedActions: ["My Orders", "Speak with Human", "Shop Collection"],
       };
     }
 
     return {
       replyText:
-        `🚚 *Order #${orderId} Status:* Dispatched from Osogbo Hub.\n\n` +
-        `Your parcel is in transit with our express logistics team. The courier will contact your phone prior to arrival.`,
+        `❌ *Order #${orderId} Not Found*\n\n` +
+        `We could not find an order with reference #${orderId} in our dispatch database. ` +
+        `Please verify your order number or type *\"my orders\"* to see your active purchases.`,
     };
   }
 
   // =========================================================================
-  // 5. PROMO CODES
+  // 5. PROMO CODES (FETCHED DIRECTLY FROM FIRESTORE DATABASE)
   // =========================================================================
   if (
     lowerText.includes("promo") ||
@@ -427,13 +476,31 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     lowerText.includes("voucher") ||
     lowerText.includes("coupon")
   ) {
+    let promoLines = "";
+    try {
+      const snap = await getDocs(collection(db, "promoCodes"));
+      const activePromos = snap.docs
+        .map((d) => d.data())
+        .filter((p: any) => p.isActive !== false && (!p.expiresAt || new Date(p.expiresAt) > new Date()));
+
+      if (activePromos.length > 0) {
+        promoLines = activePromos
+          .map((p: any) => `• Code: *${p.code}* (${p.discountPercentage || p.percentage || 0}% Off)`)
+          .join("\n");
+      }
+    } catch {}
+
+    if (!promoLines) {
+      promoLines = "• Complimentary luxury nationwide delivery on orders over ₦150,000.";
+    } else {
+      promoLines += "\n• Complimentary luxury nationwide delivery on orders over ₦150,000.";
+    }
+
     return {
       replyText:
         `🏷️ *Active BTNX Privileges:*\n\n` +
-        `• Code: *BTNX50* (50% Off your entire basket)\n` +
-        `• Code: *KLAMBY50* (50% VIP Archive pieces)\n` +
-        `• Complimentary luxury nationwide delivery on orders over ₦150,000.\n\n` +
-        `Reply *\"buy [piece]\"* to apply this privilege to your order directly in WhatsApp.`,
+        `${promoLines}\n\n` +
+        `Reply *\"buy [piece]\"* to apply privileges to your order directly in WhatsApp.`,
       suggestedActions: ["Browse Catalog", "My Orders"],
     };
   }
@@ -459,14 +526,29 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     }
 
     if (orderId) {
-      return {
-        replyText:
-          `📄 *BTNX Official Digital Invoice #${orderId}*\n\n` +
-          `• Prepared by: BTNX Atelier Dispatch, Osogbo Hub\n` +
-          `• Verified with official digital stamp & itemized line items.\n\n` +
-          `🔗 *View Official Invoice Dossier:* ${host}/render/invoice/${orderId}`,
-        suggestedActions: ["Track Order", "My Orders"],
-      };
+      let orderExists = false;
+      try {
+        const snap = await getDoc(doc(db, "orders", orderId));
+        orderExists = snap.exists();
+      } catch {}
+
+      if (orderExists) {
+        const signedToken = generateSignedResourceToken(orderId, "invoice", 7 * 24 * 3600);
+        const invoiceUrl = `${host}/render/invoice/${orderId}?sig=${signedToken.sig}&exp=${signedToken.exp}`;
+
+        return {
+          replyText:
+            `📄 *BTNX Official Digital Invoice #${orderId}*\n\n` +
+            `• Prepared by: BTNX Atelier Dispatch, Osogbo Hub\n` +
+            `• Authenticated digital receipt with itemized line items.\n\n` +
+            `🔗 *View Official Invoice Dossier:* ${invoiceUrl}`,
+          suggestedActions: ["Track Order", "My Orders"],
+        };
+      } else {
+        return {
+          replyText: `❌ *Order #${orderId} Not Found*\n\nWe could not find an invoice for reference #${orderId}.`,
+        };
+      }
     }
     return {
       replyText: `Please provide your order ID to view its invoice, e.g.: *invoice BX-849201*`,
@@ -657,13 +739,16 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
       }
 
       session.stage = "idle";
+      const signedInvoice = generateSignedResourceToken(orderId, "invoice", 7 * 24 * 3600);
+      const invoiceUrl = `${host}/render/invoice/${orderId}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`;
+
       return {
         replyText:
           `🎉 *Order Confirmed! Ref: #${orderId}*\n\n` +
           `Thank you, *${session.customerName}*. Your piece has been reserved at our Osogbo hub and queued for dispatch.\n\n` +
           `• Estimated delivery: 2–4 Business Days.\n` +
           `• You can track progress anytime by replying: *track ${orderId}*\n` +
-          `• View official digital invoice: ${host}/render/invoice/${orderId}`,
+          `• View official digital invoice: ${invoiceUrl}`,
         orderId,
       };
     } else {
@@ -723,8 +808,8 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     try {
       const ai = new GoogleGenAI({ apiKey });
       const prompt =
-        `You are the luxury client advisor for BTNX contemporary fashion. ` +
-        `Prices are in Nigerian Naira (₦). Active promo code is BTNX50 (50% off). ` +
+        `You are the luxury client advisor for BTNX contemporary fashion atelier. ` +
+        `Prices are in Nigerian Naira (₦). ` +
         `Customer is messaging via WhatsApp. Sender name: "${payload.senderName || "Client"}". ` +
         (session.user ? `Authenticated customer: ${session.user.name} (${session.user.email}). ` : "") +
         `Customer message: "${rawText}". ` +
@@ -754,8 +839,8 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
       `• *\"my orders\"* to view your active purchases\n` +
       `• *\"track\"* to check dispatch progress\n` +
       `• *\"catalog\"* to browse pieces\n` +
-      `• *\"promos\"* for discount vouchers\n` +
-      `• *\"auth Bearer [key]\"* to authenticate your account`,
+      `• *\"promos\"* for active privilege vouchers\n` +
+      `• *\"LINK [code]\"* to link your BTNX account`,
     suggestedActions: ["My Orders", "Track Parcel", "Browse Catalog"],
   };
 }

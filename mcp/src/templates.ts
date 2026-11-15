@@ -193,7 +193,7 @@ export function renderInvoiceHtml(order: any): string {
       </div>
       ${discountAmount > 0 ? `
       <div style="display: flex; justify-content: space-between; font-size: 12px; color: #966830; margin-bottom: 4px;">
-        <span>Privilege Discount (BTNX50)</span>
+        <span>Privilege Discount${order.promoCode ? ` (${escapeHtml(order.promoCode)})` : ""}</span>
         <span class="font-mono">-${formatNaira(discountAmount)}</span>
       </div>` : ""}
       <div style="display: flex; justify-content: space-between; font-size: 12px; color: #66625B; margin-bottom: 8px;">
@@ -345,6 +345,54 @@ export function renderSupportTicketHtml(ticket: any): string {
     <div style="padding: 12px 16px; border-top: 1px solid #E6E2DA; background: #FAF9F7; font-size: 11px; color: #66625B; text-align: center;">
       Active SLA: Human specialists respond within 15 minutes during operating hours.
     </div>
+  </div>
+</body>
+</html>`;
+}
+
+// 6. ACCESS RESTRICTED RENDERER
+export function renderAccessDeniedHtml(reason = "Access to this private luxury record requires verified authorization."): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTNX Atelier — Access Restricted</title>
+  <style>${BASE_STYLES}</style>
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:90vh;">
+  <div style="max-width: 440px; width: 100%; text-align: center; padding: 40px 32px;" class="btnx-card">
+    <div style="height: 24px; color: #141413; margin-bottom: 24px;">
+      ${BTNX_LOGO_SVG}
+    </div>
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 700; margin-bottom: 8px;">Private Document</div>
+    <h1 class="luxury-serif" style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">Access Restricted</h1>
+    <p style="font-size: 13px; color: #66625B; line-height: 1.6; margin-bottom: 28px;">${escapeHtml(reason)}</p>
+    <a href="https://btnx.store" style="display:inline-block;padding:12px 24px;background:#141413;color:#FAF9F7;text-decoration:none;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;border-radius:2px;">Return to Store</a>
+  </div>
+</body>
+</html>`;
+}
+
+// 7. RECORD NOT FOUND RENDERER
+export function renderNotFoundHtml(resourceType = "Record", id = ""): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTNX Atelier — ${escapeHtml(resourceType)} Not Found</title>
+  <style>${BASE_STYLES}</style>
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:90vh;">
+  <div style="max-width: 440px; width: 100%; text-align: center; padding: 40px 32px;" class="btnx-card">
+    <div style="height: 24px; color: #141413; margin-bottom: 24px;">
+      ${BTNX_LOGO_SVG}
+    </div>
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #966830; font-weight: 700; margin-bottom: 8px;">Archive Record</div>
+    <h1 class="luxury-serif" style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">${escapeHtml(resourceType)} Not Found</h1>
+    <p style="font-size: 13px; color: #66625B; line-height: 1.6; margin-bottom: 28px;">No verified record exists with reference <span class="font-mono" style="font-weight:700;color:#141413;">${escapeHtml(id)}</span> in the BTNX database.</p>
+    <a href="https://btnx.store" style="display:inline-block;padding:12px 24px;background:#141413;color:#FAF9F7;text-decoration:none;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:700;border-radius:2px;">Return to Store</a>
   </div>
 </body>
 </html>`;

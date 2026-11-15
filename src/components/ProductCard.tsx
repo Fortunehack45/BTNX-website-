@@ -5,6 +5,7 @@ import { formatNaira } from "../utils/currency";
 import { getSwatchHex } from "../utils/colors";
 import { getDiscountPercent } from "../utils/invoice";
 import { galleryCardVariants } from "../utils/motion";
+import { LOCAL_PRODUCT_IMAGES } from "../data";
 import GalleryImage from "./GalleryImage";
 
 interface ProductCardProps {
@@ -64,6 +65,7 @@ export default function ProductCard({
         <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm mb-2.5 sm:mb-4">
           <GalleryImage
             src={product.image}
+            fallbackSrc={LOCAL_PRODUCT_IMAGES[product.id]}
             alt={product.name}
             className={`w-full h-full object-cover object-center transition-all duration-700 ease-out ${
               secondaryImage ? "group-hover:opacity-0" : "group-hover:scale-[1.03]"

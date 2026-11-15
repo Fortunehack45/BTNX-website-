@@ -80,7 +80,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "btnx_get_active_promos",
         description:
-          "Get currently active voucher codes, discount percentages (e.g. BTNX50 for 50% off), and complimentary shipping thresholds.",
+          "Get currently active voucher codes directly from the BTNX store database, with real discount percentages and complimentary shipping thresholds.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -89,7 +89,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "btnx_calculate_order",
         description:
-          "Calculate item subtotals, promo code discount, nationwide shipping fees, and final order total in Nigerian Naira (₦).",
+          "Calculate item subtotals, promo code discount against live database records, nationwide shipping fees, and final order total in Nigerian Naira (₦).",
         inputSchema: {
           type: "object",
           properties: {
@@ -107,7 +107,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             promoCode: {
               type: "string",
-              description: "Optional promo code (e.g. 'BTNX50')",
+              description: "Optional promo voucher code to validate against database",
             },
           },
           required: ["items"],
@@ -336,24 +336,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "btnx_get_active_promos": {
+        let activeCodes: any[] = [];
+        try {
+          const snap = await getDocs(collection(db, "promoCodes"));
+          activeCodes = snap.docs
+            .map((d) => d.data())
+            .filter((p: any) => p.isActive !== false && (!p.expiresAt || new Date(p.expiresAt) > new Date()))
+            .map((p: any) => ({
+              code: p.code,
+              discount: `${p.discountPercentage || p.percentage || 0}% Off`,
+              expiresAt: p.expiresAt || "Ongoing",
+            }));
+        } catch (err: any) {
+          console.error("[BTNX MCP] Failed to query promoCodes:", err?.message);
+        }
+
         return {
           content: [
             {
               type: "text",
               text: JSON.stringify(
                 {
-                  activeCodes: [
-                    {
-                      code: "BTNX50",
-                      discount: "50% Off Total Basket",
-                      validUntil: "2027-12-31",
-                    },
-                    {
-                      code: "KLAMBY50",
-                      discount: "50% Off Archive Pieces",
-                      validUntil: "2027-12-31",
-                    },
-                  ],
+                  activeCodes,
                   shippingPrivilege:
                     "Complimentary luxury nationwide shipping unlocked on all orders over ₦150,000.",
                 },
@@ -367,14 +371,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "btnx_calculate_order": {
         const items = (args?.items as any[]) || [];
-        const promoCode = String(args?.promoCode || "").toUpperCase();
+        const promoCode = String(args?.promoCode || "").trim().toUpperCase();
 
         let subtotal = 0;
         for (const it of items) {
           subtotal += Number(it.price || 0) * Number(it.quantity || 1);
         }
 
-        const discountPct = promoCode === "BTNX50" || promoCode === "KLAMBY50" ? 0.5 : 0;
+        let discountPct = 0;
+        let appliedPromoName = "None";
+
+        if (promoCode) {
+          try {
+            const q = query(collection(db, "promoCodes"), where("code", "==", promoCode));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const promo = snap.docs[0].data();
+              const isNotExpired = !promo.expiresAt || new Date(promo.expiresAt) > new Date();
+              if (promo.isActive !== false && isNotExpired) {
+                const pct = Number(promo.discountPercentage || promo.percentage || 0);
+                discountPct = pct / 100;
+                appliedPromoName = `${promo.code} (${pct}% Off Applied)`;
+              } else {
+                appliedPromoName = "Expired or Inactive Code";
+              }
+            } else {
+              appliedPromoName = "Invalid Code";
+            }
+          } catch {
+            appliedPromoName = "Promo Validation Unavailable";
+          }
+        }
+
         const discountAmount = subtotal * discountPct;
         const isFreeShipping = subtotal >= 150000;
         const shippingFee = isFreeShipping ? 0 : 3500;
@@ -387,7 +415,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify(
                 {
                   subtotal: `₦${subtotal.toLocaleString()}`,
-                  appliedPromo: promoCode ? (discountPct > 0 ? `${promoCode} (50% Off)` : "Invalid") : "None",
+                  appliedPromo: appliedPromoName,
                   discountAmount: `₦${discountAmount.toLocaleString()}`,
                   shippingFee: isFreeShipping ? "Free (Over ₦150,000)" : `₦${shippingFee.toLocaleString()}`,
                   totalDue: `₦${total.toLocaleString()}`,
@@ -409,8 +437,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           subtotal += Number(it.price || 0) * Number(it.quantity || 1);
         }
 
-        const promo = String(args?.promoCode || "").toUpperCase();
-        const discountAmount = promo === "BTNX50" ? subtotal * 0.5 : 0;
+        const promo = String(args?.promoCode || "").trim().toUpperCase();
+        let discountAmount = 0;
+        if (promo) {
+          try {
+            const q = query(collection(db, "promoCodes"), where("code", "==", promo));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const pData = snap.docs[0].data();
+              if (pData.isActive !== false && (!pData.expiresAt || new Date(pData.expiresAt) > new Date())) {
+                const pct = Number(pData.discountPercentage || pData.percentage || 0);
+                discountAmount = subtotal * (pct / 100);
+              }
+            }
+          } catch {}
+        }
+
         const shippingFee = subtotal >= 150000 ? 0 : 3500;
         const total = Math.max(0, subtotal - discountAmount) + shippingFee;
 
@@ -430,8 +472,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           createdAt: new Date().toISOString(),
         };
-
-        localOrdersCache.set(orderId, record);
 
         try {
           await setDoc(doc(db, "orders", orderId), record);
@@ -459,11 +499,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "btnx_track_order": {
-        const orderIdStr = String(args?.orderId);
-        const cached = localOrdersCache.get(orderIdStr);
-        if (cached) {
+        const orderIdStr = String(args?.orderId || "").trim();
+        if (!orderIdStr) {
           return {
-            content: [{ type: "text", text: JSON.stringify(cached, null, 2) }],
+            content: [{ type: "text", text: JSON.stringify({ error: "Missing orderId parameter" }, null, 2) }],
+            isError: true,
           };
         }
 
@@ -474,9 +514,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               content: [{ type: "text", text: JSON.stringify(snap.data(), null, 2) }],
             };
           }
-        } catch (err: any) {
-          // fallback
-        }
+        } catch (err: any) {}
 
         return {
           content: [
@@ -484,15 +522,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: "text",
               text: JSON.stringify(
                 {
-                  orderId: orderIdStr,
-                  status: "Processing",
-                  message: `Order #${orderIdStr} is registered in BTNX fulfillment system and queued for courier dispatch.`,
+                  error: "Order not found",
+                  message: `Order #${orderIdStr} was not found in the BTNX database.`,
                 },
                 null,
                 2
               ),
             },
           ],
+          isError: true,
         };
       }
 
@@ -533,17 +571,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             } catch {}
           }
           if (!prod) {
-            prod = {
-              id: targetId || "1",
-              name: "Brushed Wool Check Overshirt",
-              category: "Jackets",
-              price: 185000,
-              badge: "New Season",
-              description: "Brushed wool-blend check overshirt with a cropped boxy fit and horn buttons.",
-              sizes: ["S", "M", "L", "XL"],
-              image: "/arrival_menswear_1794617809994-Br8fHW_g.jpg",
-              deliveryTimeline: "2-4 Business Days",
-              packagingType: "Cotton Garment Box",
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Product not found", id: targetId }, null, 2) }],
+              isError: true,
             };
           }
           const html = renderProductCardHtml(prod);
@@ -567,35 +597,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (widgetType === "invoice") {
-          let order: any = localOrdersCache.get(targetId);
-          if (!order && targetId) {
-            try {
-              const snap = await getDoc(doc(db, "orders", targetId));
-              if (snap.exists()) order = { id: snap.id, ...snap.data() };
-            } catch {}
-          }
-          if (!order) {
-            order = {
-              id: targetId || "BX-849201",
-              customerName: "Amina Bello",
-              customerEmail: "amina.bello@example.com",
-              shippingAddress: "Plot 402, Maitama, Abuja",
-              status: "Confirmed",
-              date: "Nov 14, 2026",
-              total: 185000,
-              subtotal: 185000,
-              discountAmount: 0,
-              shippingFee: 0,
-              items: [
-                {
-                  product: { name: "Brushed Wool Check Overshirt", price: 185000 },
-                  quantity: 1,
-                  size: "M",
-                  color: "Noir Black",
-                },
-              ],
+          if (!targetId) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Order ID required" }, null, 2) }],
+              isError: true,
             };
           }
+          let order: any = null;
+          try {
+            const snap = await getDoc(doc(db, "orders", targetId));
+            if (snap.exists()) order = { id: snap.id, ...snap.data() };
+          } catch {}
+
+          if (!order) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Order not found", id: targetId }, null, 2) }],
+              isError: true,
+            };
+          }
+
           const html = renderInvoiceHtml(order);
           return {
             content: [
@@ -618,20 +638,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (widgetType === "tracking_stepper") {
-          let order: any = localOrdersCache.get(targetId);
-          if (!order && targetId) {
-            try {
-              const snap = await getDoc(doc(db, "orders", targetId));
-              if (snap.exists()) order = { id: snap.id, ...snap.data() };
-            } catch {}
-          }
-          if (!order) {
-            order = {
-              id: targetId || "BX-849201",
-              status: "In Transit",
-              shippingAddress: "Plot 402, Maitama, Abuja, Nigeria",
+          if (!targetId) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Order ID required" }, null, 2) }],
+              isError: true,
             };
           }
+          let order: any = null;
+          try {
+            const snap = await getDoc(doc(db, "orders", targetId));
+            if (snap.exists()) order = { id: snap.id, ...snap.data() };
+          } catch {}
+
+          if (!order) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Order not found", id: targetId }, null, 2) }],
+              isError: true,
+            };
+          }
+
           const html = renderTrackingStepperHtml(order);
           return {
             content: [
@@ -654,25 +679,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (widgetType === "support_ticket") {
-          let ticket: any = localTicketsCache.get(targetId);
-          if (!ticket && targetId) {
-            try {
-              const snap = await getDoc(doc(db, "supportTickets", targetId));
-              if (snap.exists()) ticket = { id: snap.id, ...snap.data() };
-            } catch {}
-          }
-          if (!ticket) {
-            ticket = {
-              id: targetId || "TCK-892104",
-              customerName: "Amina Bello",
-              topic: "Complimentary Size Exchange",
-              mode: "human",
-              messages: [
-                { sender: "client", text: "I would like to exchange my size M overshirt for size L." },
-                { sender: "agent", senderName: "Adaobi N. (Care Desk)", text: "Your size exchange is approved. A size L has been dispatched from Osogbo." },
-              ],
+          if (!targetId) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Ticket ID required" }, null, 2) }],
+              isError: true,
             };
           }
+          let ticket: any = null;
+          try {
+            const snap = await getDoc(doc(db, "supportTickets", targetId));
+            if (snap.exists()) ticket = { id: snap.id, ...snap.data() };
+          } catch {}
+
+          if (!ticket) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Ticket not found", id: targetId }, null, 2) }],
+              isError: true,
+            };
+          }
+
           const html = renderSupportTicketHtml(ticket);
           return {
             content: [
@@ -730,8 +755,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           updatedAt: new Date().toISOString(),
         };
 
-        localTicketsCache.set(ticketId, ticket);
-
         try {
           await setDoc(doc(db, "supportTickets", ticketId), ticket);
         } catch (dbErr: any) {
@@ -762,13 +785,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "btnx_get_support_ticket": {
         const ticketId = String(args?.ticketId);
-        const cached = localTicketsCache.get(ticketId);
-        if (cached) {
-          return {
-            content: [{ type: "text", text: JSON.stringify(cached, null, 2) }],
-          };
-        }
-
         try {
           const snap = await getDoc(doc(db, "supportTickets", ticketId));
           if (snap.exists()) {
@@ -784,35 +800,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: "text",
               text: JSON.stringify(
                 {
-                  ticketId,
-                  status: "open",
-                  message: `Ticket #${ticketId} is queued on the customer service desk.`,
-                  liveSupportThreadUrl: `http://localhost:4000/render/support/${ticketId}`,
+                  error: "Ticket not found",
+                  message: `Ticket #${ticketId} was not found in the database.`,
                 },
                 null,
                 2
               ),
             },
           ],
+          isError: true,
         };
       }
 
       case "btnx_get_invoice": {
         const orderId = String(args?.orderId || args?.order_id || "");
-        let order: any = localOrdersCache.get(orderId);
-        if (!order) {
-          try {
-            const snap = await getDoc(doc(db, "orders", orderId));
-            if (snap.exists()) order = { id: snap.id, ...snap.data() };
-          } catch {}
+        if (!orderId) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ error: "Missing orderId parameter" }, null, 2) }],
+            isError: true,
+          };
         }
+
+        let order: any = null;
+        try {
+          const snap = await getDoc(doc(db, "orders", orderId));
+          if (snap.exists()) order = { id: snap.id, ...snap.data() };
+        } catch {}
+
         if (!order) {
-          order = {
-            id: orderId,
-            status: "Confirmed",
-            customerName: "Valued Client",
-            total: 185000,
-            items: [{ product: { name: "Brushed Wool Check Overshirt", price: 185000 }, quantity: 1, size: "M", color: "Noir" }],
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    error: "Order not found",
+                    message: `Order #${orderId} was not found in the BTNX database.`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: true,
           };
         }
 

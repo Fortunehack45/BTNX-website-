@@ -25,6 +25,12 @@ import {
   renderSupportTicketHtml,
 } from "./ui/templates.js";
 import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
+import {
+  verifyPersonalAccessToken,
+  verifyOAuthAccessToken,
+  generateSignedResourceToken,
+} from "./auth/tokens.js";
+import { authorizeResourceOwner } from "./auth/authorization.js";
 
 export interface McpAuthenticatedUser {
   userId: string;
@@ -47,9 +53,9 @@ const activeSessions = new Map<string, McpSession>();
 const localOrdersCache = new Map<string, any>();
 const localTicketsCache = new Map<string, any>();
 
-// Master Admin Auth Key fallback if environment variable is not defined
+// Master Admin Auth Key from environment variable only (fail-closed if unset)
 export const DEFAULT_MCP_AUTH_KEY =
-  process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "btnx_mcp_secret_2026";
+  process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "";
 
 export const BTNX_TOOLS: Tool[] = [
   {
@@ -97,7 +103,7 @@ export const BTNX_TOOLS: Tool[] = [
       properties: {
         productId: {
           type: "string",
-          description: "The product ID (e.g. '1', '2', '3')",
+          description: "The product ID (e.g. 'ny-1', 'ny-6')",
         },
       },
       required: ["productId"],
@@ -106,7 +112,7 @@ export const BTNX_TOOLS: Tool[] = [
   {
     name: "btnx_get_active_promos",
     description:
-      "Get currently active voucher codes, discount percentages (e.g. BTNX50 for 50% off), and complimentary shipping thresholds.",
+      "Get currently active voucher codes directly from the BTNX store database, with real discount percentages and complimentary shipping thresholds.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -115,7 +121,7 @@ export const BTNX_TOOLS: Tool[] = [
   {
     name: "btnx_calculate_order",
     description:
-      "Calculate item subtotals, promo code discount, nationwide shipping fees, and final order total in Nigerian Naira (₦).",
+      "Calculate item subtotals, promo code discount against live database records, nationwide shipping fees, and final order total in Nigerian Naira (₦).",
     inputSchema: {
       type: "object",
       properties: {
@@ -133,7 +139,7 @@ export const BTNX_TOOLS: Tool[] = [
         },
         promoCode: {
           type: "string",
-          description: "Optional promo code (e.g. 'BTNX50')",
+          description: "Optional promo voucher code to validate against database",
         },
       },
       required: ["items"],
@@ -276,9 +282,9 @@ export async function resolveMcpUser(providedKey: string): Promise<McpAuthentica
   const cleanKey = providedKey.trim();
   if (!cleanKey) return null;
 
-  // 1. Check Master Admin Key
-  const masterKey = process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "btnx_mcp_secret_2026";
-  if (cleanKey === masterKey) {
+  // 1. Check Server Admin API Key from environment variable only
+  const masterKey = process.env.MCP_AUTH_KEY || process.env.MCP_ADMIN_API_KEY;
+  if (masterKey && masterKey.length >= 16 && cleanKey === masterKey) {
     return {
       userId: "admin_master",
       email: "admin@btnx.store",
@@ -287,7 +293,73 @@ export async function resolveMcpUser(providedKey: string): Promise<McpAuthentica
     };
   }
 
-  // 2. Check Firestore mcpTokens collection
+  // 2. Personal Access Token (PAT) Verification via hashed personal_access_tokens
+  if (cleanKey.startsWith("btnx_pat_")) {
+    const patRecord = await verifyPersonalAccessToken(db, cleanKey);
+    if (patRecord) {
+      try {
+        const uSnap = await getDoc(doc(db, "users", patRecord.uid));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          return {
+            userId: patRecord.uid,
+            email: uData.email || "",
+            name: uData.name || uData.displayName || "BTNX VIP Client",
+            phone: uData.phone || "",
+            shippingAddress: uData.shippingAddress || "",
+            isMasterAdmin: uData.role === "admin" || Boolean(uData.isAdmin),
+          };
+        }
+      } catch (err: any) {
+        console.error("[BTNX Remote MCP] Error resolving user profile:", err?.message);
+      }
+    }
+  }
+
+  // 3. OAuth 2.1 Access Token Verification
+  if (cleanKey.startsWith("btnx_at_")) {
+    const oauthRecord = await verifyOAuthAccessToken(db, cleanKey);
+    if (oauthRecord) {
+      try {
+        const uSnap = await getDoc(doc(db, "users", oauthRecord.uid));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          return {
+            userId: oauthRecord.uid,
+            email: uData.email || "",
+            name: uData.name || uData.displayName || "BTNX VIP Client",
+            phone: uData.phone || "",
+            shippingAddress: uData.shippingAddress || "",
+            isMasterAdmin: uData.role === "admin" || Boolean(uData.isAdmin),
+          };
+        }
+      } catch {}
+    }
+  }
+
+  // 4. Firebase ID Token Verification (JWT format)
+  if (cleanKey.startsWith("eyJ") && cleanKey.split(".").length === 3) {
+    try {
+      const parts = cleanKey.split(".");
+      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+      if (payload.sub && payload.exp && payload.exp * 1000 > Date.now()) {
+        const uSnap = await getDoc(doc(db, "users", payload.sub));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          return {
+            userId: payload.sub,
+            email: uData.email || payload.email || "",
+            name: uData.name || uData.displayName || "BTNX VIP Client",
+            phone: uData.phone || "",
+            shippingAddress: uData.shippingAddress || "",
+            isMasterAdmin: uData.role === "admin" || Boolean(uData.isAdmin),
+          };
+        }
+      }
+    } catch {}
+  }
+
+  // 5. Backwards-compatible lookup in legacy mcpTokens collection (if still valid)
   try {
     const tokenDoc = await getDoc(doc(db, "mcpTokens", cleanKey));
     if (tokenDoc.exists()) {
@@ -295,59 +367,13 @@ export async function resolveMcpUser(providedKey: string): Promise<McpAuthentica
       return {
         userId: data.userId || tokenDoc.id,
         email: data.email || "",
-        name: data.name || "BTNX Client",
+        name: data.name || "BTNX VIP Client",
         phone: data.phone || "",
         shippingAddress: data.shippingAddress || "",
         isMasterAdmin: false,
       };
     }
-  } catch (err: any) {
-    console.error("[BTNX Remote MCP] Token lookup error:", err?.message);
-  }
-
-  // 3. Check Firestore users collection by mcpToken field
-  try {
-    const q = query(collection(db, "users"), where("mcpToken", "==", cleanKey));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const userDoc = snap.docs[0];
-      const data = userDoc.data();
-      return {
-        userId: userDoc.id,
-        email: data.email || "",
-        name: data.name || data.displayName || "BTNX Client",
-        phone: data.phone || "",
-        shippingAddress: data.shippingAddress || data.address || "",
-        isMasterAdmin: false,
-      };
-    }
-  } catch (err: any) {
-    console.error("[BTNX Remote MCP] User mcpToken query error:", err?.message);
-  }
-
-  // 4. Pattern check for user PATs: `btnx_pat_<uid>_<secret>`
-  if (cleanKey.startsWith("btnx_pat_")) {
-    const parts = cleanKey.split("_");
-    if (parts.length >= 3) {
-      const targetUid = parts[2];
-      try {
-        const uSnap = await getDoc(doc(db, "users", targetUid));
-        if (uSnap.exists()) {
-          const uData = uSnap.data();
-          if (uData.mcpToken === cleanKey || !uData.mcpToken) {
-            return {
-              userId: targetUid,
-              email: uData.email || "",
-              name: uData.name || "BTNX Client",
-              phone: uData.phone || "",
-              shippingAddress: uData.shippingAddress || "",
-              isMasterAdmin: false,
-            };
-          }
-        }
-      } catch {}
-    }
-  }
+  } catch {}
 
   return null;
 }
@@ -359,10 +385,19 @@ export async function executeMcpTool(
   name: string,
   args: any,
   reqOrigin = "http://localhost:4000",
-  user: McpAuthenticatedUser = { userId: "guest", email: "guest@btnx.store", isMasterAdmin: true }
+  user: McpAuthenticatedUser = { userId: "guest", email: "guest@btnx.store", isMasterAdmin: false }
 ): Promise<any> {
   switch (name) {
     case "btnx_list_my_orders": {
+      if (!user.userId || user.userId === "guest") {
+        return {
+          error: "Authentication required",
+          message:
+            "Please authenticate with your BTNX personal access token or account credentials to view your order history.",
+          orders: [],
+        };
+      }
+
       let orders: any[] = [];
       try {
         const q = user.isMasterAdmin
@@ -376,7 +411,6 @@ export async function executeMcpTool(
         const snap = await getDocs(q);
         orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       } catch {
-        // Fallback to email filter or local cache
         orders = Array.from(localOrdersCache.values()).filter(
           (o) => user.isMasterAdmin || o.userId === user.userId || o.customerEmail === user.email
         );
@@ -392,16 +426,20 @@ export async function executeMcpTool(
         customerEmail: user.email,
         customerName: user.name || "Valued Client",
         orderCount: orders.length,
-        orders: orders.map((o) => ({
-          orderId: o.id,
-          date: o.date || "Recent",
-          status: o.status,
-          total: `₦${Number(o.total || 0).toLocaleString()}`,
-          itemCount: o.items?.length || 1,
-          firstItemName: o.items?.[0]?.productName || o.items?.[0]?.product?.name || "BTNX Garment",
-          trackingUrl: `${reqOrigin}/render/track/${o.id}`,
-          invoiceUrl: `${reqOrigin}/render/invoice/${o.id}`,
-        })),
+        orders: orders.map((o) => {
+          const signedInvoice = generateSignedResourceToken(o.id, "invoice", 7 * 24 * 3600);
+          const signedTrack = generateSignedResourceToken(o.id, "track", 7 * 24 * 3600);
+          return {
+            orderId: o.id,
+            date: o.date || "Recent",
+            status: o.status,
+            total: `₦${Number(o.total || 0).toLocaleString()}`,
+            itemCount: o.items?.length || 1,
+            firstItemName: o.items?.[0]?.productName || o.items?.[0]?.product?.name || "BTNX Garment",
+            trackingUrl: `${reqOrigin}/render/track/${o.id}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`,
+            invoiceUrl: `${reqOrigin}/render/invoice/${o.id}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`,
+          };
+        }),
       };
     }
 
@@ -494,21 +532,23 @@ export async function executeMcpTool(
     }
 
     case "btnx_get_active_promos": {
+      let activeCodes: any[] = [];
+      try {
+        const snap = await getDocs(collection(db, "promoCodes"));
+        activeCodes = snap.docs
+          .map((d) => d.data())
+          .filter((p: any) => p.isActive !== false && (!p.expiresAt || new Date(p.expiresAt) > new Date()))
+          .map((p: any) => ({
+            code: p.code,
+            discount: `${p.discountPercentage || p.percentage || 0}% Off`,
+            expiresAt: p.expiresAt || "Ongoing",
+          }));
+      } catch (err: any) {
+        console.warn("[BTNX Remote MCP] Failed to query promoCodes:", err?.message);
+      }
+
       return {
-        activeCodes: [
-          {
-            code: "BTNX50",
-            discount: "50% Off Total Basket",
-            validUntil: "2027-12-31",
-            notes: "Storewide complimentary luxury privilege.",
-          },
-          {
-            code: "KLAMBY50",
-            discount: "50% Off Archive Pieces",
-            validUntil: "2027-12-31",
-            notes: "VIP Client discount code.",
-          },
-        ],
+        activeCodes,
         shippingPrivilege:
           "Complimentary luxury nationwide shipping unlocked on all orders over ₦150,000.",
       };
@@ -516,14 +556,38 @@ export async function executeMcpTool(
 
     case "btnx_calculate_order": {
       const items = (args?.items as any[]) || [];
-      const promoCode = String(args?.promoCode || "").toUpperCase();
+      const promoCode = String(args?.promoCode || "").trim().toUpperCase();
 
       let subtotal = 0;
       for (const it of items) {
         subtotal += Number(it.price || 0) * Number(it.quantity || 1);
       }
 
-      const discountPct = promoCode === "BTNX50" || promoCode === "KLAMBY50" ? 0.5 : 0;
+      let discountPct = 0;
+      let appliedPromoName = "None";
+
+      if (promoCode) {
+        try {
+          const q = query(collection(db, "promoCodes"), where("code", "==", promoCode));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const promo = snap.docs[0].data();
+            const isNotExpired = !promo.expiresAt || new Date(promo.expiresAt) > new Date();
+            if (promo.isActive !== false && isNotExpired) {
+              const pct = Number(promo.discountPercentage || promo.percentage || 0);
+              discountPct = pct / 100;
+              appliedPromoName = `${promo.code} (${pct}% Off Applied)`;
+            } else {
+              appliedPromoName = "Expired or Inactive Code";
+            }
+          } else {
+            appliedPromoName = "Invalid Code";
+          }
+        } catch {
+          appliedPromoName = "Promo Validation Unavailable";
+        }
+      }
+
       const discountAmount = subtotal * discountPct;
       const isFreeShipping = subtotal >= 150000;
       const shippingFee = isFreeShipping ? 0 : 3500;
@@ -531,7 +595,7 @@ export async function executeMcpTool(
 
       return {
         subtotal: `₦${subtotal.toLocaleString()}`,
-        appliedPromo: promoCode ? (discountPct > 0 ? `${promoCode} (50% Off Applied)` : "Invalid Code") : "None",
+        appliedPromo: appliedPromoName,
         discountAmount: `₦${discountAmount.toLocaleString()}`,
         shippingFee: isFreeShipping ? "Free (Over ₦150,000)" : `₦${shippingFee.toLocaleString()}`,
         totalDue: `₦${total.toLocaleString()}`,
@@ -547,8 +611,22 @@ export async function executeMcpTool(
         subtotal += Number(it.price || 0) * Number(it.quantity || 1);
       }
 
-      const promo = String(args?.promoCode || "").toUpperCase();
-      const discountAmount = promo === "BTNX50" || promo === "KLAMBY50" ? subtotal * 0.5 : 0;
+      const promo = String(args?.promoCode || "").trim().toUpperCase();
+      let discountAmount = 0;
+      if (promo) {
+        try {
+          const q = query(collection(db, "promoCodes"), where("code", "==", promo));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const pData = snap.docs[0].data();
+            if (pData.isActive !== false && (!pData.expiresAt || new Date(pData.expiresAt) > new Date())) {
+              const pct = Number(pData.discountPercentage || pData.percentage || 0);
+              discountAmount = subtotal * (pct / 100);
+            }
+          }
+        } catch {}
+      }
+
       const shippingFee = subtotal >= 150000 ? 0 : 3500;
       const total = Math.max(0, subtotal - discountAmount) + shippingFee;
 
@@ -570,21 +648,22 @@ export async function executeMcpTool(
         createdAt: new Date().toISOString(),
       };
 
-      localOrdersCache.set(orderId, record);
-
       try {
         await setDoc(doc(db, "orders", orderId), record);
       } catch (dbErr: any) {
-        console.error("[BTNX Remote MCP] Order cached locally:", dbErr?.message);
+        console.error("[BTNX Remote MCP] Order create error:", dbErr?.message);
       }
+
+      const signedInvoice = generateSignedResourceToken(orderId, "invoice", 7 * 24 * 3600);
+      const signedTrack = generateSignedResourceToken(orderId, "track", 7 * 24 * 3600);
 
       return {
         success: true,
         orderId,
         linkedAccount: user.email,
         message: `Order #${orderId} successfully registered under account ${user.email}. It now appears in your website order history.`,
-        invoiceUrl: `${reqOrigin}/render/invoice/${orderId}`,
-        trackingUrl: `${reqOrigin}/render/track/${orderId}`,
+        invoiceUrl: `${reqOrigin}/render/invoice/${orderId}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`,
+        trackingUrl: `${reqOrigin}/render/track/${orderId}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`,
         orderSummary: record,
       };
     }
@@ -594,6 +673,13 @@ export async function executeMcpTool(
 
       // If user omitted order ID or asked for their latest order
       if (!orderIdStr || orderIdStr.toLowerCase() === "latest" || orderIdStr.toLowerCase() === "my_order") {
+        if (!user.userId || user.userId === "guest") {
+          return {
+            error: "Order reference required",
+            message: "Please provide your order reference number, or sign in to track your latest order automatically.",
+          };
+        }
+
         try {
           const q = user.isMasterAdmin
             ? query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(1))
@@ -605,28 +691,42 @@ export async function executeMcpTool(
         } catch {}
       }
 
-      let order: any = localOrdersCache.get(orderIdStr);
-      if (!order && orderIdStr) {
-        try {
-          const snap = await getDoc(doc(db, "orders", orderIdStr));
-          if (snap.exists()) order = { id: snap.id, ...snap.data() };
-        } catch {}
+      if (!orderIdStr) {
+        return {
+          error: "Order reference required",
+          message: "Please provide an order reference number (e.g. BX-XXXXXX).",
+        };
       }
 
+      let order: any = null;
+      try {
+        const snap = await getDoc(doc(db, "orders", orderIdStr));
+        if (snap.exists()) order = { id: snap.id, ...snap.data() };
+      } catch {}
+
       if (!order) {
-        order = {
-          orderId: orderIdStr || "BX-849201",
-          status: "In Transit",
-          hub: "Osogbo, Osun Central Hub",
-          carrier: "BTNX Express Logistics",
-          dispatchDate: "Today",
-          estimatedDelivery: "Within 24–48 Hours",
-          message: `Order #${orderIdStr || "BX-849201"} has been inspected and handed over to express dispatch. The rider will call 30 minutes prior to arrival.`,
-          liveStepperUrl: `${reqOrigin}/render/track/${orderIdStr || "BX-849201"}`,
+        return {
+          error: "Order not found",
+          message: `Order #${orderIdStr} was not found in the BTNX database.`,
         };
-      } else {
-        order.liveStepperUrl = `${reqOrigin}/render/track/${order.id || orderIdStr}`;
       }
+
+      // Check ownership
+      if (
+        user.userId !== "guest" &&
+        !user.isMasterAdmin &&
+        order.userId &&
+        order.userId !== user.userId &&
+        order.customerEmail !== user.email
+      ) {
+        return {
+          error: "Access denied",
+          message: `Order #${orderIdStr} does not belong to your authenticated account.`,
+        };
+      }
+
+      const signedTrack = generateSignedResourceToken(order.id, "track", 7 * 24 * 3600);
+      order.liveStepperUrl = `${reqOrigin}/render/track/${order.id}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`;
 
       return order;
     }
@@ -678,88 +778,67 @@ export async function executeMcpTool(
       }
 
       if (widgetType === "invoice") {
-        let order: any = localOrdersCache.get(targetId);
-        if (!order && targetId) {
-          try {
-            const snap = await getDoc(doc(db, "orders", targetId));
-            if (snap.exists()) order = { id: snap.id, ...snap.data() };
-          } catch {}
+        if (!targetId) {
+          return { error: "Order ID is required to render an invoice widget." };
         }
+        let order: any = null;
+        try {
+          const snap = await getDoc(doc(db, "orders", targetId));
+          if (snap.exists()) order = { id: snap.id, ...snap.data() };
+        } catch {}
+
         if (!order) {
-          order = {
-            id: targetId || "BX-849201",
-            customerName: user.name || "Amina Bello",
-            customerEmail: user.email || "amina.bello@example.com",
-            shippingAddress: user.shippingAddress || "Plot 402, Maitama, Abuja",
-            status: "Confirmed",
-            date: "Nov 14, 2026",
-            total: 185000,
-            subtotal: 185000,
-            discountAmount: 0,
-            shippingFee: 0,
-            items: [
-              {
-                product: { name: "Brushed Wool Check Overshirt", price: 185000 },
-                quantity: 1,
-                size: "M",
-                color: "Noir Black",
-              },
-            ],
-          };
+          return { error: "Order not found", message: `Order #${targetId} not found in database.` };
         }
+
+        const signedInvoice = generateSignedResourceToken(order.id, "invoice", 7 * 24 * 3600);
         return {
           widgetType: "invoice",
           orderId: order.id,
-          livePreviewUrl: `${reqOrigin}/render/invoice/${order.id}`,
+          livePreviewUrl: `${reqOrigin}/render/invoice/${order.id}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`,
           order,
           htmlSnippet: renderInvoiceHtml(order),
         };
       }
 
       if (widgetType === "tracking_stepper") {
-        let order: any = localOrdersCache.get(targetId);
-        if (!order && targetId) {
-          try {
-            const snap = await getDoc(doc(db, "orders", targetId));
-            if (snap.exists()) order = { id: snap.id, ...snap.data() };
-          } catch {}
+        if (!targetId) {
+          return { error: "Order ID is required to render a tracking stepper widget." };
         }
+        let order: any = null;
+        try {
+          const snap = await getDoc(doc(db, "orders", targetId));
+          if (snap.exists()) order = { id: snap.id, ...snap.data() };
+        } catch {}
+
         if (!order) {
-          order = {
-            id: targetId || "BX-849201",
-            status: "In Transit",
-            shippingAddress: user.shippingAddress || "Plot 402, Maitama, Abuja, Nigeria",
-          };
+          return { error: "Order not found", message: `Order #${targetId} not found in database.` };
         }
+
+        const signedTrack = generateSignedResourceToken(order.id, "track", 7 * 24 * 3600);
         return {
           widgetType: "tracking_stepper",
           orderId: order.id,
-          livePreviewUrl: `${reqOrigin}/render/track/${order.id}`,
+          livePreviewUrl: `${reqOrigin}/render/track/${order.id}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`,
           status: order.status,
           htmlSnippet: renderTrackingStepperHtml(order),
         };
       }
 
       if (widgetType === "support_ticket") {
-        let ticket: any = localTicketsCache.get(targetId);
-        if (!ticket && targetId) {
-          try {
-            const snap = await getDoc(doc(db, "supportTickets", targetId));
-            if (snap.exists()) ticket = { id: snap.id, ...snap.data() };
-          } catch {}
+        if (!targetId) {
+          return { error: "Ticket ID is required to render a support ticket widget." };
         }
+        let ticket: any = null;
+        try {
+          const snap = await getDoc(doc(db, "supportTickets", targetId));
+          if (snap.exists()) ticket = { id: snap.id, ...snap.data() };
+        } catch {}
+
         if (!ticket) {
-          ticket = {
-            id: targetId || "TCK-892104",
-            customerName: user.name || "Amina Bello",
-            topic: "Complimentary Size Exchange",
-            mode: "human",
-            messages: [
-              { sender: "client", text: "I would like to exchange my size M overshirt for size L." },
-              { sender: "agent", senderName: "Adaobi N. (Care Desk)", text: "Your size exchange is approved. A size L has been dispatched from Osogbo." },
-            ],
-          };
+          return { error: "Ticket not found", message: `Ticket #${targetId} not found in database.` };
         }
+
         return {
           widgetType: "support_ticket",
           ticketId: ticket.id,
@@ -803,12 +882,10 @@ export async function executeMcpTool(
         updatedAt: new Date().toISOString(),
       };
 
-      localTicketsCache.set(ticketId, ticket);
-
       try {
         await setDoc(doc(db, "supportTickets", ticketId), ticket);
       } catch (dbErr: any) {
-        console.error("[BTNX Remote MCP] Support ticket local save:", dbErr?.message);
+        console.error("[BTNX Remote MCP] Support ticket save error:", dbErr?.message);
       }
 
       return {
@@ -825,9 +902,9 @@ export async function executeMcpTool(
 
     case "btnx_get_support_ticket": {
       const ticketId = String(args?.ticketId || "");
-      let ticket: any = localTicketsCache.get(ticketId);
+      let ticket: any = null;
 
-      if (!ticket && ticketId) {
+      if (ticketId) {
         try {
           const snap = await getDoc(doc(db, "supportTickets", ticketId));
           if (snap.exists()) ticket = { id: snap.id, ...snap.data() };
@@ -835,47 +912,58 @@ export async function executeMcpTool(
       }
 
       if (!ticket) {
-        ticket = {
-          ticketId,
-          status: "open",
-          assignedAgent: "Adaobi N. · Osun Hub",
-          message: `Ticket #${ticketId} is queued on the client care triage desk.`,
-          liveSupportThreadUrl: `${reqOrigin}/render/support/${ticketId}`,
+        return {
+          error: "Ticket not found",
+          message: `Ticket #${ticketId} was not found in the database.`,
         };
-      } else {
-        ticket.liveSupportThreadUrl = `${reqOrigin}/render/support/${ticket.id || ticketId}`;
       }
 
+      ticket.liveSupportThreadUrl = `${reqOrigin}/render/support/${ticket.id || ticketId}`;
       return ticket;
     }
 
     case "btnx_get_invoice": {
       const orderId = String(args?.orderId || "");
-      let order: any = localOrdersCache.get(orderId);
-
-      if (!order && orderId) {
-        try {
-          const snap = await getDoc(doc(db, "orders", orderId));
-          if (snap.exists()) order = { id: snap.id, ...snap.data() };
-        } catch {}
+      if (!orderId) {
+        return { error: "Order reference required", message: "Please specify an orderId parameter." };
       }
+
+      let order: any = null;
+      try {
+        const snap = await getDoc(doc(db, "orders", orderId));
+        if (snap.exists()) order = { id: snap.id, ...snap.data() };
+      } catch {}
 
       if (!order) {
-        order = {
-          id: orderId || "BX-849201",
-          status: "Confirmed",
-          customerName: user.name || "Valued Client",
-          total: 185000,
-          items: [{ product: { name: "Brushed Wool Check Overshirt", price: 185000 }, quantity: 1, size: "M", color: "Noir" }],
+        return {
+          error: "Order not found",
+          message: `Order #${orderId} was not found in the BTNX database.`,
         };
       }
+
+      // Check ownership
+      if (
+        user.userId !== "guest" &&
+        !user.isMasterAdmin &&
+        order.userId &&
+        order.userId !== user.userId &&
+        order.customerEmail !== user.email
+      ) {
+        return {
+          error: "Access denied",
+          message: `Order #${orderId} does not belong to your authenticated account.`,
+        };
+      }
+
+      const signedInvoice = generateSignedResourceToken(order.id, "invoice", 7 * 24 * 3600);
+      const liveInvoiceUrl = `${reqOrigin}/render/invoice/${order.id}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`;
 
       return {
         invoiceNumber: `INV-${order.id}`,
         orderId: order.id,
         total: `₦${Number(order.total || 0).toLocaleString()}`,
         status: order.status,
-        liveInvoiceUrl: `${reqOrigin}/render/invoice/${order.id}`,
+        liveInvoiceUrl,
         htmlSnippet: renderInvoiceHtml(order),
         orderSummary: order,
       };
@@ -891,7 +979,7 @@ export async function executeMcpTool(
  */
 export function createBTNXServer(
   reqOrigin = "http://localhost:4000",
-  user: McpAuthenticatedUser = { userId: "guest", email: "guest@btnx.store", isMasterAdmin: true }
+  user: McpAuthenticatedUser = { userId: "guest", email: "guest@btnx.store", isMasterAdmin: false }
 ): Server {
   const server = new Server(
     {
@@ -1137,7 +1225,6 @@ export function setupRemoteMcp(app: Express) {
   const handleMcpDashboard = (req: Request, res: Response) => {
     const host = `${req.protocol}://${req.get("host")}`;
     const mcpUrl = `${host}/mcp`;
-    const authKey = DEFAULT_MCP_AUTH_KEY;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1193,25 +1280,24 @@ export function setupRemoteMcp(app: Express) {
         Zero-Config Remote Model Context Protocol
       </span>
       <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1 text-[#141413]">
-        Connect Your Personal BTNX Account to ChatGPT
+        Connect Your Personal BTNX Account to ChatGPT & Claude
       </h1>
       <p class="text-sm sm:text-base text-[#66625B] mt-2 max-w-2xl font-normal leading-relaxed">
-        Authenticate your AI assistant directly to <strong>your personal account</strong>. Orders, tracking, and customer service requests initiated in ChatGPT are bound exclusively to you.
+        Authenticate your AI assistant directly to <strong>your personal account</strong>. Orders, tracking, and customer service requests initiated in ChatGPT or Claude are bound exclusively to your verified BTNX customer profile.
       </p>
     </div>
 
-    <!-- Account-Scoped vs Master Key Explainer Box -->
+    <!-- Account-Scoped Explainer Box -->
     <div class="bg-amber-50/60 border border-amber-200/80 p-5 rounded-xs space-y-2">
       <div class="flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider font-mono">
-        <span>🔒 Personal Access Token (PAT) vs. Store Admin Key</span>
+        <span>🔒 Secure Per-Customer Authentication</span>
       </div>
       <p class="text-xs text-amber-800/90 leading-relaxed">
-        <strong>For Customers:</strong> Log into your account on the BTNX website (<code class="font-mono bg-white/70 px-1 py-0.5">/</code> &rarr; Profile) and copy your unique <strong>Personal AI Key</strong> (<code class="font-mono">btnx_pat_...</code>). When entered into ChatGPT, your AI will only see and track <em>your</em> orders.<br>
-        <strong>For Store Operators:</strong> Use the master secret key below to manage all products, storewide metrics, and global dispatch manifests.
+        Log into your account on the BTNX website (<code class="font-mono bg-white/70 px-1 py-0.5">${host}</code> &rarr; Profile) and copy your unique <strong>Personal AI Key</strong> (<code class="font-mono">btnx_pat_...</code>). When entered into ChatGPT or Claude, your AI will only see and track <em>your</em> personal orders.
       </p>
     </div>
 
-    <!-- Quick Connection Card (The 3 fields ChatGPT asks for) -->
+    <!-- Quick Connection Card -->
     <div class="bg-white border-2 border-[#141413] shadow-[4px_4px_0px_#141413] p-6 sm:p-8 space-y-6">
       <div class="flex items-center justify-between border-b border-[#E6E2DA] pb-4">
         <div>
@@ -1219,11 +1305,11 @@ export function setupRemoteMcp(app: Express) {
             Step 1 · Remote Connection Details
           </span>
           <h2 class="text-xl font-bold text-[#141413] mt-0.5">
-            Copy into your AI Agent / ChatGPT Settings
+            Copy into your AI Agent / Connector Settings
           </h2>
         </div>
         <span class="px-2.5 py-1 bg-[#141413] text-[#FAF9F7] text-[10px] font-mono uppercase tracking-wider font-semibold">
-          SSE Transport
+          SSE Transport &amp; OAuth 2.1
         </span>
       </div>
 
@@ -1264,13 +1350,13 @@ export function setupRemoteMcp(app: Express) {
             <label class="text-[10px] font-mono uppercase tracking-wider text-[#66625B] block font-semibold mb-1">
               3. Bearer Auth Token
             </label>
-            <div class="mono text-sm font-semibold text-[#966830] break-all select-all">
-              ${authKey}
+            <div class="mono text-xs text-[#966830] break-all font-semibold">
+              btnx_pat_&lt;your_unique_key&gt;
             </div>
           </div>
-          <button onclick="navigator.clipboard.writeText('${authKey}'); alert('Copied Master Token! For personal account access, use your personal key from Profile.');" class="mt-3 w-full py-1.5 px-3 bg-[#966830] hover:bg-[#7D5323] text-white text-[11px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center">
-            Copy Token
-          </button>
+          <a href="${host}/?login=1" class="mt-3 w-full py-1.5 px-3 bg-[#966830] hover:bg-[#7D5323] text-white text-[11px] font-mono uppercase tracking-wider transition-colors cursor-pointer text-center block">
+            Get Key in Profile &rarr;
+          </a>
         </div>
       </div>
 
@@ -1280,7 +1366,7 @@ export function setupRemoteMcp(app: Express) {
           Verify via Terminal / Curl:
         </div>
         <div class="select-all text-emerald-400">
-          curl -H "Authorization: Bearer ${authKey}" "${mcpUrl}"
+          curl -H "Authorization: Bearer &lt;YOUR_PERSONAL_AI_KEY&gt;" "${mcpUrl}"
         </div>
       </div>
     </div>
@@ -1368,19 +1454,16 @@ export function setupRemoteMcp(app: Express) {
     function testTool(toolName) {
       document.getElementById('test-tool-select').value = toolName;
       if (toolName === 'btnx_get_product_details') {
-        document.getElementById('test-tool-args').value = JSON.stringify({ productId: "1" }, null, 2);
+        document.getElementById('test-tool-args').value = JSON.stringify({ productId: "ny-1" }, null, 2);
       } else if (toolName === 'btnx_calculate_order') {
         document.getElementById('test-tool-args').value = JSON.stringify({
-          items: [{ price: 185000, quantity: 1 }],
-          promoCode: "BTNX50"
+          items: [{ price: 90000, quantity: 1 }]
         }, null, 2);
       } else if (toolName === 'btnx_recommend_fit') {
         document.getElementById('test-tool-args').value = JSON.stringify({
           height: "6ft 0",
           weight: "80kg"
         }, null, 2);
-      } else if (toolName === 'btnx_track_order') {
-        document.getElementById('test-tool-args').value = JSON.stringify({ orderId: "BX-849201" }, null, 2);
       } else {
         document.getElementById('test-tool-args').value = "{}";
       }
@@ -1405,13 +1488,17 @@ export function setupRemoteMcp(app: Express) {
       btn.textContent = 'Executing...';
       output.textContent = 'Calling tool ' + tool + '...';
 
+      const userToken = prompt('Enter your BTNX Personal Access Token (or leave blank for public catalog queries):', '') || '';
+
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (userToken) {
+          headers['Authorization'] = 'Bearer ' + userToken.trim();
+        }
+
         const res = await fetch('/api/mcp/call', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${authKey}'
-          },
+          headers: headers,
           body: JSON.stringify({ name: tool, arguments: parsedArgs })
         });
         const data = await res.json();

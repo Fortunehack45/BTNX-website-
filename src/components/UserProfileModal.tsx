@@ -22,6 +22,10 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  Copy,
+  Check,
+  MessageSquare,
+  Phone,
 } from "lucide-react";
 import { Product, Order } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -90,9 +94,47 @@ export default function UserProfileModal({
   const [shippingZip, setShippingZip] = useState("");
   const [shippingCountry, setShippingCountry] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [userMcpToken, setUserMcpToken] = useState("");
+
+  interface McpTokenItem {
+    id: string;
+    name: string;
+    createdAt: string;
+    maskedToken: string;
+  }
+
+  const [mcpTokens, setMcpTokens] = useState<McpTokenItem[]>([]);
+  const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
   const [isGeneratingMcpKey, setIsGeneratingMcpKey] = useState(false);
-  const [showMcpKey, setShowMcpKey] = useState(false);
+  const [revokingTokenId, setRevokingTokenId] = useState<string | null>(null);
+
+  const [whatsappChallengeCode, setWhatsappChallengeCode] = useState<string | null>(null);
+  const [whatsappChallengeExpiresAt, setWhatsappChallengeExpiresAt] = useState<number | null>(null);
+  const [isGeneratingChallenge, setIsGeneratingChallenge] = useState(false);
+  const [copiedChallenge, setCopiedChallenge] = useState(false);
+  const [isUnlinkingWhatsApp, setIsUnlinkingWhatsApp] = useState(false);
+
+  const loadMcpTokens = async () => {
+    if (!currentUser) return;
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/user/mcp-token/list", {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tokens)) {
+        setMcpTokens(data.tokens);
+      }
+    } catch {
+      // Background fetch error ignored
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      loadMcpTokens();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (userData) {
@@ -103,9 +145,6 @@ export default function UserProfileModal({
       setShippingCity(userData.shippingCity || "");
       setShippingZip(userData.shippingZip || "");
       setShippingCountry(userData.shippingCountry || "");
-      if (userData.mcpToken) {
-        setUserMcpToken(userData.mcpToken);
-      }
     }
   }, [userData]);
 
@@ -113,45 +152,108 @@ export default function UserProfileModal({
     if (!currentUser) return;
     setIsGeneratingMcpKey(true);
     try {
-      const suffix = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
-      const token = `btnx_pat_${currentUser.uid.slice(0, 8)}_${suffix}`;
-
-      await setDoc(doc(db, "mcpTokens", token), {
-        token,
-        userId: currentUser.uid,
-        email: currentUser.email || "",
-        name: profileName || currentUser.displayName || "BTNX Client",
-        phone: profilePhone || "",
-        shippingAddress: `${shippingStreet}, ${shippingCity}, ${shippingCountry}`.trim(),
-        createdAt: new Date().toISOString(),
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/user/mcp-token/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ name: "Personal AI Assistant Token" }),
       });
-
-      await updateDoc(doc(db, "users", currentUser.uid), {
-        mcpToken: token,
-      });
-
-      setUserMcpToken(token);
-      onAddToast("Personal AI Access Key generated!", "success");
-    } catch {
-      onAddToast("Failed to generate AI key. Please try again.", "error");
+      const data = await res.json();
+      if (data.success && data.token) {
+        setNewlyCreatedToken(data.token);
+        await loadMcpTokens();
+        onAddToast("Personal AI Access Key generated! Copy it now.", "success");
+      } else {
+        throw new Error(data.error || "Token generation failed");
+      }
+    } catch (err: any) {
+      onAddToast(`Failed to generate AI key: ${err.message}`, "error");
     } finally {
       setIsGeneratingMcpKey(false);
     }
   };
 
-  const handleRevokeMcpToken = async () => {
+  const handleRevokeMcpToken = async (tokenId: string) => {
     if (!currentUser) return;
+    setRevokingTokenId(tokenId);
     try {
-      if (userMcpToken) {
-        await deleteDoc(doc(db, "mcpTokens", userMcpToken)).catch(() => {});
-      }
-      await updateDoc(doc(db, "users", currentUser.uid), {
-        mcpToken: "",
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/user/mcp-token/revoke", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ tokenId }),
       });
-      setUserMcpToken("");
-      onAddToast("Personal AI Key revoked. ChatGPT disconnected.", "info");
-    } catch {
-      onAddToast("Failed to revoke key.", "error");
+      const data = await res.json();
+      if (data.success) {
+        if (newlyCreatedToken) setNewlyCreatedToken(null);
+        await loadMcpTokens();
+        onAddToast("AI Key revoked successfully.", "info");
+      } else {
+        throw new Error(data.error || "Revocation failed");
+      }
+    } catch (err: any) {
+      onAddToast(`Failed to revoke key: ${err.message}`, "error");
+    } finally {
+      setRevokingTokenId(null);
+    }
+  };
+
+  const handleGenerateWhatsAppChallenge = async () => {
+    if (!currentUser) return;
+    setIsGeneratingChallenge(true);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/user/whatsapp/challenge", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success && data.code) {
+        setWhatsappChallengeCode(data.code);
+        setWhatsappChallengeExpiresAt(data.expiresAt);
+        onAddToast("6-digit WhatsApp link code generated!", "success");
+      } else {
+        throw new Error(data.error || "Failed to generate challenge code");
+      }
+    } catch (err: any) {
+      onAddToast(`Failed to generate code: ${err.message}`, "error");
+    } finally {
+      setIsGeneratingChallenge(false);
+    }
+  };
+
+  const handleUnlinkWhatsApp = async () => {
+    if (!currentUser) return;
+    setIsUnlinkingWhatsApp(true);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/user/whatsapp/unlink", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWhatsappChallengeCode(null);
+        onAddToast("WhatsApp disconnected from your BTNX account.", "info");
+      } else {
+        throw new Error(data.error || "Unlink failed");
+      }
+    } catch (err: any) {
+      onAddToast(`Failed to unlink WhatsApp: ${err.message}`, "error");
+    } finally {
+      setIsUnlinkingWhatsApp(false);
     }
   };
 
@@ -526,14 +628,14 @@ export default function UserProfileModal({
                           Connected AI &amp; ChatGPT (MCP)
                         </span>
                         <h3 className="font-display text-base font-medium text-[#141413] dark:text-[#F3F1EC]">
-                          Personal Account Access Key
+                          Personal Account Access Keys
                         </h3>
                       </div>
                     </div>
-                    {userMcpToken ? (
+                    {mcpTokens.length > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono rounded-full font-medium">
                         <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                        Account Linked
+                        Account Linked ({mcpTokens.length})
                       </span>
                     ) : (
                       <span className="text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] uppercase tracking-wider">
@@ -543,107 +645,236 @@ export default function UserProfileModal({
                   </div>
 
                   <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
-                    Connect your personal BTNX account to ChatGPT, Claude, or Cursor without any JSON configuration. Your personal key guarantees your AI can only see and manage <strong>your own orders</strong>, size recommendations, and tracking updates.
+                    Connect your personal BTNX account to ChatGPT, Claude, or Cursor. Your cryptographically hashed key guarantees AI agents can only query <strong>your own verified orders</strong>, invoices, and tracking.
                   </p>
 
-                  {userMcpToken ? (
-                    <div className="space-y-3 pt-1">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
-                          <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
-                            1. Server Name
-                          </span>
-                          <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
-                            BTNX Luxury Store
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText("BTNX Luxury Store");
-                              onAddToast("Copied server name!", "info");
-                            }}
-                            className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
-                          >
-                            Copy Name
-                          </button>
-                        </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
+                      <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
+                        1. Server Name
+                      </span>
+                      <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC]">
+                        BTNX Luxury Store
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText("BTNX Luxury Store");
+                          onAddToast("Copied server name!", "info");
+                        }}
+                        className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                      >
+                        Copy Name
+                      </button>
+                    </div>
 
-                        <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
-                          <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
-                            2. Server URL (Remote MCP)
-                          </span>
-                          <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
-                            {window.location.origin}/mcp
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/mcp`);
-                              onAddToast("Copied MCP URL!", "info");
-                            }}
-                            className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
-                          >
-                            Copy URL
-                          </button>
-                        </div>
+                    <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
+                      <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
+                        2. Server URL (Remote MCP)
+                      </span>
+                      <p className="font-mono text-xs font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                        https://btnx-website-mcp.vercel.app/mcp
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText("https://btnx-website-mcp.vercel.app/mcp");
+                          onAddToast("Copied MCP URL!", "info");
+                        }}
+                        className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
+                      >
+                        Copy URL
+                      </button>
+                    </div>
+                  </div>
 
-                        <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] font-semibold">
-                              3. Your Bearer Key
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setShowMcpKey(!showMcpKey)}
-                              className="text-[#66625B] hover:text-[#141413] dark:hover:text-[#F3F1EC] p-0.5 cursor-pointer"
-                            >
-                              {showMcpKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                            </button>
-                          </div>
-                          <p className="font-mono text-xs font-semibold text-[#966830] dark:text-[#C89B62] truncate">
-                            {showMcpKey ? userMcpToken : "••••••••••••••••••••"}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`Bearer ${userMcpToken}`);
-                              onAddToast("Copied personal Bearer token!", "info");
-                            }}
-                            className="text-[10px] font-mono text-[#966830] dark:text-[#C89B62] hover:underline cursor-pointer"
-                          >
-                            Copy Bearer Key
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2">
-                        <span className="text-[11px] font-mono text-[#8C877D]">
-                          Linked to: {currentUser?.email}
+                  {/* One-Time Display of Newly Generated Secret Token */}
+                  {newlyCreatedToken && (
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-sm space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-amber-900 dark:text-amber-200 font-bold">
+                          ⚠️ Copy Your New Secret Key Now
                         </span>
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                          One-time display
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                        This token will not be shown again. Paste it as your Bearer token in Claude, ChatGPT or Cursor.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={newlyCreatedToken}
+                          className="flex-1 font-mono text-xs p-2 bg-white dark:bg-[#141413] border border-amber-300 dark:border-amber-700 rounded-xs text-[#141413] dark:text-[#FAF9F7]"
+                        />
                         <button
                           type="button"
-                          onClick={handleRevokeMcpToken}
-                          className="text-[11px] font-mono uppercase tracking-wider text-red-600 dark:text-red-400 hover:underline cursor-pointer"
+                          onClick={() => {
+                            navigator.clipboard.writeText(newlyCreatedToken);
+                            setCopiedToken(true);
+                            onAddToast("Secret token copied to clipboard!", "success");
+                            setTimeout(() => setCopiedToken(false), 3000);
+                          }}
+                          className="px-3 py-2 bg-[#141413] dark:bg-[#FAF9F7] text-white dark:text-[#141413] text-[10px] font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer flex items-center gap-1"
                         >
-                          Revoke / Disconnect Key
+                          {copiedToken ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedToken ? "Copied" : "Copy"}</span>
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="pt-2">
+                  )}
+
+                  {/* Active Tokens List */}
+                  {mcpTokens.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <span className="text-[10px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] block font-semibold">
+                        Active Personal Access Tokens
+                      </span>
+                      <div className="space-y-2">
+                        {mcpTokens.map((tok) => (
+                          <div
+                            key={tok.id}
+                            className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs flex items-center justify-between"
+                          >
+                            <div>
+                              <p className="font-mono text-xs font-semibold text-[#141413] dark:text-[#FAF9F7]">
+                                {tok.name || "Personal Token"}
+                              </p>
+                              <p className="font-mono text-[10px] text-[#66625B] dark:text-[#A7A299]">
+                                {tok.maskedToken} &middot; Created {new Date(tok.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeMcpToken(tok.id)}
+                              disabled={revokingTokenId === tok.id}
+                              className="text-[10px] font-mono uppercase tracking-wider text-red-600 dark:text-red-400 hover:underline cursor-pointer disabled:opacity-50"
+                            >
+                              {revokingTokenId === tok.id ? "Revoking..." : "Revoke"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateMcpToken}
+                      disabled={isGeneratingMcpKey}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm hover:opacity-90 cursor-pointer disabled:opacity-50 transition-opacity"
+                    >
+                      {isGeneratingMcpKey ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Key className="w-3.5 h-3.5" />
+                      )}
+                      <span>Generate New AI Key</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* WhatsApp Concierge & Account Linking */}
+                <div className="border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-6 space-y-4 bg-[#FAF9F7]/60 dark:bg-[#111110]/70">
+                  <div className="flex items-center justify-between border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-[#25D366] text-white flex items-center justify-center">
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-semibold block">
+                          WhatsApp Integration
+                        </span>
+                        <h3 className="font-display text-base font-medium text-[#141413] dark:text-[#F3F1EC]">
+                          Account &amp; Phone Linking
+                        </h3>
+                      </div>
+                    </div>
+                    {userData?.whatsappPhone ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono rounded-full font-medium">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        Phone Linked
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] uppercase tracking-wider">
+                        Unlinked
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-[#66625B] dark:text-[#A7A299] leading-relaxed">
+                    Link your WhatsApp phone number to your BTNX account to check order status, view signed luxury invoices, and track parcels directly from WhatsApp.
+                  </p>
+
+                  {userData?.whatsappPhone ? (
+                    <div className="p-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-xs flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <span className="text-[9px] font-mono uppercase text-[#66625B] dark:text-[#A7A299] font-semibold">
+                          Linked Phone Number
+                        </span>
+                        <p className="font-mono text-sm font-semibold text-[#141413] dark:text-[#FAF9F7]">
+                          {userData.whatsappPhone}
+                        </p>
+                      </div>
                       <button
                         type="button"
-                        onClick={handleGenerateMcpToken}
-                        disabled={isGeneratingMcpKey}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm hover:opacity-90 cursor-pointer disabled:opacity-50 transition-opacity"
+                        onClick={handleUnlinkWhatsApp}
+                        disabled={isUnlinkingWhatsApp}
+                        className="text-[10px] font-mono uppercase tracking-wider text-red-600 dark:text-red-400 hover:underline cursor-pointer disabled:opacity-50"
                       >
-                        {isGeneratingMcpKey ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Key className="w-3.5 h-3.5" />
-                        )}
-                        <span>Generate My Personal AI Key</span>
+                        {isUnlinkingWhatsApp ? "Unlinking..." : "Unlink Phone"}
                       </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {whatsappChallengeCode ? (
+                        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-sm space-y-3 text-center">
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-800 dark:text-emerald-300 font-bold block">
+                            Your 6-Digit Link Code
+                          </span>
+                          <div className="font-mono text-3xl font-extrabold tracking-[0.25em] text-[#966830] dark:text-[#C89B62]">
+                            {whatsappChallengeCode}
+                          </div>
+                          <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed max-w-sm mx-auto">
+                            Send message <strong className="font-mono bg-white dark:bg-[#141413] px-1.5 py-0.5 rounded border border-emerald-200">LINK {whatsappChallengeCode}</strong> to our WhatsApp assistant to instantly verify your account.
+                          </p>
+                          <div className="flex items-center justify-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`LINK ${whatsappChallengeCode}`);
+                                setCopiedChallenge(true);
+                                onAddToast("Copied verification message!", "info");
+                                setTimeout(() => setCopiedChallenge(false), 3000);
+                              }}
+                              className="px-4 py-2 bg-[#141413] dark:bg-[#FAF9F7] text-white dark:text-[#141413] text-[10px] font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer flex items-center gap-1.5"
+                            >
+                              {copiedChallenge ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{copiedChallenge ? "Copied" : `Copy "LINK ${whatsappChallengeCode}"`}</span>
+                            </button>
+                          </div>
+                          <span className="text-[10px] font-mono text-[#8C877D] block">
+                            Code expires in 10 minutes &middot; Single use
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleGenerateWhatsAppChallenge}
+                          disabled={isGeneratingChallenge}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] text-[11px] font-medium uppercase tracking-[0.14em] rounded-sm hover:opacity-90 cursor-pointer disabled:opacity-50 transition-opacity"
+                        >
+                          {isGeneratingChallenge ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Phone className="w-3.5 h-3.5" />
+                          )}
+                          <span>Generate WhatsApp Link Code</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

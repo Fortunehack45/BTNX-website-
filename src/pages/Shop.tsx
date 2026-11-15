@@ -82,7 +82,7 @@ export default function Shop({
   globalSearchQuery = "",
   products,
 }: ShopProps) {
-  const storeProducts = products && products.length > 0 ? products : NEW_YEAR_PRODUCTS;
+  const storeProducts = Array.isArray(products) ? products : NEW_YEAR_PRODUCTS;
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   const [searchQuery, setSearchQuery] = useState(urlQuery || globalSearchQuery);

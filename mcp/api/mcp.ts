@@ -15,6 +15,17 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
+import {
+  hashToken,
+  generateSecureToken,
+  verifyPkce,
+  generateSignedResourceToken,
+  verifySignedResourceToken,
+  storeOAuthTokens,
+  verifyOAuthAccessToken,
+  revokeOAuthToken,
+  resolveAuthenticatedCustomer,
+} from "../src/auth/index.js";
 
 // 1. Firebase Configuration (Active Database: ai-studio-klamby-efc211be-fa31-444f-8359-2e516e0d2638)
 const FIREBASE_CONFIG = {
@@ -38,12 +49,13 @@ const customerAuth = getAuth(customerApp);
 let adminAuthPromise: Promise<any> | null = null;
 async function ensureAdminAuth() {
   if (auth.currentUser) return auth.currentUser;
+  const adminEmail = process.env.FIREBASE_ADMIN_EMAIL;
+  const adminPassword = process.env.FIREBASE_ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    return null;
+  }
   if (!adminAuthPromise) {
-    adminAuthPromise = signInWithEmailAndPassword(
-      auth,
-      "mcp-service@btnx.store",
-      "BtnxMcpService2026!"
-    )
+    adminAuthPromise = signInWithEmailAndPassword(auth, adminEmail, adminPassword)
       .then((cred) => cred.user)
       .catch((err) => {
         adminAuthPromise = null;
@@ -58,53 +70,100 @@ async function ensureAdminAuth() {
 const memorySessions = new Map<string, any>();
 const memoryOAuthTokens = new Map<string, any>();
 
+export const BTNX_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750.7 370.9" fill="none" style="height: 100%; width: auto; max-height: 28px; display: inline-block;" role="img" aria-label="BTNX"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M512.9 3.3Q526.8 2.5 548.9 2.4Q571.0 2.3 586.0 3.3Q601.0 4.2 610.0 5.2Q619.0 6.3 630.5 8.2Q642.0 10.1 650.5 12.2Q659.0 14.2 669.0 17.3Q679.0 20.4 686.5 23.3Q694.0 26.3 701.5 30.2Q709.0 34.1 714.5 37.8Q720.0 41.4 724.3 44.9Q728.6 48.5 732.4 52.5Q736.2 56.5 739.8 62.0Q743.4 67.5 745.2 72.5Q747.1 77.5 747.9 82.5Q748.6 87.5 748.4 93.0L748.1 98.5L747.0 99.8L612.0 107.5L612.1 102.5Q612.3 97.5 611.9 94.0Q611.5 90.5 609.9 85.0Q608.2 79.5 604.1 73.1Q600.0 66.7 594.0 61.0Q588.0 55.4 580.0 50.3Q572.0 45.3 562.5 41.3Q553.0 37.2 542.5 34.2Q532.0 31.3 520.5 29.2Q509.0 27.2 498.5 26.2Q488.0 25.2 475.5 24.8Q463.0 24.4 440.5 25.4Q418.0 26.3 391.5 29.7Q365.0 33.2 342.0 38.0L319.0 42.9L318.3 42.5L323.1 40.8Q328.0 39.1 344.5 34.2Q361.0 29.3 377.0 25.2Q393.0 21.1 406.5 18.2Q420.0 15.3 445.0 11.2Q470.0 7.2 484.5 5.7Q499.0 4.2 512.9 3.3Z M402.5 44.9Q418.9 43.5 433.5 43.3Q448.0 43.2 460.5 44.2Q473.0 45.3 485.5 47.7Q498.0 50.2 508.5 53.7Q519.0 57.2 528.5 62.2Q538.0 67.3 544.0 72.6Q550.0 77.8 552.2 80.6Q554.3 83.5 556.4 87.5Q558.4 91.5 559.4 95.0Q560.4 98.5 560.6 101.0L560.8 103.5L560.0 104.2L554.5 98.2Q549.0 92.1 542.5 87.7Q536.0 83.3 528.0 79.7Q520.0 76.2 510.5 73.2Q501.0 70.3 490.5 68.2Q480.0 66.1 467.0 64.7Q454.0 63.2 438.5 62.7Q423.0 62.2 407.5 62.7Q392.0 63.2 380.0 64.2Q368.0 65.2 350.0 67.7Q332.0 70.2 319.0 72.7Q306.0 75.2 289.0 79.1Q272.0 83.1 243.0 91.7Q214.0 100.4 194.5 107.2Q175.0 114.1 157.0 121.5L139.0 128.8L137.5 128.5L151.8 120.9Q166.0 113.3 184.5 104.8Q203.0 96.3 219.5 89.7Q236.0 83.2 255.5 76.7Q275.0 70.2 291.5 65.7Q308.0 61.1 328.0 56.7Q348.0 52.3 367.0 49.3Q386.0 46.3 402.5 44.9Z M684.2 121.7Q707.4 120.5 713.7 120.2L720.0 119.9L720.8 120.5L636.6 186.5L657.0 237.5L610.0 239.3L608.8 238.5L599.0 212.1L560.0 240.4L501.0 243.5L584.8 180.5L563.1 127.5L564.0 126.6L609.0 125.3L619.8 153.5L621.0 154.2L661.0 122.9L684.2 121.7Z M519.5 128.5Q537.3 127.5 543.1 127.2L549.0 126.9L549.9 127.5L489.0 243.8L469.5 245.3Q450.0 246.8 445.0 247.0L440.0 247.3L439.0 246.5L424.0 184.2L390.6 250.5L342.4 253.5L401.0 134.6L449.0 132.4L454.4 149.4Q459.9 166.5 464.4 179.2L469.0 192.0L501.7 129.5L519.5 128.5Z M312.5 139.5Q382.8 135.5 384.9 135.4L387.0 135.4L386.9 135.9Q386.8 136.5 378.9 152.3L371.0 168.1L349.0 169.5Q327.0 170.8 326.5 171.2L325.9 171.5L284.0 257.1L233.7 260.5L275.7 174.5L275.0 173.9L226.7 176.5L227.3 174.5Q227.8 172.5 235.0 158.0L242.2 143.5L312.5 139.5Z M150.8 149.2Q209.6 145.5 213.8 145.4Q218.0 145.2 220.5 146.4L222.9 147.5L224.5 150.5L223.9 153.5Q223.4 156.5 218.3 168.0Q213.3 179.5 209.7 185.5Q206.1 191.5 202.1 195.7Q198.0 199.9 193.8 202.2L189.6 204.5L191.8 206.0Q194.0 207.6 195.3 209.5Q196.6 211.5 196.8 214.0Q197.1 216.5 196.2 220.5Q195.4 224.5 193.3 229.0Q191.3 233.5 188.3 238.5Q185.3 243.5 181.7 248.0Q178.1 252.5 174.6 255.7Q171.0 258.9 166.5 261.4Q162.0 263.8 155.5 265.2Q149.0 266.6 90.3 270.6L31.6 274.5L92.0 152.9L150.8 149.2Z M151.5 180.1Q144.0 180.5 134.5 181.2L125.0 182.0L117.6 196.5L118.0 197.3L132.5 196.4Q147.0 195.6 150.0 195.2Q153.0 194.8 155.5 193.9Q158.0 193.0 160.7 190.2L163.3 187.5L164.4 183.5L163.0 180.8L161.0 180.3Q159.0 179.7 151.5 180.1Z M135.0 221.3Q129.0 221.5 117.5 222.2L106.0 222.9L97.7 238.5L98.0 239.3L115.0 238.1Q132.0 237.0 135.5 235.7Q139.0 234.5 141.5 232.0Q144.1 229.5 144.8 227.5L145.5 225.5L145.0 223.0L141.0 221.0L135.0 221.3Z M510.6 262.8Q549.2 260.5 552.1 260.3L555.0 260.2L554.5 260.8Q554.0 261.5 536.5 270.7Q519.0 279.9 504.5 286.8Q490.0 293.8 465.0 304.2Q440.0 314.7 414.5 323.7Q389.0 332.7 372.0 337.7Q355.0 342.7 329.5 348.7Q304.0 354.8 277.5 359.3Q251.0 363.7 229.5 365.7Q208.0 367.8 186.5 368.3Q165.0 368.8 148.0 367.8Q131.0 366.7 112.5 363.7Q94.0 360.6 81.0 356.7Q68.0 352.8 61.0 349.8Q54.0 346.8 48.5 343.8Q43.0 340.8 38.5 337.7Q34.0 334.7 29.2 330.6Q24.4 326.5 19.6 321.0Q14.7 315.5 11.8 311.0Q8.9 306.5 6.9 302.5Q5.0 298.5 3.5 294.0L2.0 289.5L11.0 296.1Q20.0 302.8 28.5 307.3Q37.0 311.8 49.5 316.3Q62.0 320.8 74.0 323.7Q86.0 326.7 98.5 328.7Q111.0 330.7 123.0 331.8Q135.0 332.8 150.0 333.3Q165.0 333.8 186.0 333.3Q207.0 332.7 223.5 331.2Q240.0 329.8 255.0 327.8Q270.0 325.8 289.5 322.2Q309.0 318.7 328.0 314.2Q347.0 309.8 363.0 305.3Q379.0 300.8 398.5 294.3Q418.0 287.8 431.0 282.8Q444.0 277.8 458.0 271.5Q472.0 265.2 510.6 262.8Z" /></svg>`;
+
 function resolveSessionId(req: IncomingMessage, explicitToken?: string): string {
   if (explicitToken && String(explicitToken).trim().length > 3) {
     return String(explicitToken).trim();
   }
   const headerSession = (req.headers["mcp-session-id"] ||
     req.headers["x-btnx-session"] ||
-    req.headers["authorization"]?.replace(/^Bearer\s+/i, "")) as string;
+    req.headers["x-session-id"] ||
+    req.headers["session-id"]) as string;
   if (headerSession && headerSession.trim().length > 3) {
     return headerSession.trim();
   }
-  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  const ua = String(req.headers["user-agent"] || "").slice(0, 40);
-  const rawKey = (forwarded || "local") + "_" + ua;
-  return `sess_${Buffer.from(rawKey).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
+  // Also check Authorization header if passed directly as session id
+  const authHeader = (req.headers["authorization"] || "") as string;
+  if (authHeader.startsWith("Bearer btnx_sess_")) {
+    return authHeader.replace("Bearer ", "").trim();
+  }
+  // Check cookies for persistent session
+  const cookieHeader = (req.headers["cookie"] || "") as string;
+  if (cookieHeader) {
+    const match = cookieHeader.match(/(?:btnx_session|sessionToken)=([^;]+)/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1].trim());
+    }
+  }
+  // Check URL search parameters
+  if (req.url && req.url.includes("?")) {
+    try {
+      const u = new URL(req.url, "https://btnx.store");
+      const qToken = u.searchParams.get("sessionToken") || u.searchParams.get("sessionId");
+      if (qToken && qToken.trim().length > 3) {
+        return qToken.trim();
+      }
+    } catch (_) {}
+  }
+  return "";
 }
 
 async function resolveSessionUser(req: IncomingMessage, explicitToken?: string): Promise<any | null> {
   await ensureAdminAuth();
 
-  // 1) Check Authorization: Bearer <token>
-  const authHeader = String(req.headers["authorization"] || "").trim();
-  if (authHeader.toLowerCase().startsWith("bearer ")) {
-    const bearer = authHeader.slice(7).trim();
-    if (bearer.length > 5) {
-      if (memoryOAuthTokens.has(bearer)) return memoryOAuthTokens.get(bearer);
-      try {
-        const tDoc = await getDoc(doc(db, "oauth_tokens", bearer));
-        if (tDoc.exists()) {
-          const tData = tDoc.data();
-          memoryOAuthTokens.set(bearer, tData);
-          return tData;
-        }
-      } catch {}
-    }
+  // 1) Verify Bearer token (PAT, OAuth token, or Firebase ID token) via shared auth service
+  const customer = await resolveAuthenticatedCustomer(req as any, db, auth);
+  if (customer) {
+    return customer;
   }
 
-  // 2) Check session ID in memory or Firestore 'sessions' collection
+  // 2) Check session token passed via argument, header, or cookie
   const sId = resolveSessionId(req, explicitToken);
-  if (memorySessions.has(sId)) return memorySessions.get(sId);
-  try {
-    const sDoc = await getDoc(doc(db, "sessions", sId));
-    if (sDoc.exists()) {
-      const sData = sDoc.data();
-      memorySessions.set(sId, sData);
-      return sData;
+  if (sId) {
+    if (memorySessions.has(sId)) {
+      return memorySessions.get(sId);
     }
-  } catch {}
+    // Read and restore session from Firestore across serverless invocations
+    try {
+      const sDoc = await getDoc(doc(db, "sessions", sId));
+      if (sDoc.exists()) {
+        const sData = sDoc.data();
+        if (!sData.expiresAt || new Date(sData.expiresAt).getTime() > Date.now()) {
+          memorySessions.set(sId, sData);
+          return sData;
+        }
+      }
+    } catch (err) {
+      console.error("[BTNX MCP] Error restoring session from Firestore:", err);
+    }
+
+    // 3) Also check if sId is a Personal Access Token (PAT: btnx_pat_...)
+    if (sId.startsWith("btnx_pat_")) {
+      try {
+        const tokenHash = hashToken(sId);
+        const tokDoc = await getDoc(doc(db, "mcpTokens", tokenHash));
+        if (tokDoc.exists()) {
+          const tData = tokDoc.data();
+          if (!tData.revoked && (!tData.expiresAt || new Date(tData.expiresAt).getTime() > Date.now())) {
+            const uDoc = await getDoc(doc(db, "users", tData.userId));
+            const profile = uDoc.exists() ? uDoc.data() : {};
+            const patUser = {
+              uid: tData.userId,
+              email: profile?.email || tData.userEmail || "",
+              name: profile?.name || "BTNX Customer",
+              roles: profile?.role === "admin" ? ["admin", "customer"] : ["customer"],
+              authMethod: "pat",
+            };
+            memorySessions.set(sId, patUser);
+            return patUser;
+          }
+        }
+      } catch (err) {
+        console.error("[BTNX MCP] Error resolving PAT:", err);
+      }
+    }
+  }
 
   return null;
 }
@@ -115,6 +174,7 @@ async function setAuthenticatedSession(sessionId: string, userData: any): Promis
     await setDoc(doc(db, "sessions", sessionId), {
       ...userData,
       updatedAt: new Date().toISOString(),
+      expiresAt: userData.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     });
   } catch (err) {
     console.error("[BTNX MCP] Session save error:", err);
@@ -174,6 +234,13 @@ function renderProductCardHtml(product: any, host: string): string {
       .btnx-border { border-color: #2C2A26 !important; }
       .btnx-muted { color: #A7A299 !important; }
       .btnx-hero-btn { background-color: #C89B62 !important; color: #111110 !important; }
+      .logo-wrap { color: #FAF9F7 !important; }
+    }
+    .logo-wrap {
+      display: inline-block;
+      height: 24px;
+      width: auto;
+      color: #141413;
     }
     .btnx-card {
       background-color: #FFFFFF;
@@ -338,7 +405,7 @@ function renderProductCardHtml(product: any, host: string): string {
         </div>
       </div>
 
-      <a href="https://btnx-website.vercel.app" target="_blank" class="cta-btn btnx-hero-btn">
+      <a href="https://btnx-website-k3he.vercel.app" target="_blank" class="cta-btn btnx-hero-btn">
         Order via BTNX Storefront &rarr;
       </a>
     </div>
@@ -389,6 +456,14 @@ function renderInvoiceHtml(order: any, host: string): string {
       .invoice-card { background-color: #191816 !important; border-color: #2C2A26 !important; color: #F3F1EC !important; }
       .btnx-border { border-color: #2C2A26 !important; }
       .meta-box { background-color: #141413 !important; border-color: #2C2A26 !important; }
+      .logo-wrap { color: #FAF9F7 !important; }
+    }
+    .logo-wrap {
+      display: inline-block;
+      height: 28px;
+      width: auto;
+      max-width: 90px;
+      color: #141413;
     }
     .invoice-card {
       background-color: #FFFFFF;
@@ -405,8 +480,8 @@ function renderInvoiceHtml(order: any, host: string): string {
   <div class="invoice-card">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid #E6E2DA;" class="btnx-border">
       <div>
-        <div style="font-size: 22px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase;">BTNX</div>
-        <div style="font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #966830; font-weight: 700; margin-top: 2px;">Osun Atelier &middot; Digital Receipt</div>
+        <div class="logo-wrap" style="height: 28px; width: auto; max-width: 90px;">${BTNX_LOGO_SVG}</div>
+        <div style="font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #966830; font-weight: 700; margin-top: 4px;">Osun Atelier &middot; Digital Receipt</div>
       </div>
       <div style="text-align: right;">
         <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.7;">Reference</div>
@@ -520,6 +595,14 @@ function renderTrackingStepperHtml(order: any, host: string): string {
       .track-card { background-color: #191816 !important; border-color: #2C2A26 !important; color: #F3F1EC !important; }
       .btnx-border { border-color: #2C2A26 !important; }
       .meta-box { background-color: #141413 !important; border-color: #2C2A26 !important; }
+      .logo-wrap { color: #FAF9F7 !important; }
+    }
+    .logo-wrap {
+      display: inline-block;
+      height: 24px;
+      width: auto;
+      max-width: 80px;
+      color: #141413;
     }
     .track-card {
       background-color: #FFFFFF;
@@ -536,8 +619,11 @@ function renderTrackingStepperHtml(order: any, host: string): string {
   <div class="track-card">
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid #E6E2DA;" class="btnx-border">
       <div>
-        <div style="font-size: 18px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;">BTNX Logistics</div>
-        <div style="font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #966830; font-weight: 700;">Live Dispatch Stepper</div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="logo-wrap" style="height: 22px; width: auto; max-width: 75px;">${BTNX_LOGO_SVG}</div>
+          <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75;">Logistics</span>
+        </div>
+        <div style="font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #966830; font-weight: 700; margin-top: 3px;">Live Dispatch Stepper</div>
       </div>
       <span style="font-size: 11px; font-weight: 700; background: #15803d; color: #ffffff; padding: 3px 8px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.08em;">
         ${escapeHtml(order.status || "In Transit")}
@@ -555,6 +641,33 @@ function renderTrackingStepperHtml(order: any, host: string): string {
     <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #E6E2DA; text-align: center;" class="btnx-border">
       <span style="font-size: 11px; opacity: 0.75;">Complimentary Size Exchanges: 14-Day Free Returns</span>
     </div>
+  </div>
+</body>
+</html>`;
+}
+
+function renderAccessDeniedHtml(type: string, id: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Access Denied &middot; BTNX Atelier Security</title>
+  <style>
+    body { background-color: #111110; color: #F3F1EC; font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .box { background: #191816; border: 1px solid #2C2A26; max-width: 460px; padding: 32px 28px; text-align: center; border-radius: 4px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+    .logo-wrap { display: block; margin: 0 auto 16px auto; height: 26px; width: auto; max-width: 85px; color: #FAF9F7; }
+    h1 { font-size: 18px; margin-bottom: 12px; color: #C89B62; text-transform: uppercase; letter-spacing: 0.12em; }
+    p { font-size: 13px; color: #A7A299; line-height: 1.6; margin-bottom: 24px; }
+    a { display: inline-block; padding: 12px 22px; background: #C89B62; color: #111110; text-decoration: none; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo-wrap">${BTNX_LOGO_SVG}</div>
+    <h1>🛡️ Confidential Client Record</h1>
+    <p>Viewing this ${escapeHtml(type)} (#${escapeHtml(id)}) requires an active verified customer session or a valid signed authorization link from your BTNX account.</p>
+    <a href="https://btnx-website-k3he.vercel.app">Return to Storefront &rarr;</a>
   </div>
 </body>
 </html>`;
@@ -611,7 +724,8 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        statusFilter: { type: "string", description: "Optional filter by order status: 'Pending', 'Confirmed', 'Processing', 'In Transit', 'Delivered', 'Cancelled', or 'All'" }
+        statusFilter: { type: "string", description: "Optional filter by order status: 'Pending', 'Confirmed', 'Processing', 'In Transit', 'Delivered', 'Cancelled', or 'All'" },
+        sessionToken: { type: "string", description: "BTNX session token obtained from btnx_sign_in or your Personal Access Token (PAT). Pass this to carry over your verified BTNX session across requests." }
       }
     }
   },
@@ -621,7 +735,8 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        orderId: { type: "string", description: "Specific BTNX order reference number" }
+        orderId: { type: "string", description: "Specific BTNX order reference number" },
+        sessionToken: { type: "string", description: "BTNX session token obtained from btnx_sign_in or your Personal Access Token (PAT). Pass this to carry over your verified BTNX session across requests." }
       }
     }
   },
@@ -631,7 +746,8 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        orderId: { type: "string", description: "BTNX order reference number" }
+        orderId: { type: "string", description: "BTNX order reference number" },
+        sessionToken: { type: "string", description: "BTNX session token obtained from btnx_sign_in or your Personal Access Token (PAT). Pass this to carry over your verified BTNX session across requests." }
       }
     }
   },
@@ -713,7 +829,8 @@ const MCP_TOOLS = [
         customerEmail: { type: "string", description: "Recipient email (optional if signed in)" },
         customerPhone: { type: "string", description: "Recipient phone number (optional)" },
         shippingAddress: { type: "string", description: "Recipient delivery address in Nigeria (optional if signed in)" },
-        promoCode: { type: "string", description: "Optional promo voucher code to apply" }
+        promoCode: { type: "string", description: "Optional promo voucher code to apply" },
+        sessionToken: { type: "string", description: "BTNX session token obtained from btnx_sign_in or your Personal Access Token (PAT). Pass this to carry over your verified BTNX session across requests." }
       },
       required: ["productId", "quantity", "size"]
     }
@@ -787,8 +904,12 @@ async function executeTool(name: string, args: any, sessionId: string, reqUser: 
       const phone = profile?.phone || orders[0]?.customerPhone || "N/A";
       const vipTier = profile?.role === "admin" ? "Master Atelier Admin" : "Atelier Collector";
 
+      const finalSessionId = (sessionId && sessionId.length >= 8)
+        ? sessionId
+        : generateSecureToken("btnx_sess_", 24);
+
       const sessionData = {
-        sessionId,
+        sessionId: finalSessionId,
         uid: cred.user.uid,
         email: inputEmail,
         name: customerName,
@@ -796,9 +917,16 @@ async function executeTool(name: string, args: any, sessionId: string, reqUser: 
         shippingAddress: address,
         vipTier,
         authenticatedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       };
 
-      await setAuthenticatedSession(sessionId, sessionData);
+      await setAuthenticatedSession(finalSessionId, sessionData);
+
+      let latestInvoiceUrl = "";
+      if (orders.length > 0) {
+        const { token: sigLatest, expiresAt: expLatest } = generateSignedResourceToken("invoice", orders[0].id);
+        latestInvoiceUrl = `${reqHost}/render/invoice/${orders[0].id}?sig=${sigLatest}&exp=${expLatest}`;
+      }
 
       const displayMarkdown = `### ✅ VERIFIED & SIGNED IN TO BTNX ACCOUNT
 **Welcome, ${customerName}!**  
@@ -808,13 +936,13 @@ async function executeTool(name: string, args: any, sessionId: string, reqUser: 
 - **Contact Phone:** \`${phone}\`  
 - **Total Orders on Record:** ${orders.length}  
 
-${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(orders[0].total)}) — Status: **${orders[0].status || "Confirmed"}**\n👉 [✨ Open Latest Invoice Card](${reqHost}/render/invoice/${orders[0].id})` : ""}
+${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(orders[0].total)}) — Status: **${orders[0].status || "Confirmed"}**\n👉 [✨ Open Latest Invoice Card](${latestInvoiceUrl})` : ""}
 
 *Your account is securely verified. You can now pull your private invoices, track orders, or place new orders.*`;
 
       return {
         authenticated: true,
-        sessionToken: sessionId,
+        sessionToken: finalSessionId,
         customer: {
           name: customerName,
           email: inputEmail,
@@ -825,7 +953,7 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
           latestOrderReference: orders[0]?.id || null,
         },
         displayMarkdown,
-        instructionsForAssistant: "The user has successfully verified and signed into their BTNX account. You may now retrieve their orders, invoices, or delivery address."
+        instructionsForAssistant: `The user has successfully verified and signed into their BTNX account. The authenticated sessionToken is "${finalSessionId}". CRITICAL: You must pass sessionToken: "${finalSessionId}" as an argument in EVERY subsequent tool call (such as btnx_get_invoice, btnx_list_my_orders, btnx_track_parcel, btnx_create_customer_order) so the user does NOT have to sign in again.`
       };
     }
 
@@ -860,8 +988,12 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
 
       await setDoc(doc(db, "users", cred.user.uid), newProfile);
 
+      const finalSignUpSessionId = (sessionId && sessionId.length >= 8)
+        ? sessionId
+        : generateSecureToken("btnx_sess_", 24);
+
       const sessionData = {
-        sessionId,
+        sessionId: finalSignUpSessionId,
         uid: cred.user.uid,
         email,
         name,
@@ -869,9 +1001,10 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
         shippingAddress,
         vipTier: "Atelier Collector",
         authenticatedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       };
 
-      await setAuthenticatedSession(sessionId, sessionData);
+      await setAuthenticatedSession(finalSignUpSessionId, sessionData);
 
       const displayMarkdown = `### 🎉 BTNX ACCOUNT CREATED & VERIFIED!
 **Welcome to the BTNX Atelier, ${name}!**  
@@ -885,7 +1018,7 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
       return {
         success: true,
         authenticated: true,
-        sessionToken: sessionId,
+        sessionToken: finalSignUpSessionId,
         customer: {
           name,
           email,
@@ -894,6 +1027,7 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
           vipTier: "Atelier Collector",
         },
         displayMarkdown,
+        instructionsForAssistant: `The user has registered and signed in. Always pass sessionToken: "${finalSignUpSessionId}" in subsequent tool calls.`
       };
     }
 
@@ -961,11 +1095,13 @@ Use \`btnx_sign_in\` with your email and password.`,
         };
       }
 
-      const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
-      const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email)));
+      const snapUid = user.uid ? await getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))) : null;
+      const snap1 = user.email ? await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email))) : null;
+      const snap2 = user.email ? await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email))) : null;
       const map = new Map<string, any>();
-      snap1.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-      snap2.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+      snapUid?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+      snap1?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+      snap2?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
       const orders = Array.from(map.values()).sort((a, b) => {
         const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -982,8 +1118,13 @@ Use \`btnx_sign_in\` with your email and password.`,
       }
 
       const tableRows = orders.slice(0, 10).map((o) => {
-        return `| **#${o.id}** | ${o.date || "Recent"} | ${formatNaira(o.total)} | \`${o.status || "Confirmed"}\` | [✨ View Luxury Invoice Card](${reqHost}/render/invoice/${o.id}) |`;
+        const { token: sig, expiresAt: exp } = generateSignedResourceToken("invoice", o.id);
+        const signedUrl = `${reqHost}/render/invoice/${o.id}?sig=${sig}&exp=${exp}`;
+        return `| **#${o.id}** | ${o.date || "Recent"} | ${formatNaira(o.total)} | \`${o.status || "Confirmed"}\` | [✨ View Luxury Invoice Card](${signedUrl}) |`;
       }).join("\n");
+
+      const { token: sigLatest, expiresAt: expLatest } = generateSignedResourceToken("invoice", orders[0].id);
+      const signedLatestUrl = `${reqHost}/render/invoice/${orders[0].id}?sig=${sigLatest}&exp=${expLatest}`;
 
       const displayMarkdown = `### 📦 YOUR BTNX ORDERS (\`${user.email}\`)
 **Total Orders:** ${orders.length}  
@@ -992,19 +1133,23 @@ Use \`btnx_sign_in\` with your email and password.`,
 | :--- | :--- | :--- | :--- | :--- |
 ${tableRows}
 
-👉 **[✨ OPEN LATEST ORDER INVOICE](${reqHost}/render/invoice/${orders[0].id})**`;
+👉 **[✨ OPEN LATEST ORDER INVOICE](${signedLatestUrl})**`;
 
       return {
         customerEmail: user.email,
         count: orders.length,
-        orders: orders.map((o) => ({
-          orderId: o.id,
-          date: o.date,
-          totalNaira: formatNaira(o.total),
-          status: o.status || "Confirmed",
-          viewInvoiceUrl: `${reqHost}/render/invoice/${o.id}`,
-          viewTrackingUrl: `${reqHost}/render/track/${o.id}`,
-        })),
+        orders: orders.map((o) => {
+          const { token: sigInv, expiresAt: expInv } = generateSignedResourceToken("invoice", o.id);
+          const { token: sigTrack, expiresAt: expTrack } = generateSignedResourceToken("track", o.id);
+          return {
+            orderId: o.id,
+            date: o.date,
+            totalNaira: formatNaira(o.total),
+            status: o.status || "Confirmed",
+            viewInvoiceUrl: `${reqHost}/render/invoice/${o.id}?sig=${sigInv}&exp=${expInv}`,
+            viewTrackingUrl: `${reqHost}/render/track/${o.id}?sig=${sigTrack}&exp=${expTrack}`,
+          };
+        }),
         displayMarkdown,
         instructionsForAssistant: "Present the order list in a clear table and always provide the clickable links to view the invoices."
       };
@@ -1019,18 +1164,22 @@ ${tableRows}
         if (!user) {
           return {
             requiresAuth: true,
-            message: "No order reference was provided and you are not signed into a BTNX account. Please sign in with your BTNX email and password using 'btnx_sign_in' to automatically retrieve your latest invoice, or provide a specific order reference number.",
+            error: "Authentication required: No order reference was provided and you are not signed into a BTNX account.",
+            hint: "If you called btnx_sign_in previously, pass the sessionToken from btnx_sign_in: btnx_get_invoice({ sessionToken: '<token>' }). Otherwise ask the user for their registered BTNX email and password to call btnx_sign_in.",
+            message: "No order reference was provided and you are not signed into a BTNX account. Please pass sessionToken or call btnx_sign_in with your email and password.",
             displayMarkdown: `### 🔒 AUTHENTICATION OR ORDER REFERENCE REQUIRED
-Please sign in to your BTNX account using \`btnx_sign_in\` (email and password) to view your invoices, or provide your specific order reference number.`,
+Please pass your \`sessionToken\` from \`btnx_sign_in\`, sign in using \`btnx_sign_in\` (email and password), or provide your specific order reference number.`,
           };
         }
 
         // Pull the latest order for the authenticated user
-        const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
-        const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email)));
+        const snapUid = user.uid ? await getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))) : null;
+        const snap1 = user.email ? await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email))) : null;
+        const snap2 = user.email ? await getDocs(query(collection(db, "orders"), where("userEmail", "==", user.email))) : null;
         const map = new Map<string, any>();
-        snap1.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
-        snap2.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+        snapUid?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+        snap1?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+        snap2?.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
         const orders = Array.from(map.values()).sort((a, b) => {
           const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -1060,7 +1209,9 @@ No orders or invoices were found for account \`${user.email}\`. Browse the catal
       // SECURITY CHECK: Verify ownership!
       const orderOwnerEmail = String(order.customerEmail || order.userEmail || "").toLowerCase();
       if (user) {
-        const isOwner = user.email.toLowerCase() === orderOwnerEmail || user.role === "admin";
+        const isOwner = (user.uid && order.userId === user.uid) ||
+          user.email?.toLowerCase() === orderOwnerEmail ||
+          user.role === "admin";
         if (!isOwner) {
           return {
             error: `Access denied. Order #${targetId} does not belong to your authenticated BTNX account.`,
@@ -1069,9 +1220,11 @@ No orders or invoices were found for account \`${user.email}\`. Browse the catal
       } else {
         return {
           requiresAuth: true,
-          message: `For security and customer privacy, please sign in with your BTNX account using btnx_sign_in (email & password) to view invoice #${targetId}.`,
+          error: `Authentication required: You must be signed into the BTNX account that owns order #${targetId}.`,
+          hint: `If you previously called btnx_sign_in, you must pass the sessionToken: btnx_get_invoice({ orderId: "${targetId}", sessionToken: "<token_from_sign_in>" }). If not signed in, ask the user for their BTNX email and password to call btnx_sign_in.`,
+          message: `For security and customer privacy, please sign in with your BTNX account using btnx_sign_in (email & password) or pass sessionToken to view invoice #${targetId}.`,
           displayMarkdown: `### 🔒 AUTHENTICATION REQUIRED
-For security and privacy, you must sign in with the BTNX account that owns order \`#${targetId}\`. Please call \`btnx_sign_in\` with your registered email and password.`,
+For security and privacy, you must sign in with the BTNX account that owns order \`#${targetId}\`. Please call \`btnx_sign_in\` with your registered email and password, or provide your \`sessionToken\`.`,
         };
       }
 
@@ -1084,6 +1237,9 @@ For security and privacy, you must sign in with the BTNX account that owns order
         const qty = it.quantity || 1;
         return `| **${pName}** | ${it.size || "M"} | ${qty} | ${formatNaira(pPrice * qty)} |`;
       }).join("\n");
+
+      const { token: sig, expiresAt: exp } = generateSignedResourceToken("invoice", order.id);
+      const signedInvoiceUrl = `${reqHost}/render/invoice/${order.id}?sig=${sig}&exp=${exp}`;
 
       const displayMarkdown = `### 🧾 OFFICIAL BTNX INVOICE: \`#${order.id}\`
 **Atelier Issue Date:** ${order.date || "Recent"}  
@@ -1099,7 +1255,7 @@ ${itemRows}
 ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.discountAmount)}\n` : ""}**Nationwide Express Courier:** ${order.shippingFee > 0 ? formatNaira(order.shippingFee) : "FREE"}  
 **Grand Total:** **${formatNaira(order.total)}**
 
-👉 **[✨ CLICK HERE TO OPEN FULL INTERACTIVE LUXURY INVOICE CARD](${reqHost}/render/invoice/${order.id})**`;
+👉 **[✨ CLICK HERE TO OPEN FULL INTERACTIVE LUXURY INVOICE CARD](${signedInvoiceUrl})**`;
 
       return {
         invoiceNumber: `INV-${order.id}`,
@@ -1120,7 +1276,7 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
           quantity: it.quantity || 1,
           lineTotalNaira: formatNaira((it.product?.price || it.price || 0) * (it.quantity || 1)),
         })),
-        liveCardUrl: `${reqHost}/render/invoice/${order.id}`,
+        liveCardUrl: signedInvoiceUrl,
         displayMarkdown,
         htmlSnippet: invoiceHtml,
         instructionsForAssistant: "Always display the clickable live invoice card link directly in your response: [✨ View Luxury Invoice Card](...)"
@@ -1131,9 +1287,11 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
       let user = reqUser;
       let targetId = String(args?.orderId || "").trim();
 
-      if (!targetId && user?.email) {
-        const snap = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email)));
-        if (!snap.empty) targetId = snap.docs[0].id;
+      if (!targetId && user) {
+        const snapUid = user.uid ? await getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))) : null;
+        const snap1 = user.email ? await getDocs(query(collection(db, "orders"), where("customerEmail", "==", user.email))) : null;
+        if (snapUid && !snapUid.empty) targetId = snapUid.docs[0].id;
+        else if (snap1 && !snap1.empty) targetId = snap1.docs[0].id;
       }
 
       if (!targetId) {
@@ -1152,6 +1310,9 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
       const order: any = { id: snap.id, ...snap.data() };
       const stepperHtml = renderTrackingStepperHtml(order, reqHost);
 
+      const { token: sig, expiresAt: exp } = generateSignedResourceToken("track", order.id);
+      const signedTrackUrl = `${reqHost}/render/track/${order.id}?sig=${sig}&exp=${exp}`;
+
       const displayMarkdown = `### 📦 BTNX PARCEL DISPATCH TRACKER
 **Order ID:** \`#${order.id}\`  
 **Current Status:** 🚚 **${order.status || "In Transit"}**  
@@ -1164,7 +1325,7 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
 - [x] **Dispatched via Express Courier**
 - [ ] **Out for Local Doorstep Handover**
 
-👉 **[✨ CLICK HERE TO VIEW LIVE INTERACTIVE TRACKING CARD](${reqHost}/render/track/${order.id})**`;
+👉 **[✨ CLICK HERE TO VIEW LIVE INTERACTIVE TRACKING CARD](${signedTrackUrl})**`;
 
       return {
         orderId: order.id,
@@ -1173,7 +1334,7 @@ ${order.discountAmount > 0 ? `**VIP Voucher Savings:** -${formatNaira(order.disc
         destination: order.shippingAddress || "Nigeria",
         estimatedDelivery: "2–4 Business Days nationwide across Nigeria",
         totalNaira: formatNaira(order.total),
-        liveCardUrl: `${reqHost}/render/track/${order.id}`,
+        liveCardUrl: signedTrackUrl,
         displayMarkdown,
         htmlSnippet: stepperHtml,
         instructionsForAssistant: "Always provide the clickable live tracking card link directly in your response: [✨ View Tracking Card](...)"
@@ -1236,6 +1397,7 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
 
       const newOrder = {
         id: randomRef,
+        userId: user?.uid || null,
         source: "mcp-agent",
         date: dateStr,
         createdAt: new Date().toISOString(),
@@ -1267,7 +1429,7 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
       try {
         await setDoc(doc(db, "notifications", `notif-${randomRef}`), {
           id: `notif-${randomRef}`,
-          userId: "admin_master",
+          userId: user?.uid || "admin_master",
           title: `New Order #${randomRef}`,
           message: `Order for ${prod.name} (${formatNaira(total)}) placed for ${customerName}.`,
           type: "order_status",
@@ -1277,6 +1439,10 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
       } catch {}
 
       const invoiceHtml = renderInvoiceHtml(newOrder, reqHost);
+      const { token: sigInv, expiresAt: expInv } = generateSignedResourceToken("invoice", randomRef);
+      const { token: sigTrack, expiresAt: expTrack } = generateSignedResourceToken("track", randomRef);
+      const signedInvoiceUrl = `${reqHost}/render/invoice/${randomRef}?sig=${sigInv}&exp=${expInv}`;
+      const signedTrackingUrl = `${reqHost}/render/track/${randomRef}?sig=${sigTrack}&exp=${expTrack}`;
 
       const displayMarkdown = `### 🎉 ORDER PLACED SUCCESSFULLY!
 **Order Reference:** \`#${randomRef}\`  
@@ -1286,8 +1452,8 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
 **Grand Total:** **${formatNaira(total)}**  
 **Order Status:** ✅ Confirmed & Queued for Quality Inspection  
 
-👉 **[✨ CLICK HERE TO VIEW OFFICIAL LIVE INVOICE](${reqHost}/render/invoice/${randomRef})**  
-👉 **[✨ CLICK HERE TO TRACK PARCEL DISPATCH](${reqHost}/render/track/${randomRef})**`;
+👉 **[✨ CLICK HERE TO VIEW OFFICIAL LIVE INVOICE](${signedInvoiceUrl})**  
+👉 **[✨ CLICK HERE TO TRACK PARCEL DISPATCH](${signedTrackingUrl})**`;
 
       return {
         success: true,
@@ -1296,8 +1462,8 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
         date: dateStr,
         grandTotalNaira: formatNaira(total),
         items: [{ piece: prod.name, quantity: qty, size, price: formatNaira(prod.price) }],
-        viewInvoiceUrl: `${reqHost}/render/invoice/${randomRef}`,
-        viewTrackingUrl: `${reqHost}/render/track/${randomRef}`,
+        viewInvoiceUrl: signedInvoiceUrl,
+        viewTrackingUrl: signedTrackingUrl,
         displayMarkdown,
         htmlSnippet: invoiceHtml,
         instructionsForAssistant: "Congratulate the user on placing their order and provide the clickable links to view their invoice and track shipment."
@@ -1721,29 +1887,45 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     } catch {}
   }
 
-  // 1) RFC 8414 OAuth 2.0 & OpenID Connect Discovery
-  if (url.includes(".well-known/oauth-authorization-server") || url.includes(".well-known/openid-configuration")) {
+  // 1) RFC 8414 OAuth 2.0 & OpenID Connect Discovery & RFC 9728 Protected Resource Metadata
+  const pathname = url.split("?")[0];
+
+  const isOauthMetadata =
+    pathname === "/.well-known/oauth-authorization-server" ||
+    pathname === "/.well-known/oauth-authorization-server/mcp" ||
+    pathname === "/mcp/.well-known/oauth-authorization-server" ||
+    pathname === "/.well-known/openid-configuration" ||
+    pathname === "/mcp/.well-known/openid-configuration";
+
+  if (isOauthMetadata) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       issuer: reqHost,
       authorization_endpoint: `${reqHost}/oauth/authorize`,
       token_endpoint: `${reqHost}/oauth/token`,
+      registration_endpoint: `${reqHost}/oauth/register`,
+      revocation_endpoint: `${reqHost}/oauth/revoke`,
       userinfo_endpoint: `${reqHost}/oauth/userinfo`,
       jwks_uri: `${reqHost}/oauth/jwks.json`,
       response_types_supported: ["code"],
       response_modes_supported: ["query"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
-      code_challenge_methods_supported: ["S256", "plain"],
+      code_challenge_methods_supported: ["S256"],
       scopes_supported: ["openid", "profile", "email", "orders", "btnx:all"]
     }, null, 2));
     return;
   }
 
-  if (url.includes(".well-known/oauth-protected-resource")) {
+  const isProtectedResourceMetadata =
+    pathname === "/.well-known/oauth-protected-resource" ||
+    pathname === "/.well-known/oauth-protected-resource/mcp" ||
+    pathname === "/mcp/.well-known/oauth-protected-resource";
+
+  if (isProtectedResourceMetadata) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      resource: reqHost,
+      resource: `${reqHost}/mcp`,
       authorization_servers: [reqHost],
       scopes_supported: ["openid", "profile", "email", "orders", "btnx:all"],
       bearer_methods_supported: ["header"]
@@ -1760,13 +1942,61 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       auth_type: "oauth2",
       authorization_endpoint: `${reqHost}/oauth/authorize`,
       token_endpoint: `${reqHost}/oauth/token`,
-    }));
+      registration_endpoint: `${reqHost}/oauth/register`,
+      revocation_endpoint: `${reqHost}/oauth/revoke`,
+    }, null, 2));
     return;
   }
 
-  // 2) OAuth Endpoints
-  const pathname = url.split("?")[0];
+  // 2) RFC 7591 Dynamic Client Registration Endpoint
+  if ((pathname === "/oauth/register" || pathname === "/api/oauth/register") && req.method === "POST") {
+    await ensureAdminAuth();
+    const clientName = String(body?.client_name || "Custom MCP Client").trim();
+    const redirectUris = Array.isArray(body?.redirect_uris)
+      ? body.redirect_uris
+      : [String(body?.redirect_uris || "")].filter(Boolean);
+    const clientId = "btnx_client_" + crypto.randomBytes(16).toString("hex");
+    const clientSecret = "btnx_sec_" + crypto.randomBytes(32).toString("hex");
+    const now = Math.floor(Date.now() / 1000);
 
+    const clientRecord = {
+      client_id: clientId,
+      client_secret: clientSecret,
+      client_id_issued_at: now,
+      client_secret_expires_at: 0,
+      client_name: clientName,
+      redirect_uris: redirectUris,
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: body?.token_endpoint_auth_method || "client_secret_post",
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await setDoc(doc(db, "oauth_clients", clientId), clientRecord);
+    } catch (e: any) {
+      console.warn("[OAuth] Persist dynamic client notice:", e?.message);
+    }
+
+    res.writeHead(201, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(clientRecord, null, 2));
+    return;
+  }
+
+  // 3) RFC 7009 Token Revocation Endpoint
+  if ((pathname === "/oauth/revoke" || pathname === "/api/oauth/revoke") && req.method === "POST") {
+    await ensureAdminAuth();
+    const token = String(body?.token || "").trim();
+    if (token) {
+      await revokeOAuthToken(db, token);
+      memoryOAuthTokens.delete(token);
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ revoked: true }));
+    return;
+  }
+
+  // 4) OAuth 2.1 Authorization Code Flow Endpoints
   // A) GET & POST /oauth/authorize
   if (pathname === "/oauth/authorize" || pathname === "/api/oauth/authorize") {
     await ensureAdminAuth();
@@ -1777,7 +2007,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     const scope = queryParams.get("scope") || body?.scope || "openid profile email orders";
     const responseType = queryParams.get("response_type") || body?.response_type || "code";
     const codeChallenge = queryParams.get("code_challenge") || body?.code_challenge || "";
-    const codeChallengeMethod = queryParams.get("code_challenge_method") || body?.code_challenge_method || "";
+    const codeChallengeMethod = queryParams.get("code_challenge_method") || body?.code_challenge_method || "S256";
 
     if (req.method === "POST") {
       const email = String(body?.email || "").toLowerCase().trim();
@@ -1804,7 +2034,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         return;
       }
 
-      // Customer authenticated successfully! Generate authorization code
+      // Customer authenticated successfully! Generate authorization code with 5-minute TTL
       const code = "btnx_code_" + crypto.randomBytes(18).toString("hex");
 
       let prof: any = null;
@@ -1825,7 +2055,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         codeChallenge,
         codeChallengeMethod,
         createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       };
 
       await setDoc(doc(db, "oauth_codes", code), codeRecord);
@@ -1869,10 +2099,41 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       }
 
       const cData = cDoc.data();
+      // Single-use code: Delete immediately to prevent replay attacks
       try { await deleteDoc(doc(db, "oauth_codes", code)); } catch {}
+
+      // Check code expiration
+      if (cData.expiresAt && new Date(cData.expiresAt).getTime() < Date.now()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant", error_description: "Authorization code has expired" }));
+        return;
+      }
+
+      // RFC 7636 PKCE S256 Verification
+      if (cData.codeChallenge) {
+        const verifier = String(body?.code_verifier || "").trim();
+        const method = (cData.codeChallengeMethod || "S256") as "S256" | "plain";
+        if (!verifier || !verifyPkce(verifier, cData.codeChallenge, method)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid_grant", error_description: "PKCE code_verifier validation failed" }));
+          return;
+        }
+      }
 
       const accessToken = "btnx_at_" + crypto.randomBytes(24).toString("hex");
       const refreshToken = "btnx_rt_" + crypto.randomBytes(24).toString("hex");
+
+      // Secure storage: store SHA-256 hashed tokens in oauth_tokens collection
+      await storeOAuthTokens(
+        db,
+        accessToken,
+        refreshToken,
+        cData.uid,
+        cData.email,
+        cData.name,
+        cData.clientId || "mcp_client",
+        ["openid", "profile", "email", "orders"]
+      );
 
       const tokenRecord = {
         token: accessToken,
@@ -1885,8 +2146,6 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         createdAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       };
-
-      await setDoc(doc(db, "oauth_tokens", accessToken), tokenRecord);
       memoryOAuthTokens.set(accessToken, tokenRecord);
 
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -1931,12 +2190,55 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 3) Handle Live HTML Card Render Routes (GET /render/:type/:id)
+  // 4b) Handle Luxury Product OpenGraph / Image Route (GET /og/:id)
+  if (req.method === "GET" && url.startsWith("/og/")) {
+    await ensureAdminAuth();
+    const rawId = url.replace("/og/", "").replace(/\.jpg|\.png|\.webp/i, "").split("?")[0].trim();
+    let prodName = "BTNX Luxury Piece";
+    let prodCat = "Atelier Collection";
+    let prodPrice = "₦75,000";
+
+    try {
+      const snap = await getDoc(doc(db, "products", rawId));
+      if (snap.exists()) {
+        const prodData: any = snap.data();
+        prodName = prodData.name || prodName;
+        prodCat = prodData.category || prodCat;
+        prodPrice = formatNaira(prodData.price || 75000);
+      }
+    } catch {}
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#141413"/>
+  <rect x="40" y="40" width="1120" height="550" rx="8" stroke="#2C2A26" stroke-width="2"/>
+  <g transform="translate(100, 80) scale(0.24)">
+    ${BTNX_LOGO_SVG}
+  </g>
+  <text x="100" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" letter-spacing="4" fill="#C89B62">${escapeHtml(prodCat.toUpperCase())} · OSUN ATELIER</text>
+  <text x="100" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="700" fill="#FAF9F7">${escapeHtml(prodName)}</text>
+  <text x="100" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="800" fill="#E6C08A">${prodPrice}</text>
+  <text x="100" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" letter-spacing="2" fill="#A7A299">NATIONWIDE NIGERIA DISPATCH · 100% AUTHENTIC ATELIER COLLECTION</text>
+</svg>`;
+
+    res.writeHead(200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "public, max-age=86400, s-maxage=86400",
+      "Access-Control-Allow-Origin": "*",
+    });
+    res.end(svg);
+    return;
+  }
+
+  // 5) Handle Live HTML Card Render Routes (GET /render/:type/:id)
   if (req.method === "GET" && url.startsWith("/render/")) {
     await ensureAdminAuth();
-    const parts = url.split("?")[0].split("/").filter(Boolean);
+    const urlObj = new URL(url, reqHost);
+    const parts = urlObj.pathname.split("/").filter(Boolean);
     const renderType = parts[1]; // product | invoice | track
     const targetId = decodeURIComponent(parts[2] || "");
+    const sig = urlObj.searchParams.get("sig") || "";
+    const exp = parseInt(urlObj.searchParams.get("exp") || "0", 10);
 
     if (renderType === "product") {
       let prodId = targetId || "ny-1";
@@ -1946,30 +2248,49 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         res.end(renderProductCardHtml({ id: snap.id, ...snap.data() }, reqHost));
         return;
       }
-    } else if (renderType === "invoice") {
-      let oId = targetId;
-      if (!oId) {
-        const snap = await getDocs(collection(db, "orders"));
-        if (!snap.empty) oId = snap.docs[0].id;
-      }
-      const snap = await getDoc(doc(db, "orders", oId));
-      if (snap.exists()) {
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(renderInvoiceHtml({ id: snap.id, ...snap.data() }, reqHost));
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`Product #${targetId} was not found in the BTNX database.`);
+      return;
+    }
+
+    if (renderType === "invoice" || renderType === "track") {
+      if (!targetId) {
+        res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Order reference is required.");
         return;
       }
-    } else if (renderType === "track") {
-      let oId = targetId;
-      if (!oId) {
-        const snap = await getDocs(collection(db, "orders"));
-        if (!snap.empty) oId = snap.docs[0].id;
-      }
-      const snap = await getDoc(doc(db, "orders", oId));
-      if (snap.exists()) {
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(renderTrackingStepperHtml({ id: snap.id, ...snap.data() }, reqHost));
+
+      const snap = await getDoc(doc(db, "orders", targetId));
+      if (!snap.exists()) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`Order #${targetId} was not found in the BTNX database.`);
         return;
       }
+
+      const orderData: any = { id: snap.id, ...snap.data() };
+
+      // Security check: Either valid signed HMAC token OR authenticated session user matching ownership
+      const hasValidSignature = sig && exp && verifySignedResourceToken(renderType, targetId, sig, exp);
+      const renderUser = await resolveSessionUser(req);
+      const isOwner = renderUser && (
+        renderUser.uid === orderData.userId ||
+        renderUser.email?.toLowerCase() === (orderData.customerEmail || orderData.userEmail)?.toLowerCase() ||
+        renderUser.role === "admin"
+      );
+
+      if (!hasValidSignature && !isOwner) {
+        res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderAccessDeniedHtml(renderType, targetId));
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      if (renderType === "invoice") {
+        res.end(renderInvoiceHtml(orderData, reqHost));
+      } else {
+        res.end(renderTrackingStepperHtml(orderData, reqHost));
+      }
+      return;
     }
 
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -1977,8 +2298,10 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // 4) Handle GET /mcp (Claude Connector Health & Check)
+  // 6) Handle GET /mcp (Claude Connector Health & Check)
   if (req.method === "GET" && (pathname === "/mcp" || pathname === "/api/mcp")) {
+    res.setHeader("Link", `<${reqHost}/.well-known/oauth-protected-resource>; rel="oauth-protected-resource"`);
+    res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${reqHost}/.well-known/oauth-protected-resource"`);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       status: "healthy",
@@ -1990,6 +2313,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         type: "oauth2",
         authorization_endpoint: `${reqHost}/oauth/authorize`,
         token_endpoint: `${reqHost}/oauth/token`,
+        registration_endpoint: `${reqHost}/oauth/register`,
+        revocation_endpoint: `${reqHost}/oauth/revoke`,
       },
       toolsCount: MCP_TOOLS.length,
     }));
@@ -1997,7 +2322,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   }
 
   // 5) Handle JSON-RPC 2.0 (Claude Custom Connector, Cursor, and ChatGPT)
-  const explicitToken = body?.params?.arguments?.sessionToken;
+  const explicitToken = body?.params?.arguments?.sessionToken || body?.params?.arguments?.sessionId;
   const sessionId = resolveSessionId(req, explicitToken);
   const sessionUser = await resolveSessionUser(req, explicitToken);
 
@@ -2047,8 +2372,15 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     if (method === "tools/call") {
       const toolName = body?.params?.name;
       const toolArgs = body?.params?.arguments || {};
+      const callToken = toolArgs.sessionToken || toolArgs.sessionId || explicitToken;
+      const effectiveSessionId = resolveSessionId(req, callToken) || sessionId;
+      const effectiveUser = (callToken ? await resolveSessionUser(req, callToken) : null) || sessionUser;
 
-      const resultData = await executeTool(toolName, toolArgs, sessionId, sessionUser, reqHost);
+      const resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
+
+      if (resultData?.sessionToken) {
+        res.setHeader("Set-Cookie", `btnx_session=${encodeURIComponent(resultData.sessionToken)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=2592000`);
+      }
 
       const response = {
         jsonrpc: "2.0",

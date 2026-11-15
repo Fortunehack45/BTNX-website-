@@ -124,6 +124,13 @@ export default defineConfig(() => {
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      proxy: {
+        '/api': 'http://localhost:4000',
+        '/render': 'http://localhost:4000',
+        '/mcp': 'http://localhost:4000',
+        '/oauth': 'http://localhost:4000',
+        '/.well-known': 'http://localhost:4000',
+      },
     },
   };
 });

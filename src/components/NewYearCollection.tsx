@@ -48,7 +48,7 @@ export default function NewYearCollection({
   onToggleWishlist,
   products,
 }: NewYearCollectionProps) {
-  const storeProducts = products && products.length > 0 ? products : NEW_YEAR_PRODUCTS;
+  const storeProducts = Array.isArray(products) ? products : NEW_YEAR_PRODUCTS;
   const [isVoucherClaimed, setIsVoucherClaimed] = useState(false);
 
   const handleClaimVoucher = (e: React.MouseEvent) => {

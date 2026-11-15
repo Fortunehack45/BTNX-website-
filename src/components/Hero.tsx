@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { HERO_SLIDES, NEW_YEAR_PRODUCTS, GALLERY_INDEX_ITEMS, HeroSlide } from "../data";
+import { HERO_SLIDES, NEW_YEAR_PRODUCTS, GALLERY_INDEX_ITEMS, HeroSlide, LOCAL_PRODUCT_IMAGES, HERO_MEDIA } from "../data";
 import { Product } from "../types";
 import GalleryImage from "./GalleryImage";
 import { db } from "../lib/firebase";
@@ -37,18 +37,40 @@ export default function Hero({ onOpenProduct, products }: HeroProps) {
     const list = sourceProducts || [];
     const pinned = list.filter((p) => Boolean(p.isPinnedHero));
     if (pinned.length === 0) {
+      if (sourceProducts && sourceProducts.length === 0) {
+        return {
+          slides: [
+            {
+              id: "slide-empty",
+              lookNumber: "Atelier",
+              title: "Collection In Preparation",
+              subtitle: "BTNX Store · Nationwide Delivery",
+              image: HERO_MEDIA.image,
+              alt: "BTNX Collection",
+            }
+          ],
+          map: {}
+        };
+      }
       return { slides: HERO_SLIDES, map: {} };
     }
     pinned.sort((a, b) => (a.heroOrder ?? 0) - (b.heroOrder ?? 0));
-    const dynamicSlides: HeroSlide[] = pinned.map((prod, idx) => ({
-      id: `hero-pinned-${prod.id}`,
-      lookNumber: prod.heroLookNumber || `Look 0${idx + 1}`,
-      title: prod.heroHeadline || prod.name,
-      subtitle: prod.heroSubheadline || `${prod.category} · Featured Look`,
-      image: prod.heroImage || prod.image,
-      alt: prod.name,
-      productId: prod.id,
-    }));
+    const dynamicSlides: HeroSlide[] = pinned.map((prod, idx) => {
+      const localFallback = prod.id ? LOCAL_PRODUCT_IMAGES[prod.id] : undefined;
+      const slideImg = (prod.heroImage && !prod.heroImage.includes("/og/"))
+        ? prod.heroImage
+        : ((prod.image && !prod.image.includes("/og/")) ? prod.image : (localFallback || prod.heroImage || prod.image));
+
+      return {
+        id: `hero-pinned-${prod.id}`,
+        lookNumber: prod.heroLookNumber || `Look 0${idx + 1}`,
+        title: prod.heroHeadline || prod.name,
+        subtitle: prod.heroSubheadline || `${prod.category} · Featured Look`,
+        image: slideImg,
+        alt: prod.name,
+        productId: prod.id,
+      };
+    });
     const map: Record<string, Product> = {};
     pinned.forEach((p) => {
       map[p.id] = p;
@@ -253,6 +275,7 @@ export default function Hero({ onOpenProduct, products }: HeroProps) {
                 >
                   <GalleryImage
                     src={currentSlide.image}
+                    fallbackSrc={currentSlide.productId ? LOCAL_PRODUCT_IMAGES[currentSlide.productId] : undefined}
                     alt={currentSlide.alt}
                     id="hero-bg-img"
                     className="w-full h-full object-cover object-center"

@@ -52,6 +52,14 @@
       "destination": "/api"
     },
     {
+      "source": "/.well-known/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/oauth/(.*)",
+      "destination": "/api"
+    },
+    {
       "source": "/product/(.*)",
       "destination": "/api"
     },

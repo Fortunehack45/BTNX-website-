@@ -2,18 +2,21 @@ import { useState, useEffect, useRef } from "react";
 
 interface GalleryImageProps {
   src?: string;
+  fallbackSrc?: string;
   alt: string;
   className?: string;
   id?: string;
 }
 
-export default function GalleryImage({ src, alt, className = "", id }: GalleryImageProps) {
+export default function GalleryImage({ src, fallbackSrc, alt, className = "", id }: GalleryImageProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(src);
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setHasError(false);
+    setCurrentSrc(src);
     if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
       setIsLoaded(true);
     } else {
@@ -21,7 +24,16 @@ export default function GalleryImage({ src, alt, className = "", id }: GalleryIm
     }
   }, [src]);
 
-  if (!src || hasError) {
+  const handleError = () => {
+    if (fallbackSrc && currentSrc !== fallbackSrc) {
+      setCurrentSrc(fallbackSrc);
+      setHasError(false);
+    } else {
+      setHasError(true);
+    }
+  };
+
+  if (!currentSrc || hasError) {
     return (
       <div
         className={`w-full h-full bg-[#F4F1EC] dark:bg-[#22211E] flex flex-col items-center justify-center p-6 text-center select-none ${className}`}
@@ -41,11 +53,11 @@ export default function GalleryImage({ src, alt, className = "", id }: GalleryIm
     <img
       ref={imgRef}
       id={id}
-      src={src}
+      src={currentSrc}
       alt={alt}
       referrerPolicy="no-referrer"
       onLoad={() => setIsLoaded(true)}
-      onError={() => setHasError(true)}
+      onError={handleError}
       className={`${className} ${!isLoaded ? "skeleton-shimmer" : ""}`}
     />
   );

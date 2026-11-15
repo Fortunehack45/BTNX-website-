@@ -24,7 +24,7 @@ import MobileBottomNav from "./components/MobileBottomNav";
 import { AppBootSkeleton } from "./components/StoreSkeleton";
 import SeoManager from "./components/SeoManager";
 import { Product, CartItem, Order } from "./types";
-import { NEW_YEAR_PRODUCTS } from "./data";
+import { NEW_YEAR_PRODUCTS, LOCAL_PRODUCT_IMAGES } from "./data";
 import { useAuth } from "./context/AuthContext";
 import { useNotifications } from "./hooks/useNotifications";
 import { db, handleFirestoreError, OperationType } from "./lib/firebase";
@@ -217,12 +217,25 @@ export default function App() {
               }
             } catch {}
             fetched.forEach((p) => {
-              if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
+              if (!deletedIds.includes(p.id)) {
+                const existing = map.get(p.id);
+                const localFallback = LOCAL_PRODUCT_IMAGES[p.id];
+                const resolvedImg = (p.image && !p.image.includes("/og/"))
+                  ? p.image
+                  : (localFallback || existing?.image || p.image);
+                map.set(p.id, { ...existing, ...p, image: resolvedImg });
+              }
             });
             const merged = Array.from(map.values()).filter((p) => !deletedIds.includes(p.id));
             setProducts(merged);
             try {
               localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
+            } catch {}
+          } else {
+            // Cloud database has no products or was explicitly cleared
+            setProducts([]);
+            try {
+              localStorage.setItem("btnx_cloud_products", JSON.stringify([]));
             } catch {}
           }
         },

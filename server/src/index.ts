@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import crypto from "crypto";
 import { db } from "./firebase.js";
 import {
   collection,
@@ -22,9 +23,25 @@ import {
   renderInvoiceHtml,
   renderTrackingStepperHtml,
   renderSupportTicketHtml,
+  renderAccessDeniedHtml,
+  renderNotFoundHtml,
 } from "./ui/templates.js";
 import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
 import { setupRemoteMcp } from "./mcp.js";
+import {
+  createPersonalAccessToken,
+  listPersonalAccessTokens,
+  revokePersonalAccessToken,
+  verifySignedResourceToken,
+  generateSignedResourceToken,
+} from "./auth/tokens.js";
+import {
+  createWhatsAppLinkingChallenge,
+  unlinkWhatsApp,
+} from "./auth/accountLinking.js";
+import { resolveAuthenticatedCustomer } from "./auth/identity.js";
+import { authorizeAdmin } from "./auth/authorization.js";
+import type { AuthenticatedCustomer } from "./auth/types.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -38,7 +55,14 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(publicDir));
 
@@ -107,8 +131,30 @@ app.get("/api/products/:id", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// AUTHORIZATION MIDDLEWARE
+// ==========================================
+async function requireCustomerAuth(req: Request, res: Response, next: () => void) {
+  const customer = await resolveAuthenticatedCustomer(req as any, db);
+  if (!customer) {
+    return res.status(401).json({ error: "Authentication required. Please sign in with your BTNX account." });
+  }
+  (req as any).customer = customer;
+  next();
+}
+
+async function requireAdminAuth(req: Request, res: Response, next: () => void) {
+  const customer = await resolveAuthenticatedCustomer(req as any, db);
+  const authRes = authorizeAdmin(customer);
+  if (!authRes.authorized) {
+    return res.status(403).json({ error: authRes.reason || "Administrative privilege required." });
+  }
+  (req as any).adminCustomer = customer;
+  next();
+}
+
 // ADMIN: DELETE PRODUCT (Authority Deletion from Firestore)
-app.delete("/api/admin/products/:id", async (req: Request, res: Response) => {
+app.delete("/api/admin/products/:id", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await deleteDoc(doc(db, "products", id));
@@ -119,7 +165,7 @@ app.delete("/api/admin/products/:id", async (req: Request, res: Response) => {
 });
 
 // ADMIN: UPSERT PRODUCT (Authority Save to Firestore)
-app.post("/api/admin/products", async (req: Request, res: Response) => {
+app.post("/api/admin/products", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const product = req.body;
     if (!product || !product.id) {
@@ -136,7 +182,7 @@ app.post("/api/admin/products", async (req: Request, res: Response) => {
 });
 
 // ADMIN: DELETE ORDER
-app.delete("/api/admin/orders/:id", async (req: Request, res: Response) => {
+app.delete("/api/admin/orders/:id", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await deleteDoc(doc(db, "orders", id));
@@ -147,7 +193,7 @@ app.delete("/api/admin/orders/:id", async (req: Request, res: Response) => {
 });
 
 // ADMIN: DELETE PROMO CODE
-app.delete("/api/admin/promos/:code", async (req: Request, res: Response) => {
+app.delete("/api/admin/promos/:code", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { code } = req.params;
     await deleteDoc(doc(db, "promos", code));
@@ -158,7 +204,7 @@ app.delete("/api/admin/promos/:code", async (req: Request, res: Response) => {
 });
 
 // ADMIN: DELETE SUPPORT TICKET
-app.delete("/api/admin/support/:id", async (req: Request, res: Response) => {
+app.delete("/api/admin/support/:id", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await deleteDoc(doc(db, "support_tickets", id));
@@ -213,7 +259,7 @@ app.get("/api/settings/shipping", async (_req: Request, res: Response) => {
   }
 });
 
-app.post("/api/settings/shipping", async (req: Request, res: Response) => {
+app.post("/api/settings/shipping", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const settings = {
       defaultShippingFee: Number(req.body.defaultShippingFee) || 0,
@@ -231,19 +277,16 @@ app.post("/api/settings/shipping", async (req: Request, res: Response) => {
   }
 });
 
-// 5. PROMOS & VALIDATION
+// 5. PROMOS & VALIDATION (FETCHED FROM FIRESTORE DATABASE)
 app.get("/api/promos", async (_req: Request, res: Response) => {
   try {
     const snap = await getDocs(collection(db, "promoCodes"));
-    const promos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const promos = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((p: any) => p.isActive !== false && (!p.expiresAt || new Date(p.expiresAt) > new Date()));
     res.json({ promos });
-  } catch {
-    res.json({
-      promos: [
-        { code: "BTNX50", discountPercentage: 50, expiresAt: "2027-12-31" },
-        { code: "KLAMBY50", discountPercentage: 50, expiresAt: "2027-12-31" },
-      ],
-    });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch promos", details: err?.message, promos: [] });
   }
 });
 
@@ -251,10 +294,6 @@ app.post("/api/promos/validate", async (req: Request, res: Response) => {
   try {
     const code = String(req.body.code || "").trim().toUpperCase();
     if (!code) return res.status(400).json({ valid: false, error: "Code is required" });
-
-    if (code === "BTNX50" || code === "KLAMBY50") {
-      return res.json({ valid: true, code, discountPercentage: 50 });
-    }
 
     const q = query(collection(db, "promoCodes"), where("code", "==", code));
     const snap = await getDocs(q);
@@ -270,7 +309,8 @@ app.post("/api/promos/validate", async (req: Request, res: Response) => {
       return res.status(400).json({ valid: false, error: "Promo code is inactive" });
     }
 
-    res.json({ valid: true, code, discountPercentage: promo.discountPercentage || 0 });
+    const discountPercentage = Number(promo.discountPercentage || promo.percentage || 0);
+    res.json({ valid: true, code, discountPercentage });
   } catch (err: any) {
     res.status(500).json({ valid: false, error: err.message });
   }
@@ -279,7 +319,7 @@ app.post("/api/promos/validate", async (req: Request, res: Response) => {
 // 6. CREATE ORDER
 app.post("/api/orders", async (req: Request, res: Response) => {
   try {
-    const { items, customer, promoCode, notes } = req.body;
+    const { items, customer, promoCode, notes, userId } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Order must contain at least one item." });
     }
@@ -291,10 +331,18 @@ app.post("/api/orders", async (req: Request, res: Response) => {
       subtotal += price * qty;
     }
 
-    // Check promo
+    // Dynamic promo validation from Firestore
     let discountPct = 0;
-    if (promoCode && (promoCode.toUpperCase() === "BTNX50" || promoCode.toUpperCase() === "KLAMBY50")) {
-      discountPct = 0.5;
+    if (promoCode) {
+      const cleanCode = String(promoCode).trim().toUpperCase();
+      const q = query(collection(db, "promoCodes"), where("code", "==", cleanCode));
+      const pSnap = await getDocs(q);
+      if (!pSnap.empty) {
+        const pData = pSnap.docs[0].data();
+        if (pData.isActive !== false && (!pData.expiresAt || new Date(pData.expiresAt) > new Date())) {
+          discountPct = Number(pData.discountPercentage || pData.percentage || 0) / 100;
+        }
+      }
     }
 
     // Shipping calculation
@@ -309,8 +357,15 @@ app.post("/api/orders", async (req: Request, res: Response) => {
     const total = Math.max(0, subtotal - discountAmount) + shippingFee;
 
     const orderId = `BTNX-${Date.now().toString().slice(-6)}`;
+    const resolvedUserId = userId || customer?.userId || undefined;
+
     const orderRecord = {
       id: orderId,
+      userId: resolvedUserId,
+      customerEmail: customer?.email || "guest@btnx.store",
+      customerName: customer?.name || "Guest Client",
+      customerPhone: customer?.phone || "",
+      shippingAddress: customer?.address || customer?.shippingAddress || "",
       items: items.map((it) => ({
         product: it.product || { id: it.productId, name: it.name, price: it.price },
         quantity: it.quantity || 1,
@@ -330,10 +385,15 @@ app.post("/api/orders", async (req: Request, res: Response) => {
 
     await setDoc(doc(db, "orders", orderId), orderRecord);
 
+    const signedInvoice = generateSignedResourceToken(orderId, "invoice", 7 * 24 * 3600);
+    const signedTrack = generateSignedResourceToken(orderId, "track", 7 * 24 * 3600);
+
     res.status(201).json({
       success: true,
       message: "Order placed successfully",
       order: orderRecord,
+      invoiceUrl: `/render/invoice/${orderId}?sig=${signedInvoice.sig}&exp=${signedInvoice.exp}`,
+      trackingUrl: `/render/track/${orderId}?sig=${signedTrack.sig}&exp=${signedTrack.exp}`,
     });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to create order", details: err.message });
@@ -402,7 +462,12 @@ app.get("/api/whatsapp/webhook", (req: Request, res: Response) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "btnx_secret_token";
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+
+  if (!verifyToken) {
+    console.error("[BTNX WhatsApp] WHATSAPP_VERIFY_TOKEN environment variable is not configured.");
+    return res.status(403).send("Verification token not configured");
+  }
 
   if (mode === "subscribe" && token === verifyToken) {
     return res.status(200).send(challenge);
@@ -412,6 +477,22 @@ app.get("/api/whatsapp/webhook", (req: Request, res: Response) => {
 
 app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
   try {
+    // Cryptographic validation of webhook payload from Meta
+    if (process.env.META_APP_SECRET) {
+      const signature = (req.headers["x-hub-signature-256"] || "") as string;
+      if (!signature) {
+        return res.status(401).json({ error: "Missing x-hub-signature-256 header" });
+      }
+      const rawBody = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
+      const expectedSig = "sha256=" + crypto.createHmac("sha256", process.env.META_APP_SECRET).update(rawBody).digest("hex");
+      if (
+        signature.length !== expectedSig.length ||
+        !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))
+      ) {
+        return res.status(403).json({ error: "Invalid webhook HMAC signature" });
+      }
+    }
+
     // Supports Twilio (From, Body) or Meta Cloud API format or generic JSON
     const from = req.body.From || req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || req.body.from || "guest";
     const text = req.body.Body || req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || req.body.text || "";
@@ -442,8 +523,12 @@ app.post("/api/whatsapp/webhook", async (req: Request, res: Response) => {
   }
 });
 
-// Direct test chat endpoint for web/cURL testing
+// Direct test chat endpoint for local development testing only
 app.post("/api/whatsapp/chat", async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({ error: "Chat simulation endpoint is disabled in production." });
+  }
+
   try {
     const { from, customerId, text, message, senderName } = req.body;
     const reqOrigin = `${req.protocol}://${req.get("host")}`;
@@ -726,42 +811,91 @@ app.get("/render/products", async (_req: Request, res: Response) => {
 app.get("/render/invoice/:orderId", async (req: Request, res: Response) => {
   const orderId = req.params.orderId;
   try {
-    const snap = await getDoc(doc(db, "orders", orderId));
-    if (snap.exists()) {
-      res.setHeader("Content-Type", "text/html");
-      return res.send(renderInvoiceHtml({ id: snap.id, ...snap.data() }));
+    const sig = (req.query.sig || "") as string;
+    const exp = (req.query.exp || "") as string;
+    let isAuthorized = false;
+
+    if (sig && exp) {
+      const token = `${sig}.${exp}`;
+      if (verifySignedResourceToken(token, "invoice", orderId)) {
+        isAuthorized = true;
+      }
     }
-  } catch {}
-  res.setHeader("Content-Type", "text/html");
-  res.send(
-    renderInvoiceHtml({
-      id: orderId,
-      customerName: "Valued Client",
-      total: 185000,
-      subtotal: 185000,
-      status: "Processing",
-      items: [{ product: NEW_YEAR_PRODUCTS[0], quantity: 1, size: "M", color: "Noir Black" }],
-    })
-  );
+
+    const customer = await resolveAuthenticatedCustomer(req as any, db);
+
+    const snap = await getDoc(doc(db, "orders", orderId));
+    if (!snap.exists()) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(404).send(renderNotFoundHtml("Invoice", orderId));
+    }
+
+    const orderData: any = { id: snap.id, ...snap.data() };
+
+    const isOwner = customer && (
+      customer.role === "admin" ||
+      customer.uid === orderData.userId ||
+      customer.email?.toLowerCase() === (orderData.customerEmail || orderData.userEmail)?.toLowerCase()
+    );
+
+    if (!isAuthorized && !isOwner) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(403).send(
+        renderAccessDeniedHtml("Access to this private invoice requires verified authorization or an active signed link from your BTNX account.")
+      );
+    }
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(renderInvoiceHtml(orderData));
+  } catch (err: any) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(500).send(renderNotFoundHtml("Invoice", orderId));
+  }
 });
 
 app.get("/render/track/:orderId", async (req: Request, res: Response) => {
   const orderId = req.params.orderId;
   try {
-    const snap = await getDoc(doc(db, "orders", orderId));
-    if (snap.exists()) {
-      res.setHeader("Content-Type", "text/html");
-      return res.send(renderTrackingStepperHtml({ id: snap.id, ...snap.data() }));
+    const sig = (req.query.sig || "") as string;
+    const exp = (req.query.exp || "") as string;
+    let isAuthorized = false;
+
+    if (sig && exp) {
+      const token = `${sig}.${exp}`;
+      if (verifySignedResourceToken(token, "track", orderId)) {
+        isAuthorized = true;
+      }
     }
-  } catch {}
-  res.setHeader("Content-Type", "text/html");
-  res.send(
-    renderTrackingStepperHtml({
-      id: orderId,
-      status: "In Transit",
-      shippingAddress: "Lekki Phase 1, Lagos State, Nigeria",
-    })
-  );
+
+    const customer = await resolveAuthenticatedCustomer(req as any, db);
+
+    const snap = await getDoc(doc(db, "orders", orderId));
+    if (!snap.exists()) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(404).send(renderNotFoundHtml("Parcel Tracking", orderId));
+    }
+
+    const orderData: any = { id: snap.id, ...snap.data() };
+
+    const isOwner = customer && (
+      customer.role === "admin" ||
+      customer.uid === orderData.userId ||
+      customer.email?.toLowerCase() === (orderData.customerEmail || orderData.userEmail)?.toLowerCase()
+    );
+
+    if (!isAuthorized && !isOwner) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(403).send(
+        renderAccessDeniedHtml("Access to this parcel tracking record requires verified authorization or an active signed link from your BTNX account.")
+      );
+    }
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(renderTrackingStepperHtml(orderData));
+  } catch (err: any) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(500).send(renderNotFoundHtml("Parcel Tracking", orderId));
+  }
 });
 
 app.get("/render/support/:ticketId", async (req: Request, res: Response) => {
@@ -769,31 +903,85 @@ app.get("/render/support/:ticketId", async (req: Request, res: Response) => {
   try {
     const snap = await getDoc(doc(db, "supportTickets", ticketId));
     if (snap.exists()) {
-      res.setHeader("Content-Type", "text/html");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.send(renderSupportTicketHtml({ id: snap.id, ...snap.data() }));
     }
-  } catch {}
-  res.setHeader("Content-Type", "text/html");
-  res.send(
-    renderSupportTicketHtml({
-      id: ticketId,
-      topic: "Order & Dispatch Inquiry",
-      mode: "human",
-      messages: [
-        {
-          sender: "client",
-          text: "Hello! Has my piece been shipped from Osogbo yet?",
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-        },
-        {
-          sender: "agent",
-          senderName: "Adaobi N. (Care Desk)",
-          text: "Yes! Your garment was inspected and transferred to our express dispatch carrier this morning. Tracking #BX-849201.",
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    })
-  );
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(404).send(renderNotFoundHtml("Support Ticket", ticketId));
+  } catch {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(500).send(renderNotFoundHtml("Support Ticket", ticketId));
+  }
+});
+
+// ==========================================
+// USER AUTHENTICATED MCP TOKEN & WHATSAPP MANAGEMENT
+// ==========================================
+app.post("/api/user/mcp-token/create", requireCustomerAuth, async (req: Request, res: Response) => {
+  try {
+    const customer = (req as any).customer as AuthenticatedCustomer;
+    const name = req.body.name || "Default MCP Token";
+    const tokenResult = await createPersonalAccessToken(db, customer.uid, name);
+    res.json({
+      success: true,
+      token: tokenResult.rawToken,
+      id: tokenResult.record.id,
+      name: tokenResult.record.name,
+      createdAt: tokenResult.record.createdAt,
+      maskedToken: "btnx_pat_••••••••" + tokenResult.record.id.slice(-4),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to generate MCP Personal Access Token", details: err.message });
+  }
+});
+
+app.get("/api/user/mcp-token/list", requireCustomerAuth, async (req: Request, res: Response) => {
+  try {
+    const customer = (req as any).customer as AuthenticatedCustomer;
+    const tokens = await listPersonalAccessTokens(db, customer.uid);
+    res.json({ success: true, tokens });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to list MCP tokens", details: err.message });
+  }
+});
+
+app.post("/api/user/mcp-token/revoke", requireCustomerAuth, async (req: Request, res: Response) => {
+  try {
+    const customer = (req as any).customer as AuthenticatedCustomer;
+    const { tokenId } = req.body;
+    if (!tokenId) {
+      return res.status(400).json({ error: "Token ID is required" });
+    }
+    await revokePersonalAccessToken(db, customer.uid, tokenId);
+    res.json({ success: true, message: "Token successfully revoked." });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to revoke MCP token", details: err.message });
+  }
+});
+
+app.post("/api/user/whatsapp/challenge", requireCustomerAuth, async (req: Request, res: Response) => {
+  try {
+    const customer = (req as any).customer as AuthenticatedCustomer;
+    const challenge = await createWhatsAppLinkingChallenge(db, customer.uid);
+    res.json({
+      success: true,
+      code: challenge.code,
+      expiresAt: challenge.expiresAt,
+      instructions: `Send "LINK ${challenge.code}" to the official BTNX WhatsApp number within 10 minutes to verify your account.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to create WhatsApp linking code", details: err.message });
+  }
+});
+
+app.post("/api/user/whatsapp/unlink", requireCustomerAuth, async (req: Request, res: Response) => {
+  try {
+    const customer = (req as any).customer as AuthenticatedCustomer;
+    await unlinkWhatsApp(db, customer.uid);
+    res.json({ success: true, message: "WhatsApp identity unlinked successfully." });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to unlink WhatsApp", details: err.message });
+  }
 });
 
 if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "test") {

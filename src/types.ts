@@ -10,6 +10,8 @@ export interface User {
   shippingCity?: string;
   shippingZip?: string;
   shippingCountry?: string;
+  whatsappPhone?: string;
+  mcpToken?: string;
 }
 
 export interface Product {

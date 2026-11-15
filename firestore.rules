@@ -7,13 +7,40 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Core Helpers
+    // ------------------------------------------------------------------------
+    // Core Authentication & Role Helpers
+    // ------------------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isEmailVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return (
+        isSignedIn() && (
+          (request.auth.token.admin == true) ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          )
+        )
+      );
+    }
+
+    function isSupport() {
+      return (
+        isSignedIn() && (
+          isAdmin() ||
+          (request.auth.token.support == true) ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
+          )
+        )
+      );
     }
 
     function incoming() {
@@ -28,32 +55,9 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isAdminByEmail() {
-      return isEmailVerified() && request.auth.token.email == 'fortunedomination@gmail.com';
-    }
-
-    function isAdmin() {
-      return isAdminByEmail() || (
-        isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-      );
-    }
-
-    function isSupport() {
-      return isSignedIn() && (
-        isAdmin() || (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
-        )
-      );
-    }
-
-    // Validation Helpers
+    // ------------------------------------------------------------------------
+    // Schema Validation Helpers
+    // ------------------------------------------------------------------------
     function isValidUser(data, userId) {
       return data.keys().hasAll(['id', 'email', 'role']) &&
         data.keys().hasOnly([
@@ -111,19 +115,8 @@ service cloud.firestore {
         (!('heroImage' in data) || data.heroImage == null || (data.heroImage is string && data.heroImage.size() <= 2000));
     }
 
-    function isOrderCreator(data) {
-      return isSignedIn() && (
-        ('userId' in data && data.userId != null && data.userId == request.auth.uid) ||
-        ('userEmail' in data && data.userEmail != null && request.auth.token.email != null && data.userEmail == request.auth.token.email) ||
-        ('customerEmail' in data && data.customerEmail != null && request.auth.token.email != null && data.customerEmail == request.auth.token.email) ||
-        ('email' in data && data.email != null && request.auth.token.email != null && data.email == request.auth.token.email) ||
-        ('phone' in data && data.phone != null && ('phone_number' in request.auth.token) && request.auth.token.phone_number != null && data.phone == request.auth.token.phone_number) ||
-        ('customerPhone' in data && data.customerPhone != null && ('phone_number' in request.auth.token) && request.auth.token.phone_number != null && data.customerPhone == request.auth.token.phone_number)
-      );
-    }
-
     function isValidOrder(data, orderId) {
-      return data.keys().hasAll(['id', 'items', 'total', 'status']) &&
+      return data.keys().hasAll(['id', 'userId', 'items', 'total', 'status']) &&
         data.keys().hasOnly([
           'id', 'userId', 'userEmail', 'customerEmail', 'email',
           'phone', 'customerPhone', 'customerName',
@@ -132,7 +125,7 @@ service cloud.firestore {
           'source', 'shippingAddress', 'subtotal', 'discountAmount', 'shippingFee'
         ]) &&
         data.id is string && data.id == orderId &&
-        (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128)) &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
         (!('userEmail' in data) || data.userEmail == null || (data.userEmail is string && data.userEmail.size() <= 254)) &&
         (!('customerEmail' in data) || data.customerEmail == null || (data.customerEmail is string && data.customerEmail.size() <= 254)) &&
         (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 254)) &&
@@ -258,9 +251,13 @@ service cloud.firestore {
         (!('feedbackSubmittedAt' in data) || data.feedbackSubmittedAt == null || (data.feedbackSubmittedAt is string && data.feedbackSubmittedAt.size() <= 64));
     }
 
+    // ------------------------------------------------------------------------
     // Collection Rules
+    // ------------------------------------------------------------------------
+
+    // 1. Users: Customers can read and update their own document only. Role elevation is strictly forbidden.
     match /users/{userId} {
-      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin() || isSupport());
       allow list: if isAdmin();
       allow create: if isValidId(userId) && isValidUser(incoming(), userId) && (
         isAdmin() || (isOwner(userId) && incoming().role == 'customer')
@@ -279,6 +276,31 @@ service cloud.firestore {
       allow delete: if isValidId(userId) && isAdmin();
     }
 
+    // 2. Orders: Public listing and reading strictly removed. Ownership strictly checked against Firebase UID.
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
+      );
+      allow list: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
+      );
+      allow create: if isValidId(orderId) && isSignedIn() &&
+        isValidOrder(incoming(), orderId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().id == orderId;
+      allow update: if isValidId(orderId) && (isAdmin() || isSupport()) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
+        incoming().status is string &&
+        incoming().status in [
+          'Pending', 'Confirmed', 'Processing', 'Shipped', 'In Transit', 'Delivered', 'Cancelled',
+          'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'
+        ];
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    // 3. Products: Public read for storefront; Admin-only write.
     match /products/{productId} {
       allow get: if isValidId(productId);
       allow list: if true;
@@ -293,63 +315,33 @@ service cloud.firestore {
       allow delete: if isValidId(productId) && isAdmin();
     }
 
-    match /orders/{orderId} {
-      allow get: if isValidId(orderId);
-      allow list: if true;
-      allow create: if isValidId(orderId) && isValidOrder(incoming(), orderId);
-      allow update: if isValidId(orderId) && (isAdmin() || isSupport()) && (
-        (isValidOrder(incoming(), orderId) && incoming().id == existing().id && (!('userId' in existing()) || incoming().userId == existing().userId)) ||
-        (incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
-          incoming().status is string &&
-          incoming().status in [
-            'Pending', 'Confirmed', 'Processing', 'Shipped', 'In Transit', 'Delivered', 'Cancelled',
-            'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'
-          ])
+    // 4. Support Tickets: Strict customer isolation. Customers can only read and list their own tickets.
+    match /supportTickets/{ticketId} {
+      allow get: if isValidId(ticketId) && isSignedIn() && (
+        (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
       );
-      allow delete: if isValidId(orderId) && isAdmin();
+      allow list: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
+      );
+      allow create: if isValidId(ticketId) && isSignedIn() &&
+        isValidSupportTicket(incoming(), ticketId) &&
+        incoming().userId == request.auth.uid;
+      allow update: if isValidId(ticketId) && isSignedIn() && (
+        (
+          existing().userId == request.auth.uid &&
+          incoming().userId == existing().userId &&
+          incoming().id == existing().id &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'messages', 'unreadByAdmin', 'rating', 'feedbackComment', 'feedbackSubmittedAt', 'updatedAt'
+          ])
+        ) ||
+        isAdmin() ||
+        isSupport()
+      );
+      allow delete: if isValidId(ticketId) && isAdmin();
     }
 
-    match /settings/{settingId} {
-      allow get, list: if true;
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    match /promoCodes/{promoCodeId} {
-      allow get: if isValidId(promoCodeId);
-      allow list: if true;
-      allow create, update: if isValidId(promoCodeId) && isAdmin() && isValidPromoCode(incoming());
-      allow delete: if isValidId(promoCodeId) && isAdmin();
-    }
-
-    match /collections/{collectionId} {
-      allow get: if isValidId(collectionId);
-      allow list: if true;
-      allow create, update: if isValidId(collectionId) && isAdmin() && isValidCollection(incoming());
-      allow delete: if isValidId(collectionId) && isAdmin();
-    }
-
-    match /socials/{socialId} {
-      allow get: if isValidId(socialId);
-      allow list: if true;
-      allow create, update: if isValidId(socialId) && isAdmin() && isValidSocial(incoming());
-      allow delete: if isValidId(socialId) && isAdmin();
-    }
-
-    match /newsletters/{newsletterId} {
-      allow get: if isValidId(newsletterId) && isAdmin();
-      allow list: if isAdmin();
-      allow create: if isValidId(newsletterId) && isValidNewsletter(incoming());
-      allow update, delete: if isValidId(newsletterId) && isAdmin();
-    }
-
-    match /siteContent/{contentId} {
-      allow get: if isValidId(contentId);
-      allow list: if true;
-      allow create, update: if isValidId(contentId) && isAdmin() && isValidSiteContent(incoming());
-      allow delete: if isValidId(contentId) && isAdmin();
-    }
-
+    // 5. Notifications: User-scoped or broadcast.
     match /notifications/{notificationId} {
       allow get: if isValidId(notificationId) && isSignedIn() && (
         existing().userId == request.auth.uid || existing().userId == 'broadcast' || isAdmin()
@@ -368,6 +360,7 @@ service cloud.firestore {
       allow delete: if isValidId(notificationId) && isAdmin();
     }
 
+    // 6. Reviews: Public read; Authenticated verified review submission.
     match /reviews/{reviewId} {
       allow get: if isValidId(reviewId);
       allow list: if true;
@@ -380,15 +373,68 @@ service cloud.firestore {
       allow delete: if isValidId(reviewId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
     }
 
-    match /supportTickets/{ticketId} {
-      allow get, list: if isSignedIn();
-      allow create: if isValidId(ticketId) && isSignedIn() && isValidSupportTicket(incoming(), ticketId) && (
-        incoming().userId == request.auth.uid || isAdmin() || isSupport()
-      );
-      allow update: if isValidId(ticketId) && isSignedIn() && isValidSupportTicket(incoming(), ticketId) && (
-        existing().userId == request.auth.uid || isAdmin() || isSupport()
-      );
-      allow delete: if isValidId(ticketId) && isAdmin();
+    // 7. Store Settings, Promos, Collections, Socials, Content: Public read, Admin write.
+    match /settings/{settingId} {
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /promoCodes/{promoCodeId} {
+      allow get: if isValidId(promoCodeId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(promoCodeId) && isAdmin() && isValidPromoCode(incoming());
+    }
+
+    match /collections/{collectionId} {
+      allow get: if isValidId(collectionId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(collectionId) && isAdmin() && isValidCollection(incoming());
+    }
+
+    match /socials/{socialId} {
+      allow get: if isValidId(socialId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(socialId) && isAdmin() && isValidSocial(incoming());
+    }
+
+    match /newsletters/{newsletterId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(newsletterId) && isValidNewsletter(incoming());
+      allow update, delete: if isValidId(newsletterId) && isAdmin();
+    }
+
+    match /siteContent/{contentId} {
+      allow get, list: if true;
+      allow create, update, delete: if isValidId(contentId) && isAdmin() && isValidSiteContent(incoming());
+    }
+
+    // ------------------------------------------------------------------------
+    // Protected Credentials & System Collections (Client Access Strictly Denied)
+    // Managed exclusively through trusted backend services via Admin SDK
+    // ------------------------------------------------------------------------
+    match /personal_access_tokens/{tokenId} {
+      allow read, write: if false;
+    }
+    match /oauth_tokens/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /oauth_codes/{codeHash} {
+      allow read, write: if false;
+    }
+    match /whatsapp_identities/{phoneId} {
+      allow read, write: if false;
+    }
+    match /auth_challenges/{challengeId} {
+      allow read, write: if false;
+    }
+    match /sessions/{sessionId} {
+      allow read, write: if false;
+    }
+    match /mcpTokens/{token} {
+      allow read, write: if false;
+    }
+    match /whatsappUsers/{phone} {
+      allow read, write: if false;
     }
   }
 }

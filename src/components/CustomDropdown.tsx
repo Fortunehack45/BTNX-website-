@@ -12,7 +12,7 @@ export interface DropdownOption {
 interface CustomDropdownProps {
   value: string;
   onChange: (value: string) => void;
-  options: string[] | DropdownOption[];
+  options: readonly string[] | readonly DropdownOption[] | string[] | DropdownOption[];
   placeholder?: string;
   label?: string;
   className?: string;

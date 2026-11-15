@@ -14,6 +14,15 @@ import productLayeringOrigin from "./assets/images/product_layering_origin_17946
 import productMelburneCollege from "./assets/images/product_melburne_college_1794617814102.jpg";
 import productRoyaleLeather from "./assets/images/product_royale_leather_1794617813513.jpg";
 
+export const LOCAL_PRODUCT_IMAGES: Record<string, string> = {
+  "ny-1": productPurpleBrooklyn,
+  "ny-2": productCroppedSpace,
+  "ny-3": productBirmaniaSunt,
+  "ny-4": productLayeringOrigin,
+  "ny-5": productMelburneCollege,
+  "ny-6": productRoyaleLeather,
+};
+
 export const NAVIGATION_ITEMS: NavItem[] = [
   { label: "Home", href: "/", active: true },
   { label: "New", href: "#new-arrivals" },
