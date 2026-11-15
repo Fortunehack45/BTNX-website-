@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getAuth, Auth } from "firebase-admin/auth";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
+import * as crypto from "crypto";
 import type { CustomerRole } from "./auth/types.js";
 
 export const FIREBASE_PROJECT_ID = "expenses-ai-vfx7o";
@@ -75,8 +76,28 @@ export function getFirebaseAdmin(): { app: App; auth: Auth; db: Firestore | null
   return { app: adminApp, auth: adminAuth, db: adminDb, hasCredentials: hasCreds };
 }
 
+let googleCertsCache: { keys: Record<string, string>; expiresAt: number } | null = null;
+
+async function getGooglePublicCerts(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (googleCertsCache && googleCertsCache.expiresAt > now) {
+    return googleCertsCache.keys;
+  }
+  try {
+    const res = await fetch("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com");
+    if (!res.ok) throw new Error(`Google cert fetch failed with status ${res.status}`);
+    const keys = (await res.json()) as Record<string, string>;
+    googleCertsCache = { keys, expiresAt: now + 3600 * 1000 };
+    return keys;
+  } catch (err) {
+    if (googleCertsCache) return googleCertsCache.keys;
+    throw err;
+  }
+}
+
 /**
- * Cryptographically verifies a Firebase ID Token using the official Firebase Admin SDK.
+ * Cryptographically verifies a Firebase ID Token using either the official Firebase Admin SDK
+ * or Google's public x509 certificates (RFC 7519 / Google OpenID Connect standard).
  * Never trusts unverified decoded claims. Validates signature, issuer, audience, and expiration.
  */
 export async function verifyFirebaseIdToken(
@@ -87,41 +108,112 @@ export async function verifyFirebaseIdToken(
     return null;
   }
 
+  // 1. Try Firebase Admin SDK if admin credentials are affirmatively configured
+  if (hasAdminCredentials()) {
+    try {
+      const { auth } = getFirebaseAdmin();
+      const decodedToken = await auth.verifyIdToken(token, checkRevoked);
+
+      // Enforce strict project ID audience and issuer binding
+      if (decodedToken.aud !== FIREBASE_PROJECT_ID && decodedToken.firebase?.project_id !== FIREBASE_PROJECT_ID) {
+        console.warn(`[Auth] ID token audience mismatch: expected ${FIREBASE_PROJECT_ID}, got ${decodedToken.aud}`);
+        return null;
+      }
+
+      if (decodedToken.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) {
+        console.warn(`[Auth] ID token issuer mismatch: expected https://securetoken.google.com/${FIREBASE_PROJECT_ID}, got ${decodedToken.iss}`);
+        return null;
+      }
+
+      if (!decodedToken.sub || typeof decodedToken.sub !== "string" || decodedToken.sub.trim().length === 0) {
+        return null;
+      }
+
+      const role: CustomerRole =
+        decodedToken.admin === true || decodedToken.role === "admin"
+          ? "admin"
+          : decodedToken.support === true || decodedToken.role === "support"
+          ? "support"
+          : "customer";
+
+      return {
+        uid: decodedToken.sub,
+        email: decodedToken.email,
+        name: decodedToken.name,
+        role,
+        emailVerified: decodedToken.email_verified,
+      };
+    } catch (err: any) {
+      console.warn("[Auth] Admin verifyIdToken fell through to public cert verification:", err?.code || err?.message);
+    }
+  }
+
+  // 2. Cryptographic verification using Google's public x509 certificates
   try {
-    const { auth } = getFirebaseAdmin();
-    const decodedToken = await auth.verifyIdToken(token, checkRevoked);
+    const [headerB64, payloadB64, sigB64] = token.split(".");
+    const header = JSON.parse(Buffer.from(headerB64, "base64url").toString("utf8"));
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
 
-    // Enforce strict project ID audience and issuer binding
-    if (decodedToken.aud !== FIREBASE_PROJECT_ID && decodedToken.firebase?.project_id !== FIREBASE_PROJECT_ID) {
-      console.warn(`[Auth] ID token audience mismatch: expected ${FIREBASE_PROJECT_ID}, got ${decodedToken.aud}`);
+    if (header.alg !== "RS256" || !header.kid) {
       return null;
     }
 
-    if (decodedToken.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) {
-      console.warn(`[Auth] ID token issuer mismatch: expected https://securetoken.google.com/${FIREBASE_PROJECT_ID}, got ${decodedToken.iss}`);
+    const certs = await getGooglePublicCerts();
+    const cert = certs[header.kid];
+    if (!cert) {
       return null;
     }
 
-    if (!decodedToken.sub || typeof decodedToken.sub !== "string" || decodedToken.sub.trim().length === 0) {
+    const verifier = crypto.createVerify("RSA-SHA256");
+    verifier.update(`${headerB64}.${payloadB64}`);
+    const isValidSig = verifier.verify(cert, Buffer.from(sigB64, "base64url"));
+    if (!isValidSig) {
+      console.warn("[Auth] Firebase ID token cryptographic signature invalid");
+      return null;
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    // Expiration check (with 60s clock skew tolerance)
+    if (typeof payload.exp !== "number" || payload.exp < nowSec - 60) {
+      console.warn("[Auth] Firebase ID token expired");
+      return null;
+    }
+    // Issued in the past (with 60s clock skew tolerance)
+    if (typeof payload.iat !== "number" || payload.iat > nowSec + 60) {
+      console.warn("[Auth] Firebase ID token future iat");
+      return null;
+    }
+    // Audience check
+    if (payload.aud !== FIREBASE_PROJECT_ID) {
+      console.warn("[Auth] Firebase ID token aud mismatch");
+      return null;
+    }
+    // Issuer check
+    if (payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) {
+      console.warn("[Auth] Firebase ID token iss mismatch");
+      return null;
+    }
+    // Subject (UID) check
+    if (!payload.sub || typeof payload.sub !== "string" || payload.sub.trim().length === 0) {
       return null;
     }
 
     const role: CustomerRole =
-      decodedToken.admin === true || decodedToken.role === "admin"
+      payload.admin === true || payload.role === "admin"
         ? "admin"
-        : decodedToken.support === true || decodedToken.role === "support"
+        : payload.support === true || payload.role === "support"
         ? "support"
         : "customer";
 
     return {
-      uid: decodedToken.sub,
-      email: decodedToken.email,
-      name: decodedToken.name,
+      uid: payload.sub,
+      email: payload.email,
+      name: payload.name,
       role,
-      emailVerified: decodedToken.email_verified,
+      emailVerified: payload.email_verified,
     };
   } catch (err: any) {
-    console.warn("[Auth] Firebase ID token cryptographic verification rejected:", err?.code || err?.message);
-    return null; // Fail-closed
+    console.warn("[Auth] Public JWKS ID token verification error:", err?.message || err);
+    return null;
   }
 }
