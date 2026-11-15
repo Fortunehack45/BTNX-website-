@@ -2947,7 +2947,11 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           },
         },
       };
-      res.writeHead(200, { "Content-Type": "application/json" });
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "mcp-session-id": establishedSessionId,
+        "Access-Control-Expose-Headers": "Content-Type, mcp-session-id, x-btnx-session",
+      });
       res.end(JSON.stringify(response));
       return;
     }
