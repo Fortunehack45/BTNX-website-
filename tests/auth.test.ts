@@ -8,6 +8,11 @@ import {
   verifyPkce,
   generateSignedResourceToken,
   verifySignedResourceToken,
+  createSignedOAuthCode,
+  verifySignedOAuthCode,
+  createSignedOAuthAccessToken,
+  createSignedSessionToken,
+  verifySignedSessionToken,
 } from "../server/src/auth/tokens.js";
 import {
   authorizeResourceOwner,
@@ -126,6 +131,78 @@ describe("BTNX Authentication & Authorization Security Suite", () => {
       const { token: sig, expiresAt: exp } = generateSignedResourceToken("invoice", orderId, 3600, "secret_A");
       const valid = verifySignedResourceToken("invoice", orderId, sig, exp, "secret_B");
       assert.equal(valid, false);
+    });
+  });
+
+  // 3b. Stateless Distributed OAuth & Session Tokens
+  describe("Stateless Distributed OAuth & Session Tokens (Serverless Multi-Instance)", () => {
+    it("should issue and verify a stateless OAuth authorization code", () => {
+      const record = {
+        uid: "user_stateless_123",
+        email: "stateless@btnx.store",
+        name: "Stateless Collector",
+        clientId: "claude-client",
+        redirectUri: "https://claude.ai/oauth/callback",
+        codeChallenge: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        codeChallengeMethod: "S256",
+        expiresAt: new Date(Date.now() + 300000).toISOString(),
+      };
+
+      const code = createSignedOAuthCode(record);
+      assert.ok(code.startsWith("btnx_code_"));
+
+      const verified = verifySignedOAuthCode(code);
+      assert.ok(verified);
+      assert.equal(verified?.uid, record.uid);
+      assert.equal(verified?.email, record.email);
+      assert.equal(verified?.clientId, record.clientId);
+      assert.equal(verified?.codeChallenge, record.codeChallenge);
+    });
+
+    it("should reject a tampered stateless OAuth authorization code", () => {
+      const record = {
+        uid: "user_stateless_123",
+        email: "stateless@btnx.store",
+        clientId: "claude-client",
+        redirectUri: "https://claude.ai/oauth/callback",
+        expiresAt: new Date(Date.now() + 300000).toISOString(),
+      };
+
+      const code = createSignedOAuthCode(record);
+      const tampered = code.slice(0, -4) + "abcd";
+      assert.equal(verifySignedOAuthCode(tampered), null);
+    });
+
+    it("should reject an expired stateless OAuth authorization code", () => {
+      const record = {
+        uid: "user_stateless_123",
+        email: "stateless@btnx.store",
+        clientId: "claude-client",
+        redirectUri: "https://claude.ai/oauth/callback",
+        expiresAt: new Date(Date.now() - 5000).toISOString(), // expired
+      };
+
+      const code = createSignedOAuthCode(record);
+      assert.equal(verifySignedOAuthCode(code), null);
+    });
+
+    it("should issue and verify a stateless session token", () => {
+      const sessionData = {
+        uid: "user_sess_789",
+        email: "vip@btnx.store",
+        name: "VIP Patron",
+        role: "customer",
+        vipTier: "Atelier Collector",
+      };
+
+      const token = createSignedSessionToken(sessionData);
+      assert.ok(token.startsWith("btnx_sess_"));
+
+      const verified = verifySignedSessionToken(token);
+      assert.ok(verified);
+      assert.equal(verified?.uid, sessionData.uid);
+      assert.equal(verified?.email, sessionData.email);
+      assert.equal(verified?.vipTier, sessionData.vipTier);
     });
   });
 

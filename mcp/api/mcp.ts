@@ -32,6 +32,11 @@ import {
   verifyAndLinkWhatsApp,
   unlinkWhatsApp,
   normalizePhoneNumber,
+  createSignedOAuthCode,
+  verifySignedOAuthCode,
+  createSignedOAuthAccessToken,
+  createSignedSessionToken,
+  verifySignedSessionToken,
 } from "../src/auth/index.js";
 import { getFirebaseAdmin, verifyFirebaseIdToken, hasAdminCredentials } from "../src/firebaseAdmin.js";
 
@@ -140,6 +145,20 @@ async function resolveSessionUser(req: IncomingMessage, explicitToken?: string):
   // 2) Check session token passed via argument, header, or cookie
   const sId = resolveSessionId(req, explicitToken);
   if (sId) {
+    // 2a) Cryptographically verify stateless signed session token
+    if (sId.startsWith("btnx_sess_")) {
+      const verifiedSession = verifySignedSessionToken(sId);
+      if (verifiedSession) {
+        return verifiedSession;
+      }
+    }
+    // 2b) Cryptographically verify stateless signed OAuth token passed as session
+    if (sId.startsWith("btnx_at_")) {
+      const verifiedOauth = await verifyOAuthAccessToken(db, sId);
+      if (verifiedOauth) {
+        return verifiedOauth;
+      }
+    }
     if (memorySessions.has(sId)) {
       return memorySessions.get(sId);
     }
@@ -1097,21 +1116,21 @@ async function executeTool(name: string, args: any, sessionId: string, reqUser: 
       const phone = profile?.phone || orders[0]?.customerPhone || "N/A";
       const vipTier = profile?.role === "admin" ? "Master Atelier Admin" : "Atelier Collector";
 
-      const finalSessionId = (sessionId && sessionId.length >= 8)
-        ? sessionId
-        : generateSecureToken("btnx_sess_", 24);
-
       const sessionData = {
-        sessionId: finalSessionId,
+        sessionId: "",
         uid: cred.user.uid,
         email: inputEmail,
         name: customerName,
         phone,
         shippingAddress: address,
         vipTier,
+        role: (profile?.role === "admin" || profile?.role === "support") ? profile.role : "customer",
         authenticatedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       };
+
+      const finalSessionId = createSignedSessionToken(sessionData);
+      sessionData.sessionId = finalSessionId;
 
       await setAuthenticatedSession(finalSessionId, sessionData);
 
@@ -2363,7 +2382,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  const url = req.url || "/";
+  try {
+    const url = req.url || "/";
   const reqHost = `https://${req.headers["host"] || "btnx-website-mcp.vercel.app"}`;
 
   // Parse Body for POST Requests early
@@ -2398,11 +2418,12 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   const pathname = url.split("?")[0];
 
   const isOauthMetadata =
-    pathname === "/.well-known/oauth-authorization-server" ||
-    pathname === "/.well-known/oauth-authorization-server/mcp" ||
-    pathname === "/mcp/.well-known/oauth-authorization-server" ||
-    pathname === "/.well-known/openid-configuration" ||
-    pathname === "/mcp/.well-known/openid-configuration";
+    pathname.startsWith("/.well-known/oauth-authorization-server") ||
+    pathname.startsWith("/mcp/.well-known/oauth-authorization-server") ||
+    pathname.startsWith("/.well-known/openid-configuration") ||
+    pathname.startsWith("/mcp/.well-known/openid-configuration") ||
+    pathname.endsWith("/.well-known/oauth-authorization-server") ||
+    pathname.endsWith("/.well-known/openid-configuration");
 
   if (isOauthMetadata) {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -2425,9 +2446,9 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   }
 
   const isProtectedResourceMetadata =
-    pathname === "/.well-known/oauth-protected-resource" ||
-    pathname === "/.well-known/oauth-protected-resource/mcp" ||
-    pathname === "/mcp/.well-known/oauth-protected-resource";
+    pathname.startsWith("/.well-known/oauth-protected-resource") ||
+    pathname.startsWith("/mcp/.well-known/oauth-protected-resource") ||
+    pathname.endsWith("/.well-known/oauth-protected-resource");
 
   if (isProtectedResourceMetadata) {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -2443,14 +2464,19 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
   if (url.includes(".well-known")) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      status: "ok",
-      service: "BTNX Remote MCP Server",
-      version: "2.5.0",
-      auth_type: "oauth2",
+      issuer: reqHost,
       authorization_endpoint: `${reqHost}/oauth/authorize`,
       token_endpoint: `${reqHost}/oauth/token`,
       registration_endpoint: `${reqHost}/oauth/register`,
       revocation_endpoint: `${reqHost}/oauth/revoke`,
+      userinfo_endpoint: `${reqHost}/oauth/userinfo`,
+      jwks_uri: `${reqHost}/oauth/jwks.json`,
+      response_types_supported: ["code"],
+      response_modes_supported: ["query"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
+      code_challenge_methods_supported: ["S256"],
+      scopes_supported: ["openid", "profile", "email", "orders", "btnx:all"]
     }, null, 2));
     return;
   }
@@ -2568,16 +2594,15 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         }
 
         // Customer authenticated successfully! Generate authorization code with 5-minute TTL
-        const code = "btnx_code_" + crypto.randomBytes(18).toString("hex");
-
         let prof: any = null;
         try {
           const uDoc = await getDoc(doc(db, "users", customerUid));
           if (uDoc.exists()) prof = uDoc.data();
         } catch {}
 
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
         const codeRecord = {
-          code,
+          code: "",
           uid: customerUid,
           email: customerEmail,
           name: prof?.name || customerName || "BTNX Customer",
@@ -2588,8 +2613,11 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           codeChallenge,
           codeChallengeMethod,
           createdAt: new Date().toISOString(),
-          expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+          expiresAt,
         };
+
+        const code = createSignedOAuthCode(codeRecord);
+        codeRecord.code = code;
 
         // Cache in memory for instant high-reliability resolution
         memoryOAuthCodes.set(code, codeRecord);
@@ -2658,7 +2686,11 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       }
 
       let cData: any = null;
-      if (memoryOAuthCodes.has(code)) {
+      if (code.startsWith("btnx_code_")) {
+        cData = verifySignedOAuthCode(code);
+      }
+
+      if (!cData && memoryOAuthCodes.has(code)) {
         cData = memoryOAuthCodes.get(code);
         memoryOAuthCodes.delete(code);
       }
@@ -2710,32 +2742,43 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         }
       }
 
-      const accessToken = "btnx_at_" + crypto.randomBytes(24).toString("hex");
-      const refreshToken = "btnx_rt_" + crypto.randomBytes(24).toString("hex");
-
-      // Secure storage: store SHA-256 hashed tokens in oauth_tokens collection
-      await storeOAuthTokens(
-        db,
-        accessToken,
-        refreshToken,
-        cData.uid,
-        cData.email,
-        cData.name,
-        cData.clientId || "mcp_client",
-        ["openid", "profile", "email", "orders"]
-      );
-
+      const exp = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const tokenRecord = {
-        token: accessToken,
-        refreshToken,
+        token: "",
+        refreshToken: "",
         uid: cData.uid,
         email: cData.email,
         name: cData.name,
         shippingAddress: cData.shippingAddress,
         phone: cData.phone,
+        clientId: cData.clientId || "mcp_client",
+        scopes: ["openid", "profile", "email", "orders"],
+        role: "customer",
         createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: exp,
       };
+
+      const accessToken = createSignedOAuthAccessToken(tokenRecord);
+      const refreshToken = "btnx_rt_" + crypto.randomBytes(24).toString("hex");
+      tokenRecord.token = accessToken;
+      tokenRecord.refreshToken = refreshToken;
+
+      // Secure storage: store SHA-256 hashed tokens in oauth_tokens collection
+      try {
+        await storeOAuthTokens(
+          db,
+          accessToken,
+          refreshToken,
+          cData.uid,
+          cData.email,
+          cData.name,
+          cData.clientId || "mcp_client",
+          ["openid", "profile", "email", "orders"]
+        );
+      } catch (err: any) {
+        console.warn("[OAuth] Non-fatal store token notice:", err?.message);
+      }
+
       memoryOAuthTokens.set(accessToken, tokenRecord);
 
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -2901,6 +2944,8 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
 
   if (isSseRequest && req.method === "GET") {
     const sseSessionId = (sessionId && sessionId.length >= 8) ? sessionId : ("mcp_sess_" + crypto.randomBytes(16).toString("hex"));
+    res.setHeader("Link", `<${reqHost}/.well-known/oauth-protected-resource>; rel="oauth-protected-resource"`);
+    res.setHeader("WWW-Authenticate", `Bearer realm="BTNX", resource_metadata="${reqHost}/.well-known/oauth-protected-resource"`);
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
@@ -3111,9 +3156,31 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     }
   }
 
-  // 7) Normal Browser Visit — Serve Dashboard
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(HTML_DASHBOARD);
+    // 7) Normal Browser Visit — Serve Dashboard
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HTML_DASHBOARD);
+  } catch (fatalErr: any) {
+    console.error("[BTNX MCP Fatal Handler Error]:", fatalErr);
+    if (!res.headersSent) {
+      if (req.method === "POST") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          jsonrpc: "2.0",
+          id: (req as any).body?.id ?? 1,
+          error: {
+            code: -32603,
+            message: "Internal server error: " + (fatalErr?.message || "Internal failure"),
+          },
+        }));
+      } else {
+        res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>BTNX Notice</title></head><body style="background:#111;color:#fff;font-family:sans-serif;padding:2rem;">
+          <h2>BTNX Remote MCP Notice</h2>
+          <p>${escapeHtml(fatalErr?.message || "An unexpected error occurred.")}</p>
+        </body></html>`);
+      }
+    }
+  }
 }
 
 // 8. OAuth Authorize Page Renderer
