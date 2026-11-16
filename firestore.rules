@@ -62,7 +62,8 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'email', 'role']) &&
         data.keys().hasOnly([
           'id', 'email', 'role', 'name', 'createdAt',
-          'phone', 'birthday', 'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry'
+          'phone', 'birthday', 'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry',
+          'connectedMcp', 'mcpClients', 'lastMcpActiveAt'
         ]) &&
         data.id is string && data.id == userId &&
         data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
@@ -74,7 +75,10 @@ service cloud.firestore {
         (!('shippingStreet' in data) || (data.shippingStreet is string && data.shippingStreet.size() <= 250)) &&
         (!('shippingCity' in data) || (data.shippingCity is string && data.shippingCity.size() <= 120)) &&
         (!('shippingZip' in data) || (data.shippingZip is string && data.shippingZip.size() <= 32)) &&
-        (!('shippingCountry' in data) || (data.shippingCountry is string && data.shippingCountry.size() <= 120));
+        (!('shippingCountry' in data) || (data.shippingCountry is string && data.shippingCountry.size() <= 120)) &&
+        (!('connectedMcp' in data) || data.connectedMcp == null || data.connectedMcp is bool) &&
+        (!('mcpClients' in data) || data.mcpClients == null || (data.mcpClients is list && data.mcpClients.size() <= 20 && (data.mcpClients.size() == 0 || data.mcpClients[0] is string))) &&
+        (!('lastMcpActiveAt' in data) || data.lastMcpActiveAt == null || data.lastMcpActiveAt is string || data.lastMcpActiveAt is timestamp);
     }
 
     function isValidProduct(data) {
@@ -269,7 +273,8 @@ service cloud.firestore {
           incoming().id == existing().id &&
           incoming().email == existing().email &&
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'phone', 'birthday', 'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry'
+            'name', 'phone', 'birthday', 'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry',
+            'connectedMcp', 'mcpClients', 'lastMcpActiveAt'
           ])
         )
       );
@@ -412,8 +417,12 @@ service cloud.firestore {
     // Protected Credentials & System Collections (Client Access Strictly Denied)
     // Managed exclusively through trusted backend services via Admin SDK
     // ------------------------------------------------------------------------
+    // Personal Access Tokens: Scoped token access for authenticated users and admins
     match /personal_access_tokens/{tokenId} {
-      allow read, write: if false;
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && incoming().uid == request.auth.uid && incoming().tokenHash is string && incoming().id == tokenId;
+      allow update: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
     }
     match /oauth_tokens/{tokenHash} {
       allow read, write: if false;

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Eye, X, AlertCircle, ShoppingBag, RefreshCw, Trash2 } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
 
 interface OrderItem {
   product?: {
@@ -186,26 +187,17 @@ export default function Orders() {
 
                       {/* Dynamic Status update */}
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <select
+                        <div className="w-36 flex items-center gap-1.5">
+                          <CustomSelect
+                            size="sm"
                             value={order.status || "Pending"}
-                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                            onChange={(val) => handleStatusChange(order.id, val)}
                             disabled={savingStatus === order.id}
-                            className={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg border focus:outline-none transition-all ${
-                              savingStatus === order.id ? 'opacity-50' : ''
-                            } ${
-                              ['Completed', 'Delivered', 'delivered'].includes(order.status || '') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                              ['Pending', 'pending'].includes(order.status || '') ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              ['Cancelled', 'cancelled'].includes(order.status || '') ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                              'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {STATUSES.map(st => (
-                              <option key={st} value={st}>{st}</option>
-                            ))}
-                          </select>
+                            options={STATUSES.map(st => ({ value: st, label: st }))}
+                            ariaLabel={`Update status for order ${order.id}`}
+                          />
                           {savingStatus === order.id && (
-                            <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                            <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin shrink-0" />
                           )}
                         </div>
                       </td>
@@ -270,17 +262,15 @@ export default function Orders() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Current Status</p>
-                  <div className="flex items-center gap-2">
-                    <select
+                  <div className="w-40 flex items-center gap-2">
+                    <CustomSelect
+                      size="sm"
                       value={selectedOrder.status || "Pending"}
-                      onChange={(e) => handleStatusChange(selectedOrder.id, e.target.value)}
+                      onChange={(val) => handleStatusChange(selectedOrder.id, val)}
                       disabled={savingStatus === selectedOrder.id}
-                      className="font-mono font-bold uppercase text-[11px] bg-white border border-slate-200 px-2.5 py-1 rounded focus:outline-none"
-                    >
-                      {STATUSES.map(st => (
-                        <option key={st} value={st}>{st}</option>
-                      ))}
-                    </select>
+                      options={STATUSES.map(st => ({ value: st, label: st }))}
+                      ariaLabel={`Update status for order ${selectedOrder.id}`}
+                    />
                   </div>
                 </div>
                 <div className="space-y-1 col-span-2 border-t border-slate-150 pt-3">

@@ -41,7 +41,7 @@
     },
     {
       "source": "/og/(.*)",
-      "destination": "/og/$1"
+      "destination": "/api"
     },
     {
       "source": "/images/(.*)",

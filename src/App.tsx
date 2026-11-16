@@ -888,6 +888,7 @@ export default function App() {
             isOpen={isProfileOpen}
             onClose={handleCloseProfileModal}
             orders={orders}
+            products={products}
             wishlist={wishlist}
             onToggleWishlist={handleToggleWishlist}
             onOpenProduct={(product) => {

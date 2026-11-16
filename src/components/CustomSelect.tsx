@@ -14,6 +14,7 @@ interface CustomSelectProps {
   prefix?: string;
   ariaLabel?: string;
   className?: string;
+  size?: "sm" | "md";
 }
 
 export default function CustomSelect({
@@ -23,6 +24,7 @@ export default function CustomSelect({
   prefix,
   ariaLabel,
   className = "",
+  size = "md",
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +48,8 @@ export default function CustomSelect({
 
   const selectedOption = options.find((opt) => opt.value === value) || options[0];
 
+  const heightClass = size === "sm" ? "min-h-[32px] h-8 px-2.5 text-[11px]" : "min-h-[40px] px-3.5 text-xs";
+
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <button
@@ -54,7 +58,7 @@ export default function CustomSelect({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel || prefix || "Select option"}
-        className={`w-full min-h-[44px] px-4 bg-white dark:bg-[#191816] border rounded-sm flex items-center justify-between gap-2 text-xs font-medium text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer ${
+        className={`w-full ${heightClass} bg-white dark:bg-[#191816] border rounded-sm flex items-center justify-between gap-2 font-medium text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer ${
           isOpen
             ? "border-[#141413] dark:border-[#F3F1EC]"
             : "border-[#E6E2DA] dark:border-[#2C2A26] hover:border-[#141413] dark:hover:border-[#F3F1EC]"

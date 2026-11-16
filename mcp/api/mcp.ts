@@ -242,17 +242,32 @@ function escapeHtml(str: any): string {
 
 // 3. Luxury HTML Card Renderers
 function renderProductCardHtml(product: any, host: string): string {
-  const images = Array.isArray(product.images) && product.images.length > 0
-    ? product.images
-    : [product.imageUrl || "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&q=80&w=800"];
-  const primaryImg = images[0];
+  const rawImg = product.image || (Array.isArray(product.images) && product.images[0]) || product.imageUrl || product.heroImage || "";
+  let primaryImg = rawImg || "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&q=80&w=800";
+  if (primaryImg.startsWith("/") && !primaryImg.startsWith("//")) {
+    primaryImg = `${host}${primaryImg}`;
+  }
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" prefix="og: https://ogp.me/ns#">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>${escapeHtml(product.name)} &middot; BTNX Atelier</title>
+  
+  <!-- OpenGraph & Twitter Card Tags -->
+  <meta property="og:type" content="product" />
+  <meta property="og:site_name" content="BTNX Luxury Atelier" />
+  <meta property="og:title" content="${escapeHtml(product.name)} &middot; BTNX Atelier" />
+  <meta property="og:description" content="${formatNaira(product.price)} &middot; ${escapeHtml(product.category || 'Luxury Garment')}. Crafted by BTNX Atelier in Osun, Nigeria." />
+  <meta property="og:image" content="${escapeHtml(primaryImg)}" />
+  <meta property="og:image:secure_url" content="${escapeHtml(primaryImg)}" />
+  <meta property="og:url" content="${host}/render/product/${encodeURIComponent(product.id)}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(product.name)} &middot; BTNX Atelier" />
+  <meta name="twitter:description" content="${formatNaira(product.price)} &middot; ${escapeHtml(product.category || 'Luxury Garment')}." />
+  <meta name="twitter:image" content="${escapeHtml(primaryImg)}" />
+  <link rel="image_src" href="${escapeHtml(primaryImg)}" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -415,7 +430,10 @@ function renderProductCardHtml(product: any, host: string): string {
       <span class="badge">${escapeHtml(product.badge || "Osun Atelier Archive")}</span>
     </div>
     <div class="content">
-      <div class="brand-tag">BTNX Atelier &middot; ${escapeHtml(product.category || "Limited Edition")}</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="logo-wrap" style="height: 20px; width: auto; max-width: 70px;">${BTNX_LOGO_SVG}</div>
+        <div class="brand-tag" style="margin-bottom: 0;">${escapeHtml(product.category || "Limited Edition")}</div>
+      </div>
       <h1 class="title">${escapeHtml(product.name)}</h1>
       <div class="price-row">
         <span class="price-current">${formatNaira(product.price)}</span>
@@ -1332,6 +1350,7 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
       };
     }
 
+    case "btnx_get_customer_profile":
     case "btnx_get_account_status": {
       let user = reqUser;
       if (!user) {
@@ -1349,27 +1368,44 @@ You are connected to the BTNX Atelier, but no customer account is signed in for 
         };
       }
 
+      await ensureAdminAuth();
+      let resolvedAddress = user.shippingAddress || user.address || "";
+      let resolvedPhone = user.phone || "";
+      let resolvedName = user.name || "BTNX Customer";
+      try {
+        const uSnap = await getDoc(doc(db, "users", user.uid));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          resolvedName = uData.name || resolvedName;
+          resolvedPhone = uData.phone || resolvedPhone;
+          if (uData.shippingStreet) {
+            resolvedAddress = `${uData.shippingStreet}${uData.shippingCity ? `, ${uData.shippingCity}` : ""}${uData.shippingState ? `, ${uData.shippingState}` : ""}, Nigeria`;
+          }
+        }
+      } catch {}
+
       const orders = await fetchCustomerOrders(user.email, user.uid);
 
       const displayMarkdown = `### 👤 VERIFIED BTNX CUSTOMER SESSION
-- **Customer Name:** **${user.name}**  
+- **Customer Name:** **${resolvedName}**  
 - **BTNX Email:** \`${user.email}\`  
-- **Delivery Address:** ${user.shippingAddress || "Nigeria"}  
-- **Phone:** \`${user.phone || "N/A"}\`  
+- **Primary Delivery Destination:** ${resolvedAddress || "Nationwide Delivery, Nigeria"}  
+- **Phone:** \`${resolvedPhone || "N/A"}\`  
 - **Total Orders:** ${orders.length}  
 - **Security Status:** 🛡️ Verified & Authenticated`;
 
       return {
         authenticated: true,
         customer: {
-          name: user.name,
+          name: resolvedName,
           email: user.email,
-          shippingAddress: user.shippingAddress,
-          phone: user.phone,
+          shippingAddress: resolvedAddress || "Nigeria",
+          phone: resolvedPhone,
           ordersCount: orders.length,
           latestOrderReference: orders[0]?.id || null,
         },
         displayMarkdown,
+        instructionsForAssistant: `The customer is verified. Automatically apply Name: "${resolvedName}", Email: "${user.email}", Phone: "${resolvedPhone}", Primary Destination: "${resolvedAddress || 'Nigeria'}" to all checkout, quote, and shipping operations without asking the user to re-enter them.`
       };
     }
 
@@ -1867,26 +1903,35 @@ ${catalogTable}
 
       return {
         totalPieces: products.length,
-        catalog: products.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          priceNaira: formatNaira(p.price),
-          rawPrice: p.price,
-          stock: p.stock,
-          liveCardUrl: `${reqHost}/render/product/${p.id}`,
-        })),
+        catalog: products.map((p: any) => {
+          const pImg = p.image || (Array.isArray(p.images) && p.images[0]) || p.imageUrl || p.heroImage || "";
+          const fullImg = pImg.startsWith("/") && !pImg.startsWith("//") ? `${reqHost}${pImg}` : pImg;
+          return {
+            id: p.id,
+            name: p.name,
+            category: p.category,
+            priceNaira: formatNaira(p.price),
+            rawPrice: p.price,
+            stock: p.stock,
+            image: fullImg,
+            imageUrl: fullImg,
+            previewImageUrl: fullImg,
+            liveCardUrl: `${reqHost}/render/product/${p.id}`,
+          };
+        }),
         displayMarkdown,
         instructionsForAssistant: "Present available pieces in a markdown table and include the clickable card links."
       };
     }
 
+    case "btnx_get_product":
     case "btnx_get_product_details": {
-      const pid = String(args?.productId || "").trim();
+      const pid = String(args?.productId || args?.id || "").trim();
       if (!pid) {
         return { error: "Please provide a productId. Call btnx_list_catalog to inspect valid IDs." };
       }
 
+      await ensureAdminAuth();
       const snap = await getDoc(doc(db, "products", pid));
       if (!snap.exists()) {
         return { error: `Garment '${pid}' was not found in the BTNX database.` };
@@ -1894,8 +1939,11 @@ ${catalogTable}
 
       const product: any = { id: snap.id, ...snap.data() };
       const cardHtml = renderProductCardHtml(product, reqHost);
+      const prodImg = product.image || (Array.isArray(product.images) && product.images[0]) || product.imageUrl || product.heroImage || "";
+      const fullImgUrl = prodImg.startsWith("/") && !prodImg.startsWith("//") ? `${reqHost}${prodImg}` : prodImg;
 
       const displayMarkdown = `### 🧥 ${product.name.toUpperCase()} (\`${product.id}\`)
+${fullImgUrl ? `\n![${product.name}](${fullImgUrl})\n` : ""}
 **Category:** ${product.category || "Limited Edition"} &middot; **Price:** **${formatNaira(product.price)}**  
 **Availability:** ${product.stock > 0 ? `✅ In Stock (${product.stock} units)` : "⏳ Made-to-Order"}  
 **Silhouette & Cut:** ${product.fit || "Relaxed Atelier Silhouette"}  
@@ -1911,6 +1959,9 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
         name: product.name,
         priceNaira: formatNaira(product.price),
         rawPrice: product.price,
+        image: fullImgUrl,
+        imageUrl: fullImgUrl,
+        previewImageUrl: fullImgUrl,
         description: product.description,
         sizes: product.sizes || ["XS", "S", "M", "L", "XL"],
         fit: product.fit || "Relaxed Atelier Cut",
@@ -1919,7 +1970,8 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
         liveCardUrl: `${reqHost}/render/product/${product.id}`,
         displayMarkdown,
         htmlSnippet: cardHtml,
-        instructionsForAssistant: "Always include the live interactive product card link in your reply: [✨ View Luxury Product Card](...)"
+        logoSvg: BTNX_LOGO_SVG,
+        instructionsForAssistant: "Present the product picture and interactive card link prominently in your reply."
       };
     }
 
@@ -1972,21 +2024,23 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
     }
 
     case "btnx_render_ui_widget": {
-      const wType = String(args?.widgetType || "").trim();
+      const wType = String(args?.widgetType || "").toLowerCase().trim();
       const targetId = String(args?.targetId || "").trim();
 
       if (!targetId) {
         return { error: "Please provide targetId (productId or orderId)." };
       }
 
+      await ensureAdminAuth();
       let liveCardUrl = `${reqHost}/render/${wType}/${targetId}`;
+      let htmlSnippet = "";
 
       if (wType === "invoice" || wType === "track") {
         const snap = await getDoc(doc(db, "orders", targetId));
         if (!snap.exists()) {
           return { error: `Order #${targetId} was not found.` };
         }
-        const orderData: any = snap.data();
+        const orderData: any = { id: snap.id, ...snap.data() };
         const user = reqUser;
         const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || "").toLowerCase().trim();
         const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
@@ -2007,14 +2061,27 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
 
         const { token: sig, expiresAt: exp } = generateSignedResourceToken(wType, targetId);
         liveCardUrl = `${reqHost}/render/${wType}/${targetId}?sig=${sig}&exp=${exp}`;
+        if (wType === "invoice") {
+          htmlSnippet = renderInvoiceHtml(orderData, reqHost);
+        } else {
+          htmlSnippet = renderTrackingStepperHtml(orderData, reqHost);
+        }
+      } else if (wType === "product") {
+        const snap = await getDoc(doc(db, "products", targetId));
+        if (snap.exists()) {
+          htmlSnippet = renderProductCardHtml({ id: snap.id, ...snap.data() }, reqHost);
+        }
       }
 
       return {
         widgetType: wType,
         targetId,
         liveCardUrl,
-        displayMarkdown: `👉 **[✨ CLICK HERE TO OPEN INTERACTIVE LUXURY ${wType.toUpperCase()} CARD](${liveCardUrl})**`,
-        instructionsForAssistant: "Present the clickable card link prominently in your response."
+        htmlSnippet,
+        logoSvg: BTNX_LOGO_SVG,
+        displayMarkdown: `### 🏛️ BTNX ATELIER — OFFICIAL DIGITAL ${wType.toUpperCase()}
+👉 **[✨ CLICK HERE TO OPEN INTERACTIVE LUXURY ${wType.toUpperCase()} CARD](${liveCardUrl})**`,
+        instructionsForAssistant: "The official interactive card URL and HTML snippet are returned. Present the clickable card link prominently in your response."
       };
     }
 
@@ -2910,6 +2977,24 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         console.warn("[OAuth] Non-fatal store token notice:", err?.message);
       }
 
+      // Record MCP connection on the customer's user profile
+      if (cData.uid) {
+        try {
+          await setDoc(doc(db, "users", cData.uid), {
+            connectedMcp: true,
+            lastMcpActiveAt: new Date().toISOString(),
+            mcpClients: {
+              claude: {
+                connectedAt: new Date().toISOString(),
+                clientId: cData.clientId || "claude_client",
+              }
+            }
+          }, { merge: true });
+        } catch (err: any) {
+          console.warn("[OAuth] Non-fatal user doc connection update notice:", err?.message);
+        }
+      }
+
       memoryOAuthTokens.set(accessToken, tokenRecord);
 
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -3129,6 +3214,12 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         ? sessionId
         : ("mcp_sess_" + crypto.randomBytes(16).toString("hex"));
 
+      const initUser = await resolveSessionUser(req, explicitToken);
+      let initInstructions = "BTNX Store MCP Server for luxury fashion catalog, client orders, tracking, and concierge care.";
+      if (initUser) {
+        initInstructions += `\n\n[VERIFIED BTNX CUSTOMER SESSION]\nName: ${initUser.name || "Valued Client"}\nEmail: ${initUser.email}\nPhone: ${initUser.phone || "On File"}\nPrimary Destination: ${initUser.shippingAddress || initUser.address || "Nigeria"}\n\nINSTRUCTION: You are connected directly to this authenticated customer's account. Automatically use their verified name, email, phone, and Nigerian shipping destination for all calculations, quotes, invoices, and checkout flows without asking them to re-enter them.`;
+      }
+
       // Set headers required by MCP Streamable HTTP specification
       res.setHeader("mcp-session-id", establishedSessionId);
       res.setHeader("Access-Control-Expose-Headers", "Content-Type, mcp-session-id, x-btnx-session, x-session-id");
@@ -3148,7 +3239,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
             name: "BTNX Store Remote MCP",
             version: "2.5.0",
           },
-          instructions: "BTNX Store MCP Server for luxury fashion catalog, client orders, tracking, and concierge care.",
+          instructions: initInstructions,
         },
       };
       res.writeHead(200, {
@@ -3238,6 +3329,11 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     let jsonRpcResp: any = null;
 
     if (method === "initialize") {
+      const initUser = await resolveSessionUser(req, explicitToken);
+      let initInstructions = "BTNX Store MCP Server for luxury fashion catalog, client orders, tracking, and concierge care.";
+      if (initUser) {
+        initInstructions += `\n\n[VERIFIED BTNX CUSTOMER SESSION]\nName: ${initUser.name || "Valued Client"}\nEmail: ${initUser.email}\nPhone: ${initUser.phone || "On File"}\nPrimary Destination: ${initUser.shippingAddress || initUser.address || "Nigeria"}\n\nINSTRUCTION: You are connected directly to this authenticated customer's account. Automatically use their verified name, email, phone, and Nigerian shipping destination for all calculations, quotes, invoices, and checkout flows without asking them to re-enter them.`;
+      }
       jsonRpcResp = {
         jsonrpc: "2.0",
         id,
@@ -3245,6 +3341,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           protocolVersion: "2024-11-05",
           capabilities: { tools: { listChanged: true } },
           serverInfo: { name: "BTNX Store Remote MCP", version: "2.5.0" },
+          instructions: initInstructions,
         },
       };
     } else if (method === "notifications/initialized" || (typeof method === "string" && method.startsWith("notifications/"))) {

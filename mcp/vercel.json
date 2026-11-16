@@ -28,6 +28,10 @@
       "destination": "/api/mcp"
     },
     {
+      "source": "/og/(.*)",
+      "destination": "/api/mcp"
+    },
+    {
       "source": "/oauth",
       "destination": "/api/mcp"
     },

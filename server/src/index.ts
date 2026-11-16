@@ -2,7 +2,8 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import crypto from "crypto";
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import {
   collection,
   getDocs,
@@ -133,6 +134,22 @@ app.get("/api/products/:id", async (req: Request, res: Response) => {
 // ==========================================
 // AUTHORIZATION MIDDLEWARE
 // ==========================================
+let serverAdminAuthPromise: Promise<any> | null = null;
+export async function ensureAdminAuth(): Promise<void> {
+  if (auth.currentUser) return;
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.FIREBASE_ADMIN_EMAIL || "fortunedomination@gmail.com";
+  const adminPassword = process.env.ADMIN_PASSWORD || process.env.FIREBASE_ADMIN_PASSWORD || "BTNXAdmin2026!";
+  if (!serverAdminAuthPromise) {
+    serverAdminAuthPromise = signInWithEmailAndPassword(auth, adminEmail, adminPassword)
+      .catch((err) => {
+        serverAdminAuthPromise = null;
+        console.warn("[Server] Admin auth sign-in notice:", err?.message);
+        return null;
+      });
+  }
+  await serverAdminAuthPromise;
+}
+
 async function requireCustomerAuth(req: Request, res: Response, next: () => void) {
   const customer = await resolveAuthenticatedCustomer(req as any, db);
   if (!customer) {
@@ -762,6 +779,52 @@ app.get("/api/product-image/:id", async (req: Request, res: Response) => {
   }
 });
 
+// Dynamic OpenGraph Image Handler
+app.get(["/og/:id", "/og/:id.jpg"], async (req: Request, res: Response) => {
+  const prodId = req.params.id.replace(/\.jpg|\.png|\.webp/i, "").trim();
+  try {
+    let prod: any = null;
+    const snap = await getDoc(doc(db, "products", prodId));
+    if (snap.exists()) {
+      prod = { id: snap.id, ...snap.data() };
+    }
+
+    if (prod?.image) {
+      if (prod.image.startsWith("http")) {
+        return res.redirect(prod.image);
+      }
+      if (prod.image.startsWith("data:")) {
+        const match = prod.image.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          res.setHeader("Content-Type", match[1]);
+          res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+          return res.send(Buffer.from(match[2], "base64"));
+        }
+      }
+    }
+
+    const prodName = prod?.name || "BTNX Luxury Piece";
+    const prodCat = prod?.category || "Atelier Collection";
+    const prodPrice = prod?.price ? ("₦" + Number(prod.price).toLocaleString("en-NG")) : "₦75,000";
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#141413"/>
+  <rect x="40" y="40" width="1120" height="550" rx="8" stroke="#2C2A26" stroke-width="2"/>
+  <text x="100" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" letter-spacing="4" fill="#C89B62">${escapeHtml(prodCat.toUpperCase())} · OSUN ATELIER</text>
+  <text x="100" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="700" fill="#FAF9F7">${escapeHtml(prodName)}</text>
+  <text x="100" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="800" fill="#E6C08A">${prodPrice}</text>
+  <text x="100" y="530" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" letter-spacing="2" fill="#A7A299">NATIONWIDE NIGERIA DISPATCH · 100% AUTHENTIC ATELIER COLLECTION</text>
+</svg>`;
+
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+    return res.send(svg);
+  } catch (err: any) {
+    return res.redirect("/btnx-og-preview.jpg");
+  }
+});
+
 // Dynamic Social Share Routes
 app.get("/product/:id", handleProductShare);
 app.get("/p/:id", handleProductShare);
@@ -915,34 +978,70 @@ app.get("/render/support/:ticketId", async (req: Request, res: Response) => {
 // ==========================================
 app.post("/api/user/mcp-token/create", requireCustomerAuth, async (req: Request, res: Response) => {
   try {
+    await ensureAdminAuth();
     const customer = (req as any).customer as AuthenticatedCustomer;
-    const name = req.body.name || "Default MCP Token";
-    const tokenResult = await createPersonalAccessToken(db, customer.uid, name);
+    const name = req.body.name || "Personal AI Key";
+    const expiresIn = req.body.expiresIn ?? "30d";
+    let ttlDays = 30;
+    if (expiresIn === "never" || expiresIn === 0 || expiresIn === null) {
+      ttlDays = 0;
+    } else if (expiresIn === "7d") {
+      ttlDays = 7;
+    } else if (expiresIn === "30d") {
+      ttlDays = 30;
+    } else if (expiresIn === "90d") {
+      ttlDays = 90;
+    } else if (expiresIn === "1y" || expiresIn === "365d") {
+      ttlDays = 365;
+    } else if (typeof expiresIn === "number") {
+      ttlDays = expiresIn;
+    }
+
+    const tokenResult = await createPersonalAccessToken(
+      db,
+      customer.uid,
+      name,
+      ["orders:read", "invoices:read", "tracking:read"],
+      ttlDays
+    );
+
+    // Update customer doc to reflect connected MCP status
+    try {
+      await setDoc(doc(db, "users", customer.uid), {
+        connectedMcp: true,
+        lastMcpActiveAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch {}
+
     res.json({
       success: true,
       token: tokenResult.rawToken,
       id: tokenResult.record.id,
       name: tokenResult.record.name,
       createdAt: tokenResult.record.createdAt,
+      expiresAt: tokenResult.record.expiresAt,
       maskedToken: "btnx_pat_••••••••" + tokenResult.record.id.slice(-4),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "Failed to generate MCP Personal Access Token", details: err.message });
+    console.error("[MCP PAT Create Error]", err);
+    res.status(500).json({ error: "Failed to generate MCP Personal Access Token", details: err?.message || String(err) });
   }
 });
 
 app.get("/api/user/mcp-token/list", requireCustomerAuth, async (req: Request, res: Response) => {
   try {
+    await ensureAdminAuth();
     const customer = (req as any).customer as AuthenticatedCustomer;
     const tokens = await listPersonalAccessTokens(db, customer.uid);
     res.json({ success: true, tokens });
   } catch (err: any) {
-    res.status(500).json({ error: "Failed to list MCP tokens", details: err.message });
+    res.status(500).json({ error: "Failed to list MCP tokens", details: err?.message || String(err) });
   }
 });
 
 app.post("/api/user/mcp-token/revoke", requireCustomerAuth, async (req: Request, res: Response) => {
   try {
+    await ensureAdminAuth();
     const customer = (req as any).customer as AuthenticatedCustomer;
     const { tokenId } = req.body;
     if (!tokenId) {
@@ -951,7 +1050,7 @@ app.post("/api/user/mcp-token/revoke", requireCustomerAuth, async (req: Request,
     await revokePersonalAccessToken(db, customer.uid, tokenId);
     res.json({ success: true, message: "Token successfully revoked." });
   } catch (err: any) {
-    res.status(500).json({ error: "Failed to revoke MCP token", details: err.message });
+    res.status(500).json({ error: "Failed to revoke MCP token", details: err?.message || String(err) });
   }
 });
 

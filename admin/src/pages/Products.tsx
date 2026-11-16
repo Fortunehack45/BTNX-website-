@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, onSnapshot, query, deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { Plus, Trash2, Edit, Save, ArrowLeft } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
 
 interface Product {
   id: string;
@@ -359,15 +360,12 @@ export default function Products() {
                 <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
                   Collection Category
                 </label>
-                <select
+                <CustomSelect
                   value={formData.category}
-                  onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-950 transition-colors"
-                >
-                  {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                  onChange={(val) => setFormData(prev => ({ ...prev, category: val }))}
+                  options={CATEGORIES.map(cat => ({ value: cat, label: cat }))}
+                  ariaLabel="Collection Category"
+                />
               </div>
 
               <div className="space-y-1.5">

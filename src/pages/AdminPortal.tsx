@@ -57,6 +57,7 @@ import {
 } from "firebase/firestore";
 import BrandLogo from "../components/BrandLogo";
 import GalleryImage from "../components/GalleryImage";
+import CustomSelect from "../components/CustomSelect";
 import { useTheme, ThemePreference } from "../context/ThemeContext";
 import { formatNaira } from "../utils/currency";
 import { downloadOrderInvoice } from "../utils/invoice";
@@ -3272,18 +3273,18 @@ export default function AdminPortal() {
                     className="h-9 pl-8 pr-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
                   />
                 </div>
-                <select
-                  value={orderStatusFilter}
-                  onChange={(e) => setOrderStatusFilter(e.target.value)}
-                  className="h-9 px-3 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono outline-none"
-                >
-                  <option value="All">All Statuses</option>
-                  {ORDER_STATUSES.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-44">
+                  <CustomSelect
+                    size="sm"
+                    value={orderStatusFilter}
+                    onChange={setOrderStatusFilter}
+                    options={[
+                      { value: "All", label: "All Statuses" },
+                      ...ORDER_STATUSES.map((st) => ({ value: st, label: st })),
+                    ]}
+                    ariaLabel="Filter orders by status"
+                  />
+                </div>
               </div>
             </div>
 
@@ -3326,19 +3327,15 @@ export default function AdminPortal() {
                       </div>
 
                       <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-                        <select
-                          value={ord.status || "Confirmed"}
-                          onChange={(e) =>
-                            handleOrderStatusUpdate(ord.id, e.target.value)
-                          }
-                          className="h-8 px-2 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-[11px] outline-none flex-1 min-w-0"
-                        >
-                          {ORDER_STATUSES.map((st) => (
-                            <option key={st} value={st}>
-                              {st}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex-1 min-w-0">
+                          <CustomSelect
+                            size="sm"
+                            value={ord.status || "Confirmed"}
+                            onChange={(val) => handleOrderStatusUpdate(ord.id, val)}
+                            options={ORDER_STATUSES.map((st) => ({ value: st, label: st }))}
+                            ariaLabel={`Update status for order ${ord.id}`}
+                          />
+                        </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
@@ -3415,20 +3412,14 @@ export default function AdminPortal() {
                         <td className="px-5 py-4 font-mono font-semibold tabular-nums">
                           {formatNaira(ord.total)}
                         </td>
-                        <td className="px-5 py-4">
-                          <select
+                        <td className="px-5 py-4 min-w-[170px]">
+                          <CustomSelect
+                            size="sm"
                             value={ord.status || "Confirmed"}
-                            onChange={(e) =>
-                              handleOrderStatusUpdate(ord.id, e.target.value)
-                            }
-                            className="h-8 px-2.5 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] font-mono text-[11px] outline-none"
-                          >
-                            {ORDER_STATUSES.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(val) => handleOrderStatusUpdate(ord.id, val)}
+                            options={ORDER_STATUSES.map((st) => ({ value: st, label: st }))}
+                            ariaLabel={`Update status for order ${ord.id}`}
+                          />
                         </td>
                         <td className="px-5 py-4 text-right space-x-2">
                           <button
@@ -3791,15 +3782,17 @@ export default function AdminPortal() {
                       <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
                         Batch Size
                       </label>
-                      <select
+                      <CustomSelect
+                        size="sm"
                         value={bulkQty}
-                        onChange={(e) => setBulkQty(e.target.value)}
-                        className="w-full h-9 px-2 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono outline-none"
-                      >
-                        <option value="5">5 Codes</option>
-                        <option value="10">10 Codes</option>
-                        <option value="25">25 Codes</option>
-                      </select>
+                        onChange={setBulkQty}
+                        options={[
+                          { value: "5", label: "5 Codes" },
+                          { value: "10", label: "10 Codes" },
+                          { value: "25", label: "25 Codes" },
+                        ]}
+                        ariaLabel="Batch size for promo codes"
+                      />
                     </div>
                   </div>
                   <button
@@ -4056,15 +4049,17 @@ export default function AdminPortal() {
                     <label className="block text-[10px] font-mono uppercase text-[#66625B] mb-1">
                       Category
                     </label>
-                    <select
+                    <CustomSelect
+                      size="sm"
                       value={broadcastType}
-                      onChange={(e) => setBroadcastType(e.target.value as any)}
-                      className="w-full h-10 px-3 bg-[#FAF9F7] dark:bg-[#141413] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs outline-none"
-                    >
-                      <option value="promo">Promotional Offer</option>
-                      <option value="new_arrival">New Arrival Drop</option>
-                      <option value="system">Store Announcement</option>
-                    </select>
+                      onChange={(val) => setBroadcastType(val as any)}
+                      options={[
+                        { value: "promo", label: "Promotional Offer" },
+                        { value: "new_arrival", label: "New Arrival Drop" },
+                        { value: "system", label: "Store Announcement" },
+                      ]}
+                      ariaLabel="Broadcast category"
+                    />
                   </div>
                 </div>
 

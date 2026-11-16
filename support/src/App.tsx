@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
+import CustomSelect from "./components/CustomSelect";
 import {
   Headphones,
   Search,
@@ -1566,19 +1567,21 @@ export default function SupportStaffPortal() {
                       <label className="block text-[10px] font-mono uppercase tracking-wider text-[#66625B] dark:text-[#A7A299]">
                         Update Order Status:
                       </label>
-                      <select
+                      <CustomSelect
+                        size="sm"
                         disabled={isUpdatingOrderStatus}
-                        value={ticketOrder.status}
-                        onChange={(e) => handleUpdateOrderStatus(ticketOrder.id, e.target.value)}
-                        className="w-full h-8 px-2 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none cursor-pointer"
-                      >
-                        <option value="Confirmed">Confirmed</option>
-                        <option value="Processing">Processing</option>
-                        <option value="In Transit">In Transit</option>
-                        <option value="Delivered">Delivered</option>
-                        <option value="Exchange Approved">Exchange Approved</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
+                        value={ticketOrder.status || "Confirmed"}
+                        onChange={(val) => handleUpdateOrderStatus(ticketOrder.id, val)}
+                        options={[
+                          { value: "Confirmed", label: "Confirmed" },
+                          { value: "Processing", label: "Processing" },
+                          { value: "In Transit", label: "In Transit" },
+                          { value: "Delivered", label: "Delivered" },
+                          { value: "Exchange Approved", label: "Exchange Approved" },
+                          { value: "Cancelled", label: "Cancelled" },
+                        ]}
+                        ariaLabel="Update Order Status"
+                      />
                     </div>
 
                     {/* Order Items Breakdown */}
@@ -1897,20 +1900,22 @@ export default function SupportStaffPortal() {
                     Updates customer tracker and syncs to Osogbo logistics board.
                   </p>
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <select
+                <div className="w-full sm:w-48">
+                  <CustomSelect
+                    size="sm"
                     disabled={isUpdatingOrderStatus}
-                    value={inspectingOrder.status}
-                    onChange={(e) => handleUpdateOrderStatus(inspectingOrder.id, e.target.value)}
-                    className="h-8 px-2.5 bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] text-xs font-mono text-[#141413] dark:text-[#F3F1EC] outline-none cursor-pointer"
-                  >
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Processing">Processing</option>
-                    <option value="In Transit">In Transit</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Exchange Approved">Exchange Approved</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
+                    value={inspectingOrder.status || "Confirmed"}
+                    onChange={(val) => handleUpdateOrderStatus(inspectingOrder.id, val)}
+                    options={[
+                      { value: "Confirmed", label: "Confirmed" },
+                      { value: "Processing", label: "Processing" },
+                      { value: "In Transit", label: "In Transit" },
+                      { value: "Delivered", label: "Delivered" },
+                      { value: "Exchange Approved", label: "Exchange Approved" },
+                      { value: "Cancelled", label: "Cancelled" },
+                    ]}
+                    ariaLabel="Change order status"
+                  />
                 </div>
               </div>
 
