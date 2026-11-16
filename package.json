@@ -18,7 +18,7 @@
     "dev:mcp": "npm run dev --prefix mcp",
     "dev:whatsapp-cli": "npm run sandbox --prefix server",
     "dev:all": "npx concurrently -n \"web,admin,support,api\" -c \"blue,green,magenta,yellow\" \"npm run dev\" \"npm run dev:admin\" \"npm run dev:support\" \"npm run dev:api\"",
-    "build": "vite build",
+    "build": "npm run build --prefix server && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",

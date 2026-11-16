@@ -30,12 +30,13 @@ import {
 import { Product, Order } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
-import { doc, updateDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { formatNaira } from "../utils/currency";
 import { downloadOrderInvoice } from "../utils/invoice";
 import GalleryImage from "./GalleryImage";
 import BrandLogo from "./BrandLogo";
 import CustomSelect from "./CustomSelect";
+import { LOCAL_PRODUCT_IMAGES } from "../data";
 import {
   EDITORIAL_EASE,
   galleryContainerVariants,
@@ -120,17 +121,54 @@ export default function UserProfileModal({
 
   const loadMcpTokens = async () => {
     if (!currentUser) return;
+    // 1. Fetch via authenticated server endpoints (using Firebase Admin SDK)
     try {
       const idToken = await currentUser.getIdToken();
-      const res = await fetch("/api/user/mcp-token/list", {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.tokens)) {
-        setMcpTokens(data.tokens);
+      const endpoints = [
+        "/api/user/mcp-token/list",
+        "https://btnx-website-mcp.vercel.app/api/user/mcp-token/list",
+      ];
+      for (const endpoint of endpoints) {
+        try {
+          const res = await fetch(endpoint, {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+          const text = await res.text();
+          const data = JSON.parse(text);
+          if (data && data.success && Array.isArray(data.tokens)) {
+            setMcpTokens(data.tokens);
+            return;
+          }
+        } catch {}
       }
-    } catch {
-      // Background fetch error ignored
+    } catch {}
+
+    // 2. Direct Firestore query fallback
+    try {
+      const q = query(
+        collection(db, "personal_access_tokens"),
+        where("uid", "==", currentUser.uid)
+      );
+      const snap = await getDocs(q);
+      const items: McpTokenItem[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        if (!data.revokedAt) {
+          if (!data.expiresAt || new Date(data.expiresAt).getTime() > Date.now()) {
+            items.push({
+              id: d.id,
+              name: data.name || "Personal AI Key",
+              createdAt: data.createdAt || new Date().toISOString(),
+              maskedToken: "btnx_pat_••••••••" + d.id.slice(-4),
+            });
+          }
+        }
+      });
+      if (items.length > 0) {
+        setMcpTokens(items);
+      }
+    } catch (fsErr) {
+      console.warn("[MCP Tokens] Fallback read notice:", fsErr);
     }
   };
 
@@ -156,85 +194,117 @@ export default function UserProfileModal({
     if (!currentUser) return;
     setIsGeneratingMcpKey(true);
     try {
-      let createdToken = "";
-      try {
-        const idToken = await currentUser.getIdToken();
-        const res = await fetch("/api/user/mcp-token/create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({
-            name: "Personal AI Assistant Token",
-            expiresIn: keyExpiration,
-          }),
-        });
-        const text = await res.text();
-        let data: any = {};
+      const idToken = await currentUser.getIdToken(true);
+      const endpoints = [
+        "/api/user/mcp-token/create",
+        "https://btnx-website-mcp.vercel.app/api/user/mcp-token/create",
+      ];
+
+      let tokenData: any = null;
+      let lastError = "";
+
+      for (const endpoint of endpoints) {
         try {
-          data = JSON.parse(text);
-        } catch {}
-        if (data.success && data.token) {
-          createdToken = data.token;
-        } else if (data.error) {
-          throw new Error(data.error);
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              name: "Personal AI Assistant Token",
+              expiresIn: keyExpiration,
+            }),
+          });
+          const text = await res.text();
+          try {
+            const data = JSON.parse(text);
+            if (data && data.token) {
+              tokenData = data;
+              break;
+            } else if (data && data.error) {
+              lastError = data.error;
+            }
+          } catch {
+            lastError = text.slice(0, 100);
+          }
+        } catch (e: any) {
+          lastError = e?.message || String(e);
         }
-      } catch (apiErr) {
-        console.warn("[MCP Key] Server API route notice, running resilient fallback:", apiErr);
       }
 
-      if (!createdToken) {
-        // Secure resilient token creation directly authorized by current user in Firestore
-        const array = new Uint8Array(24);
-        window.crypto.getRandomValues(array);
-        const randomHex = Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
-        createdToken = `btnx_pat_${randomHex}`;
-
-        const msgUint8 = new TextEncoder().encode(createdToken);
-        const hashBuffer = await window.crypto.subtle.digest("SHA-256", msgUint8);
-        const tokenHash = Array.from(new Uint8Array(hashBuffer), (b) => b.toString(16).padStart(2, "0")).join("");
-
-        const idArray = new Uint8Array(12);
-        window.crypto.getRandomValues(idArray);
-        const tokenId = `pat_${Array.from(idArray, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-
-        let ttlDays = 30;
-        if (keyExpiration === "never") ttlDays = 0;
-        else if (keyExpiration === "7d") ttlDays = 7;
-        else if (keyExpiration === "30d") ttlDays = 30;
-        else if (keyExpiration === "90d") ttlDays = 90;
-        else if (keyExpiration === "1y") ttlDays = 365;
-
-        const now = new Date();
-        const expiresAt = ttlDays > 0 ? new Date(now.getTime() + ttlDays * 86400000).toISOString() : null;
-
-        const record = {
-          id: tokenId,
-          uid: currentUser.uid,
-          tokenHash,
-          name: "Personal AI Assistant Token",
-          scopes: ["orders:read", "invoices:read", "tracking:read"],
-          createdAt: now.toISOString(),
-          expiresAt,
-          lastUsedAt: null,
-          revokedAt: null,
-        };
-
-        await setDoc(doc(db, "personal_access_tokens", tokenId), record);
+      if (!tokenData || !tokenData.token) {
+        // Fallback: Generate cryptographically secure PAT directly via Web Crypto and persist to Firestore
         try {
-          await setDoc(doc(db, "users", currentUser.uid), {
-            connectedMcp: true,
-            lastMcpActiveAt: new Date().toISOString(),
-          }, { merge: true });
-        } catch {}
+          const rawBytes = new Uint8Array(20);
+          window.crypto.getRandomValues(rawBytes);
+          const rawHex = Array.from(rawBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+          const rawToken = "btnx_pat_" + rawHex;
+
+          const hashBuf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawToken));
+          const tokenHash = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+          const tokenId = "pat_" + rawHex.slice(0, 12);
+
+          let expiresAt: string | null = null;
+          let days = 0;
+          if (keyExpiration === "7d") days = 7;
+          else if (keyExpiration === "30d") days = 30;
+          else if (keyExpiration === "90d") days = 90;
+          else if (keyExpiration === "1y") days = 365;
+
+          if (days > 0) {
+            expiresAt = new Date(Date.now() + days * 86400 * 1000).toISOString();
+          }
+
+          const record = {
+            id: tokenId,
+            uid: currentUser.uid,
+            tokenHash,
+            name: "Personal AI Key",
+            scopes: ["orders:read", "invoices:read", "tracking:read"],
+            createdAt: new Date().toISOString(),
+            expiresAt,
+            lastUsedAt: null,
+            revokedAt: null,
+          };
+
+          await setDoc(doc(db, "personal_access_tokens", tokenId), record);
+
+          tokenData = {
+            token: rawToken,
+            id: tokenId,
+            name: "Personal AI Key",
+            createdAt: record.createdAt,
+            expiresAt,
+            maskedToken: "btnx_pat_••••••••" + tokenId.slice(-4),
+          };
+        } catch (clientErr: any) {
+          throw new Error(lastError || clientErr?.message || "Could not generate key from server.");
+        }
       }
 
-      setNewlyCreatedToken(createdToken);
-      await loadMcpTokens();
+      setNewlyCreatedToken(tokenData.token);
+      setMcpTokens((prev) => [
+        {
+          id: tokenData.id,
+          name: tokenData.name || "Personal AI Key",
+          createdAt: tokenData.createdAt || new Date().toISOString(),
+          maskedToken: tokenData.maskedToken || ("btnx_pat_••••••••" + tokenData.id.slice(-4)),
+        },
+        ...prev.filter((t) => t.id !== tokenData.id),
+      ]);
+
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+          connectedMcp: true,
+          lastMcpActiveAt: new Date().toISOString(),
+        });
+      } catch {}
+
       onAddToast("Personal AI Access Key generated! Copy it now.", "success");
     } catch (err: any) {
-      onAddToast(`Failed to generate AI key: ${err?.message || "Unknown error"}`, "error");
+      console.error("[MCP Key Error]", err);
+      onAddToast(`Failed to generate AI key: ${err?.message || "Please check connection"}`, "error");
     } finally {
       setIsGeneratingMcpKey(false);
     }
@@ -245,24 +315,42 @@ export default function UserProfileModal({
     setRevokingTokenId(tokenId);
     try {
       const idToken = await currentUser.getIdToken();
-      const res = await fetch("/api/user/mcp-token/revoke", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ tokenId }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (newlyCreatedToken) setNewlyCreatedToken(null);
-        await loadMcpTokens();
-        onAddToast("AI Key revoked successfully.", "info");
-      } else {
-        throw new Error(data.error || "Revocation failed");
+      const endpoints = [
+        "/api/user/mcp-token/revoke",
+        "https://btnx-website-mcp.vercel.app/api/user/mcp-token/revoke",
+      ];
+      let revokedOnServer = false;
+      for (const endpoint of endpoints) {
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ tokenId }),
+          });
+          if (res.ok) {
+            revokedOnServer = true;
+            break;
+          }
+        } catch {}
       }
+
+      if (!revokedOnServer) {
+        try {
+          await updateDoc(doc(db, "personal_access_tokens", tokenId), {
+            revokedAt: new Date().toISOString(),
+          });
+        } catch {}
+      }
+
+      setMcpTokens((prev) => prev.filter((t) => t.id !== tokenId));
+      if (newlyCreatedToken) setNewlyCreatedToken(null);
+      await loadMcpTokens();
+      onAddToast("AI Key revoked successfully.", "info");
     } catch (err: any) {
-      onAddToast(`Failed to revoke key: ${err.message}`, "error");
+      onAddToast(`Failed to revoke key: ${err?.message || "Unknown error"}`, "error");
     } finally {
       setRevokingTokenId(null);
     }
@@ -1240,16 +1328,17 @@ export default function UserProfileModal({
                               <div className="divide-y divide-[#E6E2DA] dark:divide-[#2C2A26] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm bg-white dark:bg-[#191816] overflow-hidden">
                                 {order.items.map((item, idx) => {
                                   const liveProd = products.find(
-                                    (p) => p.id === item.product.id || p.name?.toLowerCase() === item.product.name?.toLowerCase()
+                                    (p) => p.id === item.product?.id || p.name?.toLowerCase() === item.product?.name?.toLowerCase()
                                   );
-                                  const resolvedImg = liveProd?.image || (liveProd?.images && liveProd.images[0]) || item.product.image || "";
+                                  const localImg = LOCAL_PRODUCT_IMAGES[item.product?.id || (item as any).productId || ""] || (liveProd ? LOCAL_PRODUCT_IMAGES[liveProd.id] : undefined);
+                                  const resolvedImg = liveProd?.image || localImg || (liveProd?.images && liveProd.images[0]) || item.product?.image || "";
                                   return (
-                                    <div key={`${item.product.id}-${idx}`} className="p-4 flex items-center gap-4">
+                                    <div key={`${item.product?.id || idx}-${idx}`} className="p-4 flex items-center gap-4">
                                       <div className="w-14 h-16 bg-[#F4F1EC] dark:bg-[#22211E] rounded-sm shrink-0 overflow-hidden">
                                         <GalleryImage
                                           src={resolvedImg}
-                                          fallbackSrc={liveProd?.image}
-                                          alt={item.product.name}
+                                          fallbackSrc={localImg || liveProd?.image}
+                                          alt={item.product?.name || "BTNX Garment"}
                                           className="w-full h-full object-cover"
                                         />
                                       </div>

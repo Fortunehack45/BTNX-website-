@@ -16,6 +16,7 @@ import {
   OAuthTokenRecord,
   OAuthCodeRecord,
 } from "./types.js";
+import { getFirebaseAdmin } from "../firebaseAdmin.js";
 
 export function getSigningSecret(): string {
   const secret = process.env.SESSION_SECRET || process.env.RESOURCE_SIGNING_SECRET;
@@ -200,6 +201,34 @@ export async function listPersonalAccessTokens(
   uid: string
 ): Promise<Array<Omit<PersonalAccessTokenRecord, "tokenHash"> & { maskedToken: string }>> {
   try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      const snap = await admin.db
+        .collection("personal_access_tokens")
+        .where("uid", "==", uid)
+        .get();
+      return snap.docs
+        .map((d) => {
+          const data = d.data() as PersonalAccessTokenRecord;
+          return {
+            id: data.id,
+            uid: data.uid,
+            name: data.name,
+            scopes: data.scopes,
+            createdAt: data.createdAt,
+            expiresAt: data.expiresAt,
+            lastUsedAt: data.lastUsedAt,
+            revokedAt: data.revokedAt,
+            maskedToken: "btnx_pat_••••••••" + data.id.slice(-4),
+          };
+        })
+        .filter((t) => t.revokedAt == null);
+    }
+  } catch (adminErr) {
+    console.warn("[Auth] Admin list PATs notice:", adminErr);
+  }
+
+  try {
     const q = query(
       collection(db, "personal_access_tokens"),
       where("uid", "==", uid)
@@ -255,6 +284,16 @@ export async function createPersonalAccessToken(
     revokedAt: null,
   };
 
+  try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      await admin.db.collection("personal_access_tokens").doc(tokenId).set(record);
+      return { rawToken, record };
+    }
+  } catch (adminErr) {
+    console.warn("[Auth] Admin create PAT notice:", adminErr);
+  }
+
   await setDoc(doc(db, "personal_access_tokens", tokenId), record);
 
   return { rawToken, record };
@@ -271,31 +310,44 @@ export async function verifyPersonalAccessToken(
   const targetHash = hashToken(rawToken);
 
   try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      const snap = await admin.db
+        .collection("personal_access_tokens")
+        .where("tokenHash", "==", targetHash)
+        .limit(1)
+        .get();
+      if (!snap.empty) {
+        const docSnap = snap.docs[0];
+        const record = docSnap.data() as PersonalAccessTokenRecord;
+        if (record.revokedAt != null) return null;
+        if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) return null;
+        docSnap.ref.update({ lastUsedAt: new Date().toISOString() }).catch(() => {});
+        return record;
+      }
+    }
+  } catch (adminErr: any) {
+    console.warn("[Auth] Admin PAT verification notice:", adminErr?.message);
+  }
+
+  try {
     const q = query(
       collection(db, "personal_access_tokens"),
       where("tokenHash", "==", targetHash)
     );
     const snap = await getDocs(q);
-    if (snap.empty) return null;
-
-    const record = snap.docs[0].data() as PersonalAccessTokenRecord;
-
-    // Check revocation
-    if (record.revokedAt != null) return null;
-
-    // Check expiration
-    if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) {
-      return null;
+    if (!snap.empty) {
+      const record = snap.docs[0].data() as PersonalAccessTokenRecord;
+      if (record.revokedAt != null) return null;
+      if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) return null;
+      updateDoc(snap.docs[0].ref, { lastUsedAt: new Date().toISOString() }).catch(() => {});
+      return record;
     }
-
-    // Touch lastUsedAt without blocking
-    updateDoc(snap.docs[0].ref, { lastUsedAt: new Date().toISOString() }).catch(() => {});
-
-    return record;
   } catch (err: any) {
-    console.error("[Auth] PAT verification error:", err?.message);
-    return null;
+    console.warn("[Auth] Client PAT verification notice:", err?.message);
   }
+
+  return null;
 }
 
 /**
@@ -306,6 +358,21 @@ export async function revokePersonalAccessToken(
   uid: string,
   tokenId: string
 ): Promise<boolean> {
+  try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      const docRef = admin.db.collection("personal_access_tokens").doc(tokenId);
+      const snap = await docRef.get();
+      if (!snap.exists) return false;
+      const data = snap.data() as PersonalAccessTokenRecord;
+      if (data.uid !== uid) return false;
+      await docRef.update({ revokedAt: new Date().toISOString() });
+      return true;
+    }
+  } catch (adminErr) {
+    console.warn("[Auth] Admin revoke PAT notice:", adminErr);
+  }
+
   try {
     const ref = doc(db, "personal_access_tokens", tokenId);
     const snap = await getDoc(ref);

@@ -238,7 +238,5 @@ describe("BTNX MCP Streamable HTTP & Protocol Compliance Suite", () => {
     assert.deepStrictEqual(json.result, {});
   });
 
-  test.after(() => {
-    setTimeout(() => process.exit(0), 100);
-  });
+
 });
