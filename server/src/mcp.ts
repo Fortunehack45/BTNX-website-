@@ -24,7 +24,6 @@ import {
   renderTrackingStepperHtml,
   renderSupportTicketHtml,
 } from "./ui/templates.js";
-import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
 import * as crypto from "crypto";
 import {
   verifyPersonalAccessToken,
@@ -585,11 +584,8 @@ export async function executeMcpTool(
       try {
         const snap = await getDocs(collection(db, "products"));
         products = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      } catch {
-        products = [...NEW_YEAR_PRODUCTS];
-      }
-      if (!products.length) {
-        products = [...NEW_YEAR_PRODUCTS];
+      } catch (err: any) {
+        console.error("[btnx_list_products] Error fetching from database:", err);
       }
 
       if (args?.category && args.category !== "All") {
@@ -636,10 +632,6 @@ export async function executeMcpTool(
         const snap = await getDoc(doc(db, "products", pid));
         if (snap.exists()) p = { id: snap.id, ...snap.data() };
       } catch {}
-
-      if (!p) {
-        p = NEW_YEAR_PRODUCTS.find((item) => String(item.id) === pid);
-      }
 
       if (!p) {
         throw new Error(`Product #${pid} not found in BTNX luxury catalog.`);
@@ -901,12 +893,9 @@ export async function executeMcpTool(
             const snap = await getDoc(doc(db, "products", targetId));
             if (snap.exists()) prod = { id: snap.id, ...snap.data() };
           } catch {}
-          if (!prod) {
-            prod = NEW_YEAR_PRODUCTS.find((p) => String(p.id) === targetId);
-          }
         }
         if (!prod) {
-          prod = NEW_YEAR_PRODUCTS[0];
+          throw new Error(`Product #${targetId} not found in database to render UI widget.`);
         }
         return {
           widgetType: "product_card",

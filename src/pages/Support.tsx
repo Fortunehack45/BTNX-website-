@@ -29,7 +29,6 @@ import {
   Star,
 } from "lucide-react";
 import { Order, Product, CartItem } from "../types";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import GalleryImage from "../components/GalleryImage";
 import CustomDropdown from "../components/CustomDropdown";
@@ -59,59 +58,8 @@ interface SupportProps {
   onViewInvoice: (order: Order) => void;
   onOpenProduct: (product: Product) => void;
   onAddToast: (message: string, type: "success" | "error" | "info") => void;
+  products?: Product[];
 }
-
-const DEMO_FALLBACK_ORDERS: Order[] = [
-  {
-    id: "BX-849201",
-    status: "In Transit",
-    date: "12 Nov 2026",
-    total: 232500,
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[0],
-        quantity: 1,
-        size: "L",
-        color: "Dusty Plum",
-      },
-      {
-        product: NEW_YEAR_PRODUCTS[2],
-        quantity: 1,
-        size: "L",
-        color: "Deep Navy",
-      },
-    ],
-  },
-  {
-    id: "BX-730419",
-    status: "Processing",
-    date: "13 Nov 2026",
-    total: 185000,
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[1],
-        quantity: 1,
-        size: "M",
-        color: "Black",
-      },
-    ],
-  },
-];
-
-const SAMPLE_ATTACHMENT_IMAGES = [
-  {
-    label: "Garment Fit & Tag",
-    url: NEW_YEAR_PRODUCTS[0]?.image || "",
-  },
-  {
-    label: "Outerwear Detail",
-    url: NEW_YEAR_PRODUCTS[1]?.image || "",
-  },
-  {
-    label: "Knitwear Texture",
-    url: NEW_YEAR_PRODUCTS[2]?.image || "",
-  },
-];
 
 const FAQ_LIST = [
   {
@@ -141,6 +89,7 @@ export default function Support({
   userEmail = "",
   onOpenProduct,
   onAddToast,
+  products = [],
 }: SupportProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialOrderParam = searchParams.get("order") || "";
@@ -196,7 +145,7 @@ export default function Support({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const displayOrders = orders.length > 0 ? orders : DEMO_FALLBACK_ORDERS;
+  const displayOrders = orders;
   const clientDisplayName =
     userName || currentUser?.displayName || currentUser?.email?.split("@")[0] || "BTNX Client";
   const clientDisplayEmail = userEmail || currentUser?.email || "client@btnx.store";
@@ -254,7 +203,7 @@ export default function Support({
         date: "Recent",
         itemCount: 1,
         firstItemName: "BTNX Seasonal Piece",
-        firstItemImage: NEW_YEAR_PRODUCTS[0]?.image,
+        firstItemImage: (products && products[0]?.image) || "",
       });
     }
     const existingForOrder =
@@ -538,7 +487,7 @@ export default function Support({
         title: "14-Day Size Exchange",
         details: {
           orderId: actionOrderId || "BX-849201",
-          item: actionField1.trim() || NEW_YEAR_PRODUCTS[0].name,
+          item: actionField1.trim() || (products && products[0]?.name) || "BTNX Garment",
           fromSize: "M",
           toSize: actionField2.trim() || "L",
           notes: actionNotes.trim() || "Unworn with original tags attached.",
@@ -686,7 +635,7 @@ export default function Support({
   const catalogOptions = [
     ...cart.map((c) => c.product),
     ...wishlist,
-    ...NEW_YEAR_PRODUCTS,
+    ...(products || []),
   ]
     .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
     .filter(
@@ -956,10 +905,9 @@ export default function Support({
                         <button
                           type="button"
                           onClick={() => {
-                            const found = NEW_YEAR_PRODUCTS.find(
-                              (p) => p.id === msg.attachedProduct?.id
-                            );
-                            if (found) onOpenProduct(found);
+                            if (msg.attachedProduct) {
+                              onOpenProduct(msg.attachedProduct as any);
+                            }
                           }}
                           className="h-7 px-2.5 border border-current/25 text-[10px] font-mono uppercase tracking-[0.12em] hover:opacity-75 shrink-0 cursor-pointer"
                         >
@@ -1318,7 +1266,7 @@ export default function Support({
                       date: "Recent",
                       itemCount: 1,
                       firstItemName: "BTNX Order Reference",
-                      firstItemImage: NEW_YEAR_PRODUCTS[0]?.image,
+                      firstItemImage: (products && products[0]?.image) || "",
                     });
                     setCustomOrderIdInput("");
                     setActivePicker("none");

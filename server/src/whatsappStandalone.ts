@@ -12,7 +12,6 @@ import {
   renderTrackingStepperHtml,
   renderSupportTicketHtml,
 } from "./ui/templates.js";
-import { NEW_YEAR_PRODUCTS } from "./ui/productsData.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -166,25 +165,25 @@ app.get("/render/product/:id", async (req: Request, res: Response) => {
   const prodId = req.params.id;
   try {
     const snap = await getDoc(doc(db, "products", prodId));
-    const prod = snap.exists() ? { id: snap.id, ...snap.data() } : NEW_YEAR_PRODUCTS.find((p) => p.id === prodId) || NEW_YEAR_PRODUCTS[0];
+    if (!snap.exists()) {
+      return res.status(404).send("Product not found in BTNX database.");
+    }
+    const prod = { id: snap.id, ...snap.data() };
     res.setHeader("Content-Type", "text/html");
     res.send(renderProductCardHtml(prod));
-  } catch {
-    const prod = NEW_YEAR_PRODUCTS.find((p) => p.id === prodId) || NEW_YEAR_PRODUCTS[0];
-    res.setHeader("Content-Type", "text/html");
-    res.send(renderProductCardHtml(prod));
+  } catch (err: any) {
+    res.status(500).send("Database error retrieving product: " + (err?.message || err));
   }
 });
 
 app.get("/render/products", async (_req: Request, res: Response) => {
   try {
     const snap = await getDocs(collection(db, "products"));
-    const list = snap.docs.length ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : NEW_YEAR_PRODUCTS;
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     res.setHeader("Content-Type", "text/html");
     res.send(renderCatalogGridHtml(list));
-  } catch {
-    res.setHeader("Content-Type", "text/html");
-    res.send(renderCatalogGridHtml(NEW_YEAR_PRODUCTS));
+  } catch (err: any) {
+    res.status(500).send("Database error retrieving catalog: " + (err?.message || err));
   }
 });
 
@@ -196,18 +195,10 @@ app.get("/render/invoice/:orderId", async (req: Request, res: Response) => {
       res.setHeader("Content-Type", "text/html");
       return res.send(renderInvoiceHtml({ id: snap.id, ...snap.data() }));
     }
-  } catch {}
-  res.setHeader("Content-Type", "text/html");
-  res.send(
-    renderInvoiceHtml({
-      id: orderId,
-      customerName: "Valued Client",
-      total: 185000,
-      subtotal: 185000,
-      status: "Processing",
-      items: [{ product: NEW_YEAR_PRODUCTS[0], quantity: 1, size: "M", color: "Noir Black" }],
-    })
-  );
+    return res.status(404).send("Order not found in BTNX database.");
+  } catch (err: any) {
+    res.status(500).send("Database error retrieving invoice: " + (err?.message || err));
+  }
 });
 
 app.get("/render/track/:orderId", async (req: Request, res: Response) => {

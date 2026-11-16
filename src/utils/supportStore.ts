@@ -1,5 +1,4 @@
 import { Order, Product } from "../types";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "./currency";
 import { db, auth } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -130,7 +129,7 @@ const SEED_TICKETS: SupportTicket[] = [
           date: "12 Nov 2026",
           itemCount: 2,
           firstItemName: "Purple Brooklyn Fleece Hoodie",
-          firstItemImage: NEW_YEAR_PRODUCTS[0]?.image,
+          firstItemImage: "",
         },
       },
       {

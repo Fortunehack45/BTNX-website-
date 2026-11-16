@@ -13,7 +13,6 @@ import {
 } from "firebase/firestore";
 import { GoogleGenAI } from "@google/genai";
 import { resolveMcpUser, McpAuthenticatedUser } from "../mcp.js";
-import { NEW_YEAR_PRODUCTS } from "../ui/productsData.js";
 import {
   verifyAndLinkWhatsApp,
   resolveWhatsAppSender,
@@ -626,7 +625,13 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
     lowerText.includes("pants") ||
     lowerText.includes("tops")
   ) {
-    const items = NEW_YEAR_PRODUCTS.slice(0, 5)
+    let prods: any[] = [];
+    try {
+      const snap = await getDocs(collection(db, "products"));
+      prods = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    } catch {}
+
+    const items = prods.slice(0, 5)
       .map((p, idx) => `${idx + 1}️⃣ *${p.name}* — ₦${Number(p.price || 0).toLocaleString()}`)
       .join("\n");
 
@@ -634,7 +639,7 @@ export async function processWhatsAppMessage(payload: WhatsAppMessagePayload): P
       replyText:
         `🏛️ *BTNX Ready-to-Wear Seasonal Catalog*\n\n` +
         `Explore our signature structured silhouettes cut from fine brushed wool, tropical suiting, and supple lambskin.\n\n` +
-        `${items}\n\n` +
+        `${items || "Please visit our live catalog link below."}\n\n` +
         `✨ *View Visual Product Cards:* ${host}/render/products\n\n` +
         `Reply *\"buy [item]\"* to place an order immediately, or reply *\"card [id]\"* to inspect details.`,
       suggestedActions: ["Buy Overshirt", "Latest Promos", "Fit Advisory"],

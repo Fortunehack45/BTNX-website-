@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Product, CartItem } from "../types";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { Check, Copy, ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
@@ -48,7 +47,7 @@ export default function NewYearCollection({
   onToggleWishlist,
   products,
 }: NewYearCollectionProps) {
-  const storeProducts = Array.isArray(products) ? products : NEW_YEAR_PRODUCTS;
+  const storeProducts = Array.isArray(products) ? products : [];
   const [isVoucherClaimed, setIsVoucherClaimed] = useState(false);
 
   const handleClaimVoucher = (e: React.MouseEvent) => {

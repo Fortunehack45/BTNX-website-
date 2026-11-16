@@ -4,7 +4,6 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { Copy, Check, ArrowRight, ShoppingBag, Tag, Search } from "lucide-react";
 import { motion } from "motion/react";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { Product } from "../types";
 import { formatNaira } from "../utils/currency";
 import { getDiscountPercent } from "../utils/invoice";
@@ -31,6 +30,7 @@ interface PromosProps {
   onApplyPromoToBag: (code: string) => void;
   onAddToast: (message: string, type: "success" | "error" | "info") => void;
   onOpenProduct: (product: Product) => void;
+  products?: Product[];
 }
 
 const FLAGSHIP_PROMO: PromoRecord = {
@@ -47,6 +47,7 @@ export default function Promos({
   onApplyPromoToBag,
   onAddToast,
   onOpenProduct,
+  products = [],
 }: PromosProps) {
   const navigate = useNavigate();
   const [firestorePromos, setFirestorePromos] = useState<PromoRecord[]>([]);
@@ -159,7 +160,7 @@ export default function Promos({
     });
   };
 
-  const featuredPieces = NEW_YEAR_PRODUCTS.slice(0, 3);
+  const featuredPieces = (products || []).slice(0, 3);
 
   return (
     <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#111110] text-[#141413] dark:text-[#F3F1EC] pb-20 lg:pb-0">

@@ -58,7 +58,6 @@ import {
 import BrandLogo from "../components/BrandLogo";
 import GalleryImage from "../components/GalleryImage";
 import { useTheme, ThemePreference } from "../context/ThemeContext";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import { downloadOrderInvoice } from "../utils/invoice";
 import {
@@ -264,7 +263,7 @@ export default function AdminPortal() {
     category: PRODUCT_CATEGORIES[0],
     price: "",
     originalPrice: "",
-    image: NEW_YEAR_PRODUCTS[0]?.image || "",
+    image: "",
     images: [] as string[],
     customColorInput: "",
     customImageUrl: "",
@@ -593,80 +592,14 @@ export default function AdminPortal() {
     };
   }, [isFirebaseAdmin, firebaseUser]);
 
-  // Combined Catalog: Cloud products + Storefront products
+  // Combined Catalog: Strictly database products from Firestore
   const allProducts: Product[] = React.useMemo(() => {
-    const map = new Map<string, Product>();
-    NEW_YEAR_PRODUCTS.forEach((p) => {
-      if (!deletedProductIds.includes(p.id)) {
-        map.set(p.id, { ...p, stock: p.stock ?? 45 });
-      }
-    });
-    cloudProducts.forEach((p) => {
-      if (!deletedProductIds.includes(p.id)) {
-        map.set(p.id, { ...map.get(p.id), ...p });
-      }
-    });
-    return Array.from(map.values());
+    return cloudProducts.filter((p) => !deletedProductIds.includes(p.id));
   }, [cloudProducts, deletedProductIds]);
 
-  // Combined Orders (with demo fallback if empty so Admin Orders table is immediately rich)
+  // Orders: Strictly real orders from database
   const allOrders: Order[] = React.useMemo(() => {
-    const valid = orders.filter((o) => !deletedOrderIds.includes(o.id));
-    if (valid.length > 0) return valid;
-    const fallback: Order[] = [
-      {
-        id: "BX-849201",
-        userId: "tunde.adeleke@example.com",
-        status: "In Transit",
-        date: "12 Nov 2026",
-        total: 232500,
-        items: [
-          {
-            product: NEW_YEAR_PRODUCTS[0],
-            quantity: 1,
-            size: "L",
-            color: "Dusty Plum",
-          },
-          {
-            product: NEW_YEAR_PRODUCTS[2],
-            quantity: 1,
-            size: "L",
-            color: "Deep Navy",
-          },
-        ],
-      },
-      {
-        id: "BX-730419",
-        userId: "amaka.obi@example.com",
-        status: "Processing",
-        date: "13 Nov 2026",
-        total: 185000,
-        items: [
-          {
-            product: NEW_YEAR_PRODUCTS[1],
-            quantity: 1,
-            size: "M",
-            color: "Black",
-          },
-        ],
-      },
-      {
-        id: "BX-619042",
-        userId: "ibrahim.musa@example.com",
-        status: "Delivered",
-        date: "08 Nov 2026",
-        total: 147000,
-        items: [
-          {
-            product: NEW_YEAR_PRODUCTS[3] || NEW_YEAR_PRODUCTS[0],
-            quantity: 1,
-            size: "XL",
-            color: "Sand",
-          },
-        ],
-      },
-    ];
-    return fallback.filter((o) => !deletedOrderIds.includes(o.id));
+    return orders.filter((o) => !deletedOrderIds.includes(o.id));
   }, [orders, deletedOrderIds]);
 
   // KPI Metrics
@@ -937,7 +870,7 @@ export default function AdminPortal() {
   // Product Management Handlers
   const openAddProductModal = () => {
     setEditingProduct(null);
-    const defaultImg = NEW_YEAR_PRODUCTS[0]?.image || "";
+    const defaultImg = "";
     setProductForm({
       name: "",
       category: PRODUCT_CATEGORIES[0],
@@ -1131,8 +1064,8 @@ export default function AdminPortal() {
         ? productForm.images
         : productForm.image
         ? [productForm.image.trim()]
-        : [NEW_YEAR_PRODUCTS[0]?.image || ""];
-    const mainImage = productForm.image.trim() || finalImages[0] || NEW_YEAR_PRODUCTS[0]?.image || "";
+        : [];
+    const mainImage = productForm.image.trim() || finalImages[0] || "";
     const finalColors = productForm.colors.length > 0 ? productForm.colors : ["Noir Black"];
 
     const newProd: Product = {
@@ -1335,27 +1268,12 @@ export default function AdminPortal() {
 
   const handleSeedCatalogToCloud = async () => {
     try {
-      await Promise.all(
-        NEW_YEAR_PRODUCTS.map((p) =>
-          setDoc(doc(db, "products", p.id), {
-            id: p.id,
-            name: p.name,
-            category: p.category,
-            price: p.price,
-            originalPrice: p.originalPrice || null,
-            image: p.image,
-            badge: p.badge || null,
-            description: p.description || "",
-            sizes: p.sizes || ["S", "M", "L", "XL"],
-            colors: p.colors || ["Black"],
-            stock: p.stock ?? 45,
-          })
-        )
-      );
-      showToast("Synced all storefront garments to Firestore catalog.");
+      const snap = await getDocs(collection(db, "products"));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Product[];
+      setCloudProducts(list);
+      showToast(`Refreshed ${list.length} garments directly from Firestore database.`);
     } catch {
-      setCloudProducts(NEW_YEAR_PRODUCTS);
-      showToast("Synced storefront garments to active catalog.");
+      showToast("Unable to refresh Firestore catalog.");
     }
   };
 

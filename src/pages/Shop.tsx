@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, CartItem } from "../types";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import { getDiscountPercent } from "../utils/invoice";
 import {
@@ -35,6 +34,7 @@ interface ShopProps {
   onToggleWishlist?: (product: Product) => void;
   globalSearchQuery?: string;
   products?: Product[];
+  isLoading?: boolean;
 }
 
 const CATEGORIES = [
@@ -56,9 +56,10 @@ const MOBILE_CATEGORY_SHORT: Record<string, string> = {
 };
 
 const PRICE_PRESETS = [
-  { label: "All", min: 0, max: 150 },
-  { label: "< ₦120k", min: 0, max: 80 },
-  { label: "₦120k+", min: 80, max: 150 },
+  { label: "All", min: 0, max: 200000 },
+  { label: "< ₦80k", min: 0, max: 80000 },
+  { label: "₦80k – ₦120k", min: 80000, max: 120000 },
+  { label: "₦120k+", min: 120000, max: 200000 },
 ];
 
 const COLLECTION_TAGS = [
@@ -80,9 +81,10 @@ export default function Shop({
   wishlist = [],
   onToggleWishlist,
   globalSearchQuery = "",
-  products,
+  products = [],
+  isLoading = false,
 }: ShopProps) {
-  const storeProducts = Array.isArray(products) ? products : NEW_YEAR_PRODUCTS;
+  const storeProducts = Array.isArray(products) ? products : [];
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   const [searchQuery, setSearchQuery] = useState(urlQuery || globalSearchQuery);
@@ -113,9 +115,14 @@ export default function Shop({
   const [maxPrice, setMaxPrice] = useState<number>(() => {
     try {
       const saved = sessionStorage.getItem("btnx_shop_filters");
-      return saved ? Number(JSON.parse(saved).maxPrice ?? 150) : 150;
+      if (saved) {
+        const val = Number(JSON.parse(saved).maxPrice);
+        // Automatically upgrade obsolete USD 150 ceiling to 200,000 Naira
+        if (val && val > 150) return val;
+      }
+      return 200000;
     } catch {
-      return 150;
+      return 200000;
     }
   });
   const [sortBy, setSortBy] = useState<string>(() => {
@@ -152,7 +159,7 @@ export default function Shop({
     setCategoryFilter("All Pieces");
     setBadgeFilter("");
     setMinPrice(0);
-    setMaxPrice(150);
+    setMaxPrice(200000);
     setSortBy("featured");
     try {
       sessionStorage.removeItem("btnx_shop_filters");
@@ -167,13 +174,13 @@ export default function Shop({
     badgeFilter !== "" ||
     searchQuery.trim() !== "" ||
     minPrice > 0 ||
-    maxPrice < 150 ||
+    maxPrice < 200000 ||
     sortBy !== "featured";
 
   const activeFilterCount =
     (categoryFilter !== "All Pieces" ? 1 : 0) +
     (badgeFilter !== "" ? 1 : 0) +
-    (minPrice > 0 || maxPrice < 150 ? 1 : 0);
+    (minPrice > 0 || maxPrice < 200000 ? 1 : 0);
 
   const matchesCategoryName = (product: Product, cat: string) => {
     if (cat === "All Pieces") return true;
@@ -229,9 +236,12 @@ export default function Shop({
     return 0;
   });
 
-  const visibleRecommendations = [0, 1, 2].map(
-    (offset) => storeProducts[(recOffset + offset) % storeProducts.length]
-  );
+  const visibleRecommendations =
+    storeProducts.length > 0
+      ? [0, 1, 2]
+          .map((offset) => storeProducts[(recOffset + offset) % storeProducts.length])
+          .filter(Boolean)
+      : [];
 
   const renderFilterSections = (isMobile = false) => (
     <div className="space-y-5">
@@ -291,9 +301,9 @@ export default function Shop({
         <div>
           <input
             type="range"
-            min="50"
-            max="150"
-            step="5"
+            min="0"
+            max="200000"
+            step="5000"
             aria-label="Maximum price ceiling"
             value={maxPrice}
             onChange={(e) => setMaxPrice(Number(e.target.value))}
@@ -301,11 +311,11 @@ export default function Shop({
           />
           <div className="flex justify-between font-mono text-[10px] tabular-nums text-[#66625B] dark:text-[#A7A299] -mt-1">
             <span>{formatNaira(minPrice)}</span>
-            <span>{formatNaira(150)}</span>
+            <span>{formatNaira(200000)}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-3">
           {PRICE_PRESETS.map((preset) => {
             const isSelected = minPrice === preset.min && maxPrice === preset.max;
             return (
@@ -459,7 +469,7 @@ export default function Shop({
                   </span>
                 </>
               )}
-              {(minPrice > 0 || maxPrice < 150) && (
+              {(minPrice > 0 || maxPrice < 200000) && (
                 <>
                   <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums text-[#141413] dark:text-[#F3F1EC] whitespace-nowrap">
@@ -564,7 +574,13 @@ export default function Shop({
               </div>
             </div>
 
-            {sortedProducts.length > 0 ? (
+            {isLoading && storeProducts.length === 0 ? (
+              <div className="py-24 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
+                <div className="inline-block w-8 h-8 border-2 border-[#C89B62] border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="font-display text-2xl text-[#141413] dark:text-[#F3F1EC] mb-2">Connecting to Atelier Collection</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-[#A7A299]">Retrieving real-time catalog directly from database...</p>
+              </div>
+            ) : sortedProducts.length > 0 ? (
               <motion.div
                 key={`${categoryFilter}-${badgeFilter}-${sortBy}`}
                 variants={galleryContainerVariants}
@@ -590,14 +606,18 @@ export default function Shop({
               <div className="py-20 px-6 text-center bg-white dark:bg-[#191816] border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm">
                 <p className="font-display text-3xl text-[#141413] dark:text-[#F3F1EC] mb-2">No matching pieces</p>
                 <p className="text-sm text-[#66625B] dark:text-[#A7A299] max-w-sm mx-auto mb-6">
-                  Adjust your price range or category filter to view available store items.
+                  {storeProducts.length === 0
+                    ? "The database catalog is currently empty. Add products from the Admin Portal to populate the storefront."
+                    : "Adjust your price range or category filter to view available store items."}
                 </p>
-                <button
-                  onClick={handleResetFilters}
-                  className="min-h-[46px] px-6 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-sm transition-colors cursor-pointer"
-                >
-                  Reset All Filters
-                </button>
+                {storeProducts.length > 0 && (
+                  <button
+                    onClick={handleResetFilters}
+                    className="min-h-[46px] px-6 py-3 bg-[#141413] dark:bg-[#F3F1EC] text-[#FAF9F7] dark:text-[#141413] hover:bg-[#2B2A28] dark:hover:bg-[#E2DFD7] text-xs font-medium uppercase tracking-[0.14em] rounded-sm transition-colors cursor-pointer"
+                  >
+                    Reset All Filters
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -672,105 +692,111 @@ export default function Shop({
       </AnimatePresence>
 
       {/* Curated Recommendations */}
-      <section className="bg-white dark:bg-[#191816] border-t border-[#E6E2DA] dark:border-[#2C2A26]">
-        <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16">
-          <div className="flex items-end justify-between gap-4 pb-8 mb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
-            <div>
-              <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1.5">
-                Picked For You
-              </span>
-              <h2 className="font-display text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
-                You Might Also Like
-              </h2>
-            </div>
+      {visibleRecommendations.length > 0 && (
+        <section className="bg-white dark:bg-[#191816] border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+          <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-6 py-16">
+            <div className="flex items-end justify-between gap-4 pb-8 mb-8 border-b border-[#E6E2DA] dark:border-[#2C2A26]">
+              <div>
+                <span className="text-[11px] uppercase tracking-[0.18em] text-[#966830] dark:text-[#C89B62] font-medium block mb-1.5">
+                  Picked For You
+                </span>
+                <h2 className="font-display text-3xl font-medium text-[#141413] dark:text-[#F3F1EC]">
+                  You Might Also Like
+                </h2>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setRecOffset(
-                    (prev) => (prev - 1 + storeProducts.length) % storeProducts.length
-                  )
-                }
-                className="w-10 h-10 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer"
-                aria-label="Previous recommendations"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setRecOffset((prev) => (prev + 1) % storeProducts.length)}
-                className="w-10 h-10 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer"
-                aria-label="Next recommendations"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <motion.div
-            key={recOffset}
-            variants={galleryContainerVariants}
-            initial="hidden"
-            whileInView="visible"
-            viewport={EDITORIAL_VIEWPORT}
-            className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 lg:gap-8"
-          >
-            {visibleRecommendations.map((product) => {
-              const discountPct = getDiscountPercent(product.price, product.originalPrice);
-              return (
-                <motion.article
-                  key={`rec-${product.id}`}
-                  variants={galleryCardVariants}
-                  onClick={() => onOpenProduct(product)}
-                  className="group cursor-pointer flex flex-col gap-2.5 sm:gap-3"
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    storeProducts.length > 0 &&
+                    setRecOffset(
+                      (prev) => (prev - 1 + storeProducts.length) % storeProducts.length
+                    )
+                  }
+                  className="w-10 h-10 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer"
+                  aria-label="Previous recommendations"
                 >
-                  <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
-                    <GalleryImage
-                      src={product.image}
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
-                    />
-                    {discountPct && (
-                      <span className="m3-haze-photo absolute top-2 left-2 sm:top-3 sm:left-3 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[#FAF9F7] font-mono text-[9px] sm:text-[10px] font-medium uppercase tracking-[0.1em] sm:tracking-[0.12em] rounded-sm">
-                        -{discountPct}%
-                      </span>
-                    )}
-                  </div>
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    storeProducts.length > 0 &&
+                    setRecOffset((prev) => (prev + 1) % storeProducts.length)
+                  }
+                  className="w-10 h-10 border border-[#E6E2DA] dark:border-[#2C2A26] bg-white dark:bg-[#22211E] hover:border-[#141413] dark:hover:border-[#F3F1EC] rounded-sm flex items-center justify-center text-[#141413] dark:text-[#F3F1EC] transition-colors cursor-pointer"
+                  aria-label="Next recommendations"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-                  <div className="space-y-1 sm:space-y-1.5">
-                    <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
-                      <div className="min-w-0">
-                        <p className="text-[9px] sm:text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
-                          {product.category}
-                        </p>
-                        <h3 className="text-[13px] sm:text-sm font-semibold text-[#141413] dark:text-[#F3F1EC] mt-0.5 truncate">
-                          {product.name}
-                        </h3>
-                      </div>
-                      <div className="flex items-baseline gap-1.5 shrink-0">
-                        {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="font-mono text-[10px] sm:text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
-                            {formatNaira(product.originalPrice)}
-                          </span>
-                        )}
-                        <span className="font-mono text-[12px] sm:text-sm font-semibold sm:font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
-                          {formatNaira(product.price)}
+            <motion.div
+              key={recOffset}
+              variants={galleryContainerVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={EDITORIAL_VIEWPORT}
+              className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 lg:gap-8"
+            >
+              {visibleRecommendations.map((product) => {
+                const discountPct = getDiscountPercent(product.price, product.originalPrice);
+                return (
+                  <motion.article
+                    key={`rec-${product.id}`}
+                    variants={galleryCardVariants}
+                    onClick={() => onOpenProduct(product)}
+                    className="group cursor-pointer flex flex-col gap-2.5 sm:gap-3"
+                  >
+                    <div className="relative aspect-[3/4] bg-[#F4F1EC] dark:bg-[#22211E] overflow-hidden rounded-sm">
+                      <GalleryImage
+                        src={product.image}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
+                      />
+                      {discountPct && (
+                        <span className="m3-haze-photo absolute top-2 left-2 sm:top-3 sm:left-3 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[#FAF9F7] font-mono text-[9px] sm:text-[10px] font-medium uppercase tracking-[0.1em] sm:tracking-[0.12em] rounded-sm">
+                          -{discountPct}%
                         </span>
-                      </div>
+                      )}
                     </div>
-                    {product.description && (
-                      <p className="text-[11px] sm:text-xs text-[#66625B] dark:text-[#A7A299] leading-snug sm:leading-relaxed line-clamp-2">
-                        {product.description}
-                      </p>
-                    )}
-                  </div>
-                </motion.article>
-              );
-            })}
-          </motion.div>
-        </div>
-      </section>
+
+                    <div className="space-y-1 sm:space-y-1.5">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5 sm:gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[9px] sm:text-[11px] uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[#66625B] dark:text-[#A7A299] truncate">
+                            {product.category}
+                          </p>
+                          <h3 className="text-[13px] sm:text-sm font-semibold text-[#141413] dark:text-[#F3F1EC] mt-0.5 truncate">
+                            {product.name}
+                          </h3>
+                        </div>
+                        <div className="flex items-baseline gap-1.5 shrink-0">
+                          {product.originalPrice && product.originalPrice > product.price && (
+                            <span className="font-mono text-[10px] sm:text-[11px] text-[#66625B] dark:text-[#A7A299] line-through tabular-nums">
+                              {formatNaira(product.originalPrice)}
+                            </span>
+                          )}
+                          <span className="font-mono text-[12px] sm:text-sm font-semibold sm:font-medium text-[#141413] dark:text-[#F3F1EC] tabular-nums">
+                            {formatNaira(product.price)}
+                          </span>
+                        </div>
+                      </div>
+                      {product.description && (
+                        <p className="text-[11px] sm:text-xs text-[#66625B] dark:text-[#A7A299] leading-snug sm:leading-relaxed line-clamp-2">
+                          {product.description}
+                        </p>
+                      )}
+                    </div>
+                  </motion.article>
+                );
+              })}
+            </motion.div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

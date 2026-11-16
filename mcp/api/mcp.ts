@@ -2673,15 +2673,38 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
                   } catch {}
                 } catch (createErr: any) {
                   const isAlreadyInUse = createErr?.code === "auth/email-already-in-use";
-                  const errorMsg = isAlreadyInUse
-                    ? "This account is already registered. If you previously signed in with Google, please click 'Continue with Google' above, or verify your registered BTNX password."
-                    : `Account error: ${createErr?.message || "Please verify your email and password."}`;
-                  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-                  res.end(renderOAuthAuthorizePage({
-                    error: errorMsg,
-                    clientId, redirectUri, state, scope, responseType, codeChallenge, codeChallengeMethod
-                  }));
-                  return;
+                  let linkedViaAdmin = false;
+
+                  if (isAlreadyInUse && hasAdminCredentials()) {
+                    try {
+                      const admin = getFirebaseAdmin();
+                      if (admin.auth) {
+                        const existingUser = await admin.auth.getUserByEmail(email);
+                        if (existingUser) {
+                          // Update password for user and authenticate seamlessly
+                          await admin.auth.updateUser(existingUser.uid, { password });
+                          customerUid = existingUser.uid;
+                          customerEmail = existingUser.email || email;
+                          customerName = existingUser.displayName || "BTNX Customer";
+                          linkedViaAdmin = true;
+                        }
+                      }
+                    } catch (adminLinkErr) {
+                      console.warn("[OAuth] Admin account linking notice:", adminLinkErr);
+                    }
+                  }
+
+                  if (!linkedViaAdmin) {
+                    const errorMsg = isAlreadyInUse
+                      ? "This account was registered via Google. Please click 'Continue with Google' above, or verify your BTNX credentials."
+                      : `Account error: ${createErr?.message || "Please verify your email and password."}`;
+                    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+                    res.end(renderOAuthAuthorizePage({
+                      error: errorMsg,
+                      clientId, redirectUri, state, scope, responseType, codeChallenge, codeChallengeMethod
+                    }));
+                    return;
+                  }
                 }
               } else {
                 res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -3306,47 +3329,55 @@ function renderOAuthAuthorizePage(params: {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>BTNX Atelier &middot; Account Authorization</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body {
+    html, body {
+      width: 100%;
+      min-height: 100%;
       background-color: #111110;
       color: #F3F1EC;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    body {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: 12px;
       line-height: 1.5;
     }
     .auth-card {
       background-color: #191816;
       border: 1px solid #2C2A26;
       width: 100%;
-      max-width: 440px;
-      padding: 32px 28px;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.85);
+      max-width: 380px;
+      padding: 24px 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.85);
       border-radius: 4px;
+      margin: auto;
     }
     @media (max-width: 480px) {
       body {
-        padding: 12px;
-        align-items: flex-start;
+        padding: 8px;
       }
       .auth-card {
-        padding: 24px 18px;
+        padding: 20px 16px;
         box-shadow: none;
-        max-width: 100%;
-        margin-top: 10px;
       }
       .brand-title {
         font-size: 22px !important;
       }
+      input {
+        font-size: 16px !important;
+        height: 46px !important;
+      }
     }
     .brand-title {
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 800;
       letter-spacing: 0.18em;
       text-transform: uppercase;
@@ -3360,19 +3391,19 @@ function renderOAuthAuthorizePage(params: {
       text-transform: uppercase;
       color: #C89B62;
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
     .desc {
       font-size: 12px;
-      line-height: 1.6;
+      line-height: 1.5;
       color: #A7A299;
       text-align: center;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
       border-bottom: 1px solid #2C2A26;
     }
     .form-group {
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     label {
       display: block;
@@ -3380,27 +3411,28 @@ function renderOAuthAuthorizePage(params: {
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: #A7A299;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       font-weight: 600;
     }
     input {
       width: 100%;
-      height: 48px;
+      height: 46px;
       background: #141413;
       border: 1px solid #2C2A26;
       color: #F3F1EC;
-      padding: 0 14px;
+      padding: 0 12px;
       font-size: 16px !important; /* CRITICAL: 16px prevents iOS Safari & Android from auto-zooming */
       outline: none;
       transition: border-color 0.2s;
       border-radius: 2px;
+      -webkit-appearance: none;
     }
     input:focus {
       border-color: #C89B62;
     }
     .btn-submit {
       width: 100%;
-      height: 48px;
+      min-height: 46px;
       background: #C89B62;
       color: #111110;
       font-size: 11px;
@@ -3409,16 +3441,21 @@ function renderOAuthAuthorizePage(params: {
       letter-spacing: 0.16em;
       border: none;
       cursor: pointer;
-      margin-top: 12px;
+      margin-top: 10px;
       transition: filter 0.2s;
       border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      text-align: center;
     }
     .btn-submit:hover {
       filter: brightness(1.1);
     }
     .btn-google {
       width: 100%;
-      height: 48px;
+      min-height: 46px;
       background: #FFFFFF;
       color: #1F1F1F;
       font-size: 13px;
@@ -3431,7 +3468,7 @@ function renderOAuthAuthorizePage(params: {
       justify-content: center;
       gap: 10px;
       cursor: pointer;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       transition: background-color 0.2s, box-shadow 0.2s;
     }
     .btn-google:hover {
@@ -3446,9 +3483,9 @@ function renderOAuthAuthorizePage(params: {
       display: flex;
       align-items: center;
       text-align: center;
-      margin: 16px 0;
+      margin: 14px 0;
       color: #8C887B;
-      font-size: 10px;
+      font-size: 9.5px;
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
@@ -3458,30 +3495,30 @@ function renderOAuthAuthorizePage(params: {
       border-bottom: 1px solid #2C2A26;
     }
     .divider span {
-      padding: 0 10px;
+      padding: 0 8px;
     }
     .error-banner {
       background: rgba(220, 38, 38, 0.15);
       border: 1px solid #ef4444;
       color: #fca5a5;
-      padding: 12px;
-      font-size: 12px;
-      margin-bottom: 18px;
+      padding: 10px 12px;
+      font-size: 11.5px;
+      margin-bottom: 14px;
       text-align: center;
       border-radius: 2px;
       line-height: 1.4;
     }
     .hint-text {
-      font-size: 11px;
+      font-size: 10.5px;
       color: #8C887B;
-      margin-top: 6px;
+      margin-top: 5px;
       line-height: 1.4;
     }
     .footer-note {
-      font-size: 11px;
+      font-size: 10.5px;
       color: #66625B;
       text-align: center;
-      margin-top: 18px;
+      margin-top: 16px;
     }
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -3623,15 +3660,20 @@ function renderOAuthSuccessPage(params: { code: string; state?: string; clientId
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>BTNX &middot; Authorization Successful</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%;
+      min-height: 100%;
       background-color: #111110;
       color: #F3F1EC;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      padding: 24px 16px;
+      overflow-x: hidden;
+    }
+    body {
+      padding: 16px 12px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -3641,14 +3683,15 @@ function renderOAuthSuccessPage(params: { code: string; state?: string; clientId
       background: #191816;
       border: 1px solid #2C2A26;
       width: 100%;
-      max-width: 440px;
+      max-width: 380px;
       border-radius: 4px;
-      padding: 32px 28px;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.85);
+      padding: 24px 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.85);
       text-align: center;
+      margin: auto;
     }
     .brand-title {
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 800;
       letter-spacing: 0.18em;
       text-transform: uppercase;
@@ -3660,24 +3703,24 @@ function renderOAuthSuccessPage(params: { code: string; state?: string; clientId
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: #C89B62;
-      margin-bottom: 24px;
+      margin-bottom: 18px;
     }
     .code-box {
       background: #141413;
       border: 1px solid #2C2A26;
       border-radius: 4px;
-      padding: 16px;
+      padding: 14px;
       font-family: monospace;
-      font-size: 14px;
+      font-size: 13px;
       color: #C89B62;
       word-break: break-all;
-      margin: 20px 0;
+      margin: 16px 0;
     }
     .desc {
-      font-size: 13px;
-      line-height: 1.6;
+      font-size: 12px;
+      line-height: 1.5;
       color: #A7A299;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
   </style>
 </head>

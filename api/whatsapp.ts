@@ -13,7 +13,6 @@ import {
   renderTrackingStepperHtml,
   renderSupportTicketHtml,
 } from "../server/src/ui/templates.js";
-import { NEW_YEAR_PRODUCTS } from "../server/src/ui/productsData.js";
 
 dotenv.config();
 

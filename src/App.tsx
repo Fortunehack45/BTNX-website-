@@ -24,7 +24,7 @@ import MobileBottomNav from "./components/MobileBottomNav";
 import { AppBootSkeleton } from "./components/StoreSkeleton";
 import SeoManager from "./components/SeoManager";
 import { Product, CartItem, Order } from "./types";
-import { NEW_YEAR_PRODUCTS, LOCAL_PRODUCT_IMAGES } from "./data";
+import { LOCAL_PRODUCT_IMAGES } from "./data";
 import { useAuth } from "./context/AuthContext";
 import { useNotifications } from "./hooks/useNotifications";
 import { db, handleFirestoreError, OperationType } from "./lib/firebase";
@@ -132,7 +132,7 @@ export default function App() {
     }
   }, [location.pathname, location.search]);
 
-  // Dynamic store products synchronized with Firestore and local cache
+  // Dynamic store products synchronized directly with Firestore database
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const cached = localStorage.getItem("btnx_cloud_products");
@@ -141,42 +141,36 @@ export default function App() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const map = new Map<string, Product>();
-          NEW_YEAR_PRODUCTS.forEach((p) => {
-            if (!deletedIds.includes(p.id)) map.set(p.id, p);
-          });
-          parsed.forEach((p: Product) => {
-            if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
-          });
-          return Array.from(map.values());
+          return parsed.filter((p: Product) => !deletedIds.includes(p.id));
         }
       }
     } catch {
       // ignore
     }
-    return NEW_YEAR_PRODUCTS;
+    return [];
+  });
+  const [isProductsLoading, setIsProductsLoading] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem("btnx_cloud_products");
+      return !cached;
+    } catch {
+      return true;
+    }
   });
 
-  // Listen to instantaneous product updates from Admin Portal
+  // Listen to instantaneous product updates from Admin Portal or storage
   useEffect(() => {
     const syncProducts = () => {
       try {
         const cached = localStorage.getItem("btnx_cloud_products");
         const delCached = localStorage.getItem("btnx_deleted_product_ids");
         const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
-        const map = new Map<string, Product>();
-        NEW_YEAR_PRODUCTS.forEach((p) => {
-          if (!deletedIds.includes(p.id)) map.set(p.id, p);
-        });
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed)) {
-            parsed.forEach((p: Product) => {
-              if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
-            });
+            setProducts(parsed.filter((p: Product) => !deletedIds.includes(p.id)));
           }
         }
-        setProducts(Array.from(map.values()).filter((p) => !deletedIds.includes(p.id)));
       } catch {}
     };
 
@@ -193,68 +187,51 @@ export default function App() {
       const unsub = onSnapshot(
         collection(db, "products"),
         (snapshot) => {
+          setIsProductsLoading(false);
           if (!snapshot.empty) {
-            const fetched = snapshot.docs.map((d) => ({
-              id: d.id,
-              ...d.data(),
-            })) as Product[];
             const delCached = localStorage.getItem("btnx_deleted_product_ids");
             const deletedIds: string[] = delCached ? JSON.parse(delCached) : [];
-            const map = new Map<string, Product>();
-            NEW_YEAR_PRODUCTS.forEach((p) => {
-              if (!deletedIds.includes(p.id)) map.set(p.id, p);
-            });
-            // Also merge localStorage cached products
+            const fetched = snapshot.docs
+              .map((d) => {
+                const data = d.data();
+                const localFallback = LOCAL_PRODUCT_IMAGES[d.id];
+                const resolvedImg = (data.image && !data.image.includes("/og/"))
+                  ? data.image
+                  : (localFallback || data.image || "");
+                return {
+                  id: d.id,
+                  ...data,
+                  image: resolvedImg,
+                } as Product;
+              })
+              .filter((p) => !deletedIds.includes(p.id));
+
+            setProducts(fetched);
             try {
-              const cached = localStorage.getItem("btnx_cloud_products");
-              if (cached) {
-                const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach((p: Product) => {
-                    if (!deletedIds.includes(p.id)) map.set(p.id, { ...map.get(p.id), ...p });
-                  });
-                }
-              }
-            } catch {}
-            fetched.forEach((p) => {
-              if (!deletedIds.includes(p.id)) {
-                const existing = map.get(p.id);
-                const localFallback = LOCAL_PRODUCT_IMAGES[p.id];
-                const resolvedImg = (p.image && !p.image.includes("/og/"))
-                  ? p.image
-                  : (localFallback || existing?.image || p.image);
-                map.set(p.id, { ...existing, ...p, image: resolvedImg });
-              }
-            });
-            const merged = Array.from(map.values()).filter((p) => !deletedIds.includes(p.id));
-            setProducts(merged);
-            try {
-              localStorage.setItem("btnx_cloud_products", JSON.stringify(merged));
+              localStorage.setItem("btnx_cloud_products", JSON.stringify(fetched));
             } catch {}
           } else {
-            // Cloud database has no products or was explicitly cleared
             setProducts([]);
             try {
               localStorage.setItem("btnx_cloud_products", JSON.stringify([]));
             } catch {}
           }
         },
-        () => {
-          // fallback to local state
+        (err) => {
+          setIsProductsLoading(false);
+          console.warn("[Firestore] Live product catalog subscription notice:", err);
         }
       );
       return () => unsub();
     } catch {
-      // ignore
+      setIsProductsLoading(false);
     }
   }, []);
 
   // Derive activeProduct and account modal state from URL query params so reload preserves them
   const urlProductId = searchParams.get("product");
   const activeProduct: Product | null = urlProductId
-    ? products.find((p) => p.id === urlProductId) ||
-      NEW_YEAR_PRODUCTS.find((p) => p.id === urlProductId) ||
-      null
+    ? products.find((p) => p.id === urlProductId) || null
     : null;
 
   const accountParam = searchParams.get("account") as "profile" | "orders" | "favorites" | null;
@@ -639,6 +616,7 @@ export default function App() {
       onToggleWishlist={handleToggleWishlist}
       onOpenAuth={() => setIsAuthOpen(true)}
       onAddToast={handleAddToast}
+      allProducts={products}
     />
   );
 
@@ -758,6 +736,7 @@ export default function App() {
                   }}
                   onAddToast={handleAddToast}
                   onOpenProduct={setActiveProduct}
+                  products={products}
                 />
               )
             }
@@ -875,6 +854,7 @@ export default function App() {
                   onViewInvoice={(order) => setInvoiceOrder(order)}
                   onOpenProduct={(product) => setActiveProduct(product)}
                   onAddToast={handleAddToast}
+                  products={products}
                 />
               )
             }

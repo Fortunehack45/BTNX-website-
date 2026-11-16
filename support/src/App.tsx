@@ -56,72 +56,6 @@ import {
 } from "../../src/utils/supportStore";
 import { formatNaira } from "../../src/utils/currency";
 import { Order, Product } from "../../src/types";
-import { NEW_YEAR_PRODUCTS } from "../../src/data";
-
-const DEMO_SUPPORT_ORDERS: Order[] = [
-  {
-    id: "BX-849201",
-    status: "In Transit",
-    date: "12 Nov 2026",
-    total: 232500,
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[0],
-        quantity: 1,
-        size: "L",
-        color: "Dusty Plum",
-      },
-      {
-        product: NEW_YEAR_PRODUCTS[2],
-        quantity: 1,
-        size: "L",
-        color: "Deep Navy",
-      },
-    ],
-  },
-  {
-    id: "BX-730419",
-    status: "Processing",
-    date: "13 Nov 2026",
-    total: 185000,
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[1],
-        quantity: 1,
-        size: "M",
-        color: "Black",
-      },
-    ],
-  },
-  {
-    id: "BX-994102",
-    status: "Confirmed",
-    date: "14 Nov 2026",
-    total: 340000,
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[3] || NEW_YEAR_PRODUCTS[0],
-        quantity: 2,
-        size: "XL",
-        color: "Noir Black",
-      },
-    ],
-  },
-  {
-    id: "BX-621804",
-    status: "Delivered",
-    date: "10 Nov 2026",
-    total: 120000,
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[0],
-        quantity: 1,
-        size: "S",
-        color: "Off-White",
-      },
-    ],
-  },
-];
 
 const CANNED_REPLIES = [
   {
@@ -167,7 +101,7 @@ export default function SupportStaffPortal() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // Orders State & Dossier
-  const [orders, setOrders] = useState<Order[]>(DEMO_SUPPORT_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [ordersSearch, setOrdersSearch] = useState("");
   const [ordersFilterStatus, setOrdersFilterStatus] = useState<string>("all");
   const [inspectingOrder, setInspectingOrder] = useState<Order | null>(null);
@@ -177,7 +111,7 @@ export default function SupportStaffPortal() {
   const [linkSearchQuery, setLinkSearchQuery] = useState("");
 
   // Attachment & Chat State
-  const [availableProducts, setAvailableProducts] = useState<Product[]>(NEW_YEAR_PRODUCTS);
+  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -307,9 +241,9 @@ export default function SupportStaffPortal() {
             try {
               const local = localStorage.getItem("btnx_orders");
               if (local) setOrders(JSON.parse(local));
-              else setOrders(DEMO_SUPPORT_ORDERS);
+              else setOrders([]);
             } catch {
-              setOrders(DEMO_SUPPORT_ORDERS);
+              setOrders([]);
             }
           }
         },
@@ -317,9 +251,9 @@ export default function SupportStaffPortal() {
           try {
             const local = localStorage.getItem("btnx_orders");
             if (local) setOrders(JSON.parse(local));
-            else setOrders(DEMO_SUPPORT_ORDERS);
+            else setOrders([]);
           } catch {
-            setOrders(DEMO_SUPPORT_ORDERS);
+            setOrders([]);
           }
         }
       );
@@ -1411,8 +1345,11 @@ export default function SupportStaffPortal() {
                     <button
                       type="button"
                       onClick={() => {
-                        const prod = availableProducts[0] || NEW_YEAR_PRODUCTS[0];
-                        if (!prod) return;
+                        const prod = availableProducts[0] || null;
+                        if (!prod) {
+                          showToast("No products found in active catalog.");
+                          return;
+                        }
                         const productAttachment: SupportAttachmentProduct = {
                           id: prod.id,
                           name: prod.name,

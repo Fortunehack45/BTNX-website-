@@ -13,7 +13,6 @@ import {
   Headphones,
 } from "lucide-react";
 import { Order, Product } from "../types";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import GalleryImage from "../components/GalleryImage";
 import { db } from "../lib/firebase";
@@ -42,57 +41,6 @@ interface TrackingStage {
   timestamp: string;
   state: "completed" | "current" | "upcoming";
 }
-
-const SAMPLE_TRACKABLE_ORDERS: Order[] = [
-  {
-    id: "BX-849201",
-    date: "12 Nov 2026",
-    total: 185000,
-    status: "In Transit",
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[0],
-        quantity: 1,
-        size: "L",
-        color: NEW_YEAR_PRODUCTS[0]?.colors?.[0] || "Obsidian",
-      },
-      {
-        product: NEW_YEAR_PRODUCTS[2] || NEW_YEAR_PRODUCTS[0],
-        quantity: 1,
-        size: "M",
-        color: NEW_YEAR_PRODUCTS[2]?.colors?.[0] || "Bone",
-      },
-    ],
-  },
-  {
-    id: "BX-510394",
-    date: "13 Nov 2026",
-    total: 95000,
-    status: "Processing",
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[1] || NEW_YEAR_PRODUCTS[0],
-        quantity: 1,
-        size: "M",
-        color: NEW_YEAR_PRODUCTS[1]?.colors?.[0] || "Charcoal",
-      },
-    ],
-  },
-  {
-    id: "BX-209481",
-    date: "08 Nov 2026",
-    total: 240000,
-    status: "Delivered",
-    items: [
-      {
-        product: NEW_YEAR_PRODUCTS[3] || NEW_YEAR_PRODUCTS[0],
-        quantity: 2,
-        size: "XL",
-        color: NEW_YEAR_PRODUCTS[3]?.colors?.[0] || "Espresso",
-      },
-    ],
-  },
-];
 
 function normalizeOrderQuery(raw: string): string {
   const cleaned = raw.trim().toUpperCase().replace(/^#/, "");
@@ -225,19 +173,11 @@ export default function TrackOrder({
   const [copiedTracking, setCopiedTracking] = useState<string | null>(null);
 
   const trackableOrders = useMemo(() => {
-    if (orders.length > 0) return orders;
-    return SAMPLE_TRACKABLE_ORDERS;
+    return orders;
   }, [orders]);
 
   const allKnownOrders = useMemo(() => {
-    const map = new Map<string, Order>();
-    orders.forEach((o) => map.set(o.id.toUpperCase(), o));
-    SAMPLE_TRACKABLE_ORDERS.forEach((d) => {
-      if (!map.has(d.id.toUpperCase())) {
-        map.set(d.id.toUpperCase(), d);
-      }
-    });
-    return Array.from(map.values());
+    return orders;
   }, [orders]);
 
   const selectedOrder = useMemo(() => {

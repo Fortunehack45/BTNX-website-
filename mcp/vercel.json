@@ -28,7 +28,15 @@
       "destination": "/api/mcp"
     },
     {
+      "source": "/oauth",
+      "destination": "/api/mcp"
+    },
+    {
       "source": "/oauth/(.*)",
+      "destination": "/api/mcp"
+    },
+    {
+      "source": "/api/oauth/(.*)",
       "destination": "/api/mcp"
     },
     {
@@ -36,11 +44,7 @@
       "destination": "/api/mcp"
     },
     {
-      "source": "/api/mcp",
-      "destination": "/api/mcp"
-    },
-    {
-      "source": "/api/index",
+      "source": "/api/(.*)",
       "destination": "/api/mcp"
     }
   ]

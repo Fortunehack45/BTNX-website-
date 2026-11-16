@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { CartItem, Product } from "../types";
-import { NAVIGATION_ITEMS, NEW_YEAR_PRODUCTS } from "../data";
+import { NAVIGATION_ITEMS } from "../data";
 import { formatNaira } from "../utils/currency";
 import { motion, AnimatePresence } from "motion/react";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
@@ -295,7 +295,7 @@ export default function Header({
     navigate("/notifications");
   };
 
-  const allProducts = products && products.length > 0 ? products : NEW_YEAR_PRODUCTS;
+  const allProducts = Array.isArray(products) ? products : [];
   const cleanQuery = searchQuery.trim().toLowerCase();
   const suggestedProducts = cleanQuery
     ? allProducts.filter(

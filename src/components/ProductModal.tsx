@@ -20,7 +20,6 @@ import {
   Share2,
 } from "lucide-react";
 import ShareProductModal from "./ShareProductModal";
-import { NEW_YEAR_PRODUCTS } from "../data";
 import { formatNaira } from "../utils/currency";
 import { getSwatchHex } from "../utils/colors";
 import { getDiscountPercent } from "../utils/invoice";
@@ -50,6 +49,7 @@ interface ProductModalProps {
   onToggleWishlist?: (product: Product) => void;
   onOpenAuth?: () => void;
   onAddToast?: (message: string, type: "success" | "error" | "info") => void;
+  allProducts?: Product[];
 }
 
 const SIZE_CHART = [
@@ -72,6 +72,7 @@ export default function ProductModal({
   onToggleWishlist,
   onOpenAuth,
   onAddToast,
+  allProducts = [],
 }: ProductModalProps) {
   const [selectedSize, setSelectedSize] = useState("S");
   const [selectedColor, setSelectedColor] = useState("");
@@ -357,7 +358,7 @@ export default function ProductModal({
       ? product.images
       : [product.image, product.image, product.image];
 
-  const complementaryPieces = NEW_YEAR_PRODUCTS.filter((p) => p.id !== product.id).slice(0, 4);
+  const complementaryPieces = (allProducts || []).filter((p) => p.id !== product.id).slice(0, 4);
   const visibleReviews = showAllReviews ? reviews : reviews.slice(0, 4);
 
   const variantItem = cart.find(

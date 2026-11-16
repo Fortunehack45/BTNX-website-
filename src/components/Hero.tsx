@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { HERO_SLIDES, NEW_YEAR_PRODUCTS, GALLERY_INDEX_ITEMS, HeroSlide, LOCAL_PRODUCT_IMAGES, HERO_MEDIA } from "../data";
+import { HERO_SLIDES, GALLERY_INDEX_ITEMS, HeroSlide, LOCAL_PRODUCT_IMAGES, HERO_MEDIA } from "../data";
 import { Product } from "../types";
 import GalleryImage from "./GalleryImage";
 import { db } from "../lib/firebase";
@@ -169,8 +169,7 @@ export default function Hero({ onOpenProduct, products }: HeroProps) {
     if (currentSlide.productId && onOpenProduct) {
       const target =
         pinnedProductsMap[currentSlide.productId] ||
-        products?.find((p) => p.id === currentSlide.productId) ||
-        NEW_YEAR_PRODUCTS.find((p) => p.id === currentSlide.productId);
+        products?.find((p) => p.id === currentSlide.productId);
       if (target) {
         onOpenProduct(target);
         return;
