@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import * as crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import {
@@ -2035,11 +2037,10 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
       let htmlSnippet = "";
 
       if (wType === "invoice" || wType === "track") {
-        const snap = await getDoc(doc(db, "orders", targetId));
-        if (!snap.exists()) {
+        const orderData: any = await fetchOrderById(targetId);
+        if (!orderData) {
           return { error: `Order #${targetId} was not found.` };
         }
-        const orderData: any = { id: snap.id, ...snap.data() };
         const user = reqUser;
         const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || "").toLowerCase().trim();
         const providedEmail = String(args?.email || args?.customerEmail || "").toLowerCase().trim();
@@ -2066,10 +2067,12 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
           htmlSnippet = renderTrackingStepperHtml(orderData, reqHost);
         }
       } else if (wType === "product") {
-        const snap = await getDoc(doc(db, "products", targetId));
-        if (snap.exists()) {
-          htmlSnippet = renderProductCardHtml({ id: snap.id, ...snap.data() }, reqHost);
-        }
+        try {
+          const snap = await getDoc(doc(db, "products", targetId));
+          if (snap.exists()) {
+            htmlSnippet = renderProductCardHtml({ id: snap.id, ...snap.data() }, reqHost);
+          }
+        } catch {}
       }
 
       return {
@@ -3046,6 +3049,35 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     let prodCat = "Atelier Collection";
     let prodPrice = "₦75,000";
 
+    // 1. Check if a real binary JPG image file exists on disk in public/og or mcp/public/og
+    const candidateFileNames = [`${rawId}.jpg`, `${rawId.replace("ny-", "")}.jpg`, "ny-1.jpg", "og-preview.jpg", "btnx-og-preview.jpg"];
+    const candidateDirs = [
+      path.resolve(process.cwd(), "mcp/public/og"),
+      path.resolve(process.cwd(), "public/og"),
+      path.resolve(process.cwd(), "og"),
+      path.resolve(process.cwd(), "public"),
+      path.resolve(process.cwd(), "mcp/public")
+    ];
+
+    for (const cDir of candidateDirs) {
+      for (const fName of candidateFileNames) {
+        try {
+          const fullP = path.join(cDir, fName);
+          if (fs.existsSync(fullP) && !fs.statSync(fullP).isDirectory()) {
+            const buf = fs.readFileSync(fullP);
+            res.writeHead(200, {
+              "Content-Type": "image/jpeg",
+              "Cache-Control": "public, max-age=604800, s-maxage=604800",
+              "Access-Control-Allow-Origin": "*",
+            });
+            res.end(buf);
+            return;
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Check if Firestore record has an image or base64 stream
     try {
       const snap = await getDoc(doc(db, "products", rawId));
       if (snap.exists()) {
@@ -3053,6 +3085,27 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         prodName = prodData.name || prodName;
         prodCat = prodData.category || prodCat;
         prodPrice = formatNaira(prodData.price || 75000);
+        const img = prodData.image || (Array.isArray(prodData.images) && prodData.images[0]) || prodData.imageUrl || "";
+        if (img) {
+          if (img.startsWith("data:image/")) {
+            const parts = img.split(";base64,");
+            if (parts.length === 2) {
+              const mime = parts[0].replace("data:", "") || "image/jpeg";
+              const buf = Buffer.from(parts[1], "base64");
+              res.writeHead(200, {
+                "Content-Type": mime,
+                "Cache-Control": "public, max-age=604800, s-maxage=604800",
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end(buf);
+              return;
+            }
+          } else if ((img.startsWith("http://") || img.startsWith("https://")) && !img.includes("/og/")) {
+            res.writeHead(302, { Location: img });
+            res.end();
+            return;
+          }
+        }
       }
     } catch {}
 

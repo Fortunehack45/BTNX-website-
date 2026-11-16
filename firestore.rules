@@ -281,11 +281,9 @@ service cloud.firestore {
       allow delete: if isValidId(userId) && isAdmin();
     }
 
-    // 2. Orders: Public listing and reading strictly removed. Ownership strictly checked against Firebase UID.
+    // 2. Orders: Direct lookup allowed by valid ID for tracking and MCP widgets; list strictly restricted to owner/admin/support.
     match /orders/{orderId} {
-      allow get: if isValidId(orderId) && isSignedIn() && (
-        (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
-      );
+      allow get: if isValidId(orderId);
       allow list: if isSignedIn() && (
         (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
       );

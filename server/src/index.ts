@@ -783,6 +783,28 @@ app.get("/api/product-image/:id", async (req: Request, res: Response) => {
 app.get(["/og/:id", "/og/:id.jpg"], async (req: Request, res: Response) => {
   const prodId = req.params.id.replace(/\.jpg|\.png|\.webp/i, "").trim();
   try {
+    // 1. Check if a real binary JPG image file exists on disk
+    const candidateFileNames = [`${prodId}.jpg`, `${prodId.replace("ny-", "")}.jpg`, "ny-1.jpg", "og-preview.jpg", "btnx-og-preview.jpg"];
+    const candidateDirs = [
+      path.resolve(process.cwd(), "public/og"),
+      path.resolve(process.cwd(), "mcp/public/og"),
+      path.resolve(process.cwd(), "og"),
+      path.resolve(process.cwd(), "public")
+    ];
+
+    for (const cDir of candidateDirs) {
+      for (const fName of candidateFileNames) {
+        try {
+          const fullP = path.join(cDir, fName);
+          if (fs.existsSync(fullP) && !fs.statSync(fullP).isDirectory()) {
+            res.setHeader("Content-Type", "image/jpeg");
+            res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=604800");
+            return res.sendFile(fullP);
+          }
+        } catch {}
+      }
+    }
+
     let prod: any = null;
     const snap = await getDoc(doc(db, "products", prodId));
     if (snap.exists()) {
@@ -790,7 +812,7 @@ app.get(["/og/:id", "/og/:id.jpg"], async (req: Request, res: Response) => {
     }
 
     if (prod?.image) {
-      if (prod.image.startsWith("http")) {
+      if (prod.image.startsWith("http") && !prod.image.includes("/og/")) {
         return res.redirect(prod.image);
       }
       if (prod.image.startsWith("data:")) {
