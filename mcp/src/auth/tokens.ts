@@ -619,6 +619,8 @@ export async function verifyOAuthAccessToken(
               uid: payload.uid,
               email: payload.email,
               name: payload.name || "BTNX Customer",
+              phone: payload.phone || undefined,
+              shippingAddress: payload.shippingAddress || undefined,
               scopes: payload.scopes || ["openid", "profile", "email", "orders"],
               createdAt: payload.createdAt || new Date().toISOString(),
               expiresAt: payload.expiresAt,

@@ -7,6 +7,7 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { db, auth } from "./firebase.js";
+import { getFirebaseAdmin } from "./firebaseAdmin.js";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import {
   collection,
@@ -68,21 +69,12 @@ const localTicketsCache = new Map<string, any>();
 export const DEFAULT_MCP_AUTH_KEY =
   process.env.MCP_AUTH_KEY || process.env.BTNX_API_KEY || "";
 
-let serverMcpAdminAuthPromise: Promise<any> | null = null;
 export async function ensureAdminAuth(): Promise<any> {
-  if (auth.currentUser) return auth.currentUser;
-  const adminEmail = process.env.FIREBASE_ADMIN_EMAIL || process.env.ADMIN_EMAIL || "fortunedomination@gmail.com";
-  const adminPassword = process.env.FIREBASE_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "BTNXAdmin2026!";
-  if (!serverMcpAdminAuthPromise) {
-    serverMcpAdminAuthPromise = signInWithEmailAndPassword(auth, adminEmail, adminPassword)
-      .then((cred) => cred.user)
-      .catch((err) => {
-        serverMcpAdminAuthPromise = null;
-        console.warn("[Server MCP] Admin auth sign-in notice:", err?.message);
-        return null;
-      });
+  const admin = getFirebaseAdmin();
+  if (admin.hasCredentials && admin.db) {
+    return admin.app;
   }
-  return serverMcpAdminAuthPromise;
+  return null;
 }
 
 export const BTNX_TOOLS: Tool[] = [

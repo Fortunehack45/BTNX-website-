@@ -11,17 +11,34 @@ let adminApp: App | null = null;
 let adminAuth: Auth | null = null;
 let adminDb: Firestore | null = null;
 
+function parseServiceAccountJson(raw?: string): any | null {
+  if (!raw || raw.trim().length < 10) return null;
+  const str = raw.trim();
+  try {
+    return JSON.parse(str);
+  } catch {}
+  try {
+    const decoded = Buffer.from(str, "base64").toString("utf8");
+    return JSON.parse(decoded);
+  } catch {}
+  return null;
+}
+
 export function hasAdminCredentials(): boolean {
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (serviceAccountKey && serviceAccountKey.trim().length > 10) {
-    try {
-      JSON.parse(serviceAccountKey);
-      return true;
-    } catch {
-      return false;
-    }
+  const possibleKeys = [
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+    process.env.FIREBASE_SERVICE_ACCOUNT,
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    process.env.SERVICE_ACCOUNT_KEY,
+    process.env.FIREBASE_ADMIN_CREDENTIALS,
+  ];
+  for (const k of possibleKeys) {
+    if (k && parseServiceAccountJson(k)) return true;
   }
-  if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+  if (
+    process.env.FIREBASE_PRIVATE_KEY &&
+    (process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL_ADDRESS)
+  ) {
     return true;
   }
   return false;
@@ -38,19 +55,28 @@ export function getFirebaseAdmin(): { app: App; auth: Auth; db: Firestore | null
     adminApp = existing;
   } else {
     let credentialOption = undefined;
-    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    const possibleKeys = [
+      process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+      process.env.FIREBASE_SERVICE_ACCOUNT,
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+      process.env.SERVICE_ACCOUNT_KEY,
+      process.env.FIREBASE_ADMIN_CREDENTIALS,
+    ];
+    let parsedKey: any = null;
+    for (const k of possibleKeys) {
+      parsedKey = parseServiceAccountJson(k);
+      if (parsedKey) break;
+    }
 
-    if (serviceAccountKey && serviceAccountKey.trim().length > 10) {
-      try {
-        const parsed = JSON.parse(serviceAccountKey);
-        credentialOption = cert(parsed);
-      } catch (err) {
-        console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:", err);
-      }
-    } else if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    if (parsedKey) {
+      credentialOption = cert(parsedKey);
+    } else if (
+      process.env.FIREBASE_PRIVATE_KEY &&
+      (process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL_ADDRESS)
+    ) {
       credentialOption = cert({
-        projectId: FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        projectId: process.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT_ID,
+        clientEmail: (process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL_ADDRESS)!,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
       });
     }

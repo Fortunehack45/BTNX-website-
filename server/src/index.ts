@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import fs from "fs";
 import { db, auth } from "./firebase.js";
+import { getFirebaseAdmin } from "./firebaseAdmin.js";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import {
   collection,
@@ -135,20 +136,11 @@ app.get("/api/products/:id", async (req: Request, res: Response) => {
 // ==========================================
 // AUTHORIZATION MIDDLEWARE
 // ==========================================
-let serverAdminAuthPromise: Promise<any> | null = null;
 export async function ensureAdminAuth(): Promise<void> {
-  if (auth.currentUser) return;
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.FIREBASE_ADMIN_EMAIL || "fortunedomination@gmail.com";
-  const adminPassword = process.env.ADMIN_PASSWORD || process.env.FIREBASE_ADMIN_PASSWORD || "BTNXAdmin2026!";
-  if (!serverAdminAuthPromise) {
-    serverAdminAuthPromise = signInWithEmailAndPassword(auth, adminEmail, adminPassword)
-      .catch((err) => {
-        serverAdminAuthPromise = null;
-        console.warn("[Server] Admin auth sign-in notice:", err?.message);
-        return null;
-      });
+  const admin = getFirebaseAdmin();
+  if (admin.hasCredentials && admin.db) {
+    return;
   }
-  await serverAdminAuthPromise;
 }
 
 async function requireCustomerAuth(req: Request, res: Response, next: () => void) {
@@ -659,12 +651,46 @@ async function handleProductShare(req: Request, res: Response) {
   const hostOrigin = getHostOrigin(req);
 
   let prod: any = null;
+  const variations = Array.from(new Set([
+    prodId,
+    prodId.toLowerCase(),
+    prodId.startsWith("ny-") ? prodId : `ny-${prodId}`,
+    prodId.replace(/^ny-/i, ""),
+  ])).filter(Boolean);
+
   try {
-    const snap = await getDoc(doc(db, "products", prodId));
-    if (snap.exists()) {
-      prod = { id: snap.id, ...snap.data() };
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      for (const vid of variations) {
+        const snap = await admin.db.collection("products").doc(vid).get();
+        if (snap.exists) {
+          prod = { id: snap.id, ...snap.data() };
+          break;
+        }
+      }
+      if (!prod) {
+        for (const vid of variations) {
+          const qSnap = await admin.db.collection("products").where("id", "==", vid).limit(1).get();
+          if (!qSnap.empty) {
+            prod = { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
+            break;
+          }
+        }
+      }
     }
   } catch {}
+
+  if (!prod) {
+    try {
+      for (const vid of variations) {
+        const snap = await getDoc(doc(db, "products", vid));
+        if (snap.exists()) {
+          prod = { id: snap.id, ...snap.data() };
+          break;
+        }
+      }
+    } catch {}
+  }
 
   if (!prod) {
     res.status(404).send("Product not found in BTNX database");
@@ -673,14 +699,15 @@ async function handleProductShare(req: Request, res: Response) {
 
   // Determine absolute image URL for WhatsApp / Social Meta tags
   // WhatsApp strictly requires images to be under 300KB and directly accessible over HTTP(S)
+  const rawImage = prod.image || (Array.isArray(prod.images) && prod.images[0]) || "";
   let absoluteImageUrl = `${hostOrigin}/og/${encodeURIComponent(prod.id)}.jpg`;
-  if (prod.image && !prod.image.startsWith("/og/")) {
-    if (prod.image.startsWith("data:")) {
+  if (rawImage && !rawImage.startsWith("/og/")) {
+    if (rawImage.startsWith("data:")) {
       absoluteImageUrl = `${hostOrigin}/api/product-image/${encodeURIComponent(prod.id)}`;
-    } else if (prod.image.startsWith("http")) {
-      absoluteImageUrl = prod.image;
+    } else if (rawImage.startsWith("http")) {
+      absoluteImageUrl = rawImage;
     } else {
-      absoluteImageUrl = `${hostOrigin}${prod.image.startsWith("/") ? "" : "/"}${prod.image}`;
+      absoluteImageUrl = `${hostOrigin}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`;
     }
   }
 
@@ -993,6 +1020,37 @@ app.get("/render/support/:ticketId", async (req: Request, res: Response) => {
   } catch {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(500).send(renderNotFoundHtml("Support Ticket", ticketId));
+  }
+});
+
+// ==========================================
+// USER PROFILE MANAGEMENT
+// ==========================================
+app.post("/api/user/profile", requireCustomerAuth, async (req: Request, res: Response) => {
+  try {
+    const customer = (req as any).customer as AuthenticatedCustomer;
+    const profileUpdate: any = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (typeof req.body?.name === "string") profileUpdate.name = req.body.name.trim();
+    if (typeof req.body?.phone === "string") profileUpdate.phone = req.body.phone.trim();
+    if (typeof req.body?.birthday === "string") profileUpdate.birthday = req.body.birthday.trim();
+    if (typeof req.body?.shippingStreet === "string") profileUpdate.shippingStreet = req.body.shippingStreet.trim();
+    if (typeof req.body?.shippingCity === "string") profileUpdate.shippingCity = req.body.shippingCity.trim();
+    if (typeof req.body?.shippingZip === "string") profileUpdate.shippingZip = req.body.shippingZip.trim();
+    if (typeof req.body?.shippingCountry === "string") profileUpdate.shippingCountry = req.body.shippingCountry.trim();
+
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      await admin.db.collection("users").doc(customer.uid).set(profileUpdate, { merge: true });
+    } else {
+      await setDoc(doc(db, "users", customer.uid), profileUpdate, { merge: true });
+    }
+
+    res.json({ success: true, profile: profileUpdate });
+  } catch (err: any) {
+    console.error("[Profile Save API Error]:", err);
+    res.status(500).json({ error: "Failed to save profile", details: err?.message || String(err) });
   }
 });
 

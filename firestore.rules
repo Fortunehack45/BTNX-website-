@@ -7,6 +7,90 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Auth UID)
+    // Fields:
+    //   - id: string (optional, immutable, must equal userId)
+    //   - uid: string (optional, immutable, must equal userId)
+    //   - email: string (optional, size <= 254)
+    //   - role: string (optional, 'customer' | 'admin' | 'support')
+    //   - name: string (optional, size <= 120)
+    //   - displayName: string (optional, size <= 120)
+    //   - photoURL: string (optional, size <= 2000)
+    //   - avatar: string (optional, size <= 2000)
+    //   - createdAt: string | timestamp (optional, immutable)
+    //   - updatedAt: string | timestamp (optional)
+    //   - phone: string (optional, size <= 40)
+    //   - birthday: string (optional, size <= 32)
+    //   - address: string (optional, size <= 500)
+    //   - shippingStreet: string (optional, size <= 250)
+    //   - shippingCity: string (optional, size <= 120)
+    //   - shippingState: string (optional, size <= 120)
+    //   - shippingZip: string (optional, size <= 32)
+    //   - shippingCountry: string (optional, size <= 120)
+    //   - whatsappPhone: string (optional, size <= 40)
+    //   - connectedMcp: bool (optional)
+    //   - mcpClients: list of strings (optional, size <= 20)
+    //   - lastMcpActiveAt: string | timestamp (optional)
+    //   - mcpToken: string (optional, size <= 256)
+    //
+    // Collection: products
+    // Document ID: productId
+    // Fields:
+    //   - id: string (optional, size <= 128)
+    //   - name: string (required, size 1..200)
+    //   - category: string (required, size 1..100)
+    //   - price: number (required, >= 0)
+    //   - originalPrice: number (optional, >= 0)
+    //   - image: string (required, size 1..2000)
+    //   - images: list of string (optional, size <= 20)
+    //   - badge: string (optional, size <= 80)
+    //   - description: string (optional, size <= 5000)
+    //   - sizes: list of string (optional, size <= 20)
+    //   - colors: list of string (optional, size <= 20)
+    //   - collectionId: string (optional, size <= 128)
+    //   - stock: number (optional, >= 0)
+    //   - cartCount: number (optional)
+    //   - fabricAndCare: string (optional, size <= 5000)
+    //   - fitDetails: string (optional, size <= 1000)
+    //   - deliveryTimeline: string (optional, size <= 120)
+    //   - packagingType: string (optional, size <= 120)
+    //   - returnPolicy: string (optional, size <= 120)
+    //   - shippingFee: number (optional, >= 0)
+    //   - isFreeShipping: bool (optional)
+    //   - isPinnedHero: bool (optional)
+    //   - heroOrder: number (optional, >= 0)
+    //   - heroHeadline: string (optional, size <= 200)
+    //   - heroSubheadline: string (optional, size <= 200)
+    //   - heroLookNumber: string (optional, size <= 60)
+    //   - heroImage: string (optional, size <= 2000)
+    //
+    // Collection: orders
+    // Document ID: orderId
+    // Fields:
+    //   - id: string (required, must equal orderId)
+    //   - userId: string (required, size 1..128)
+    //   - items: list (required, size 1..100)
+    //   - total: number (required, >= 0)
+    //   - status: string (required, enum)
+    //   - customerEmail, userEmail, email, customerPhone, phone, customerName: optional strings
+    //   - shippingStreet, shippingCity, shippingZip, shippingCountry, shippingAddress: optional strings
+    //   - subtotal, discountAmount, shippingFee: optional numbers
+    //   - date, promoCodeId, source: optional strings
+    //   - createdAt: optional string | timestamp
+    //
+    // Collection: supportTickets
+    // Document ID: ticketId
+    // Fields:
+    //   - id, userId, userEmail, userName, subject, topic, status, mode, messages, createdAt, updatedAt
+    //   - orderId, assignedAgent, unreadByAdmin, unreadByCustomer, rating, feedbackComment, feedbackSubmittedAt
+    //
+    // ===============================================================
+
     // ------------------------------------------------------------------------
     // Core Authentication & Role Helpers
     // ------------------------------------------------------------------------
@@ -22,6 +106,11 @@ service cloud.firestore {
       return (
         isSignedIn() && (
           (request.auth.token.admin == true) ||
+          (
+            request.auth.token.email != null &&
+            request.auth.token.email.lower() == 'fortunedomination@gmail.com' &&
+            request.auth.token.email_verified == true
+          ) ||
           (
             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
@@ -59,26 +148,35 @@ service cloud.firestore {
     // Schema Validation Helpers
     // ------------------------------------------------------------------------
     function isValidUser(data, userId) {
-      return data.keys().hasAll(['id', 'email', 'role']) &&
-        data.keys().hasOnly([
-          'id', 'email', 'role', 'name', 'createdAt',
-          'phone', 'birthday', 'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry',
-          'connectedMcp', 'mcpClients', 'lastMcpActiveAt'
+      return data.keys().hasOnly([
+          'id', 'uid', 'email', 'role', 'name', 'displayName', 'photoURL', 'avatar',
+          'createdAt', 'updatedAt', 'phone', 'birthday', 'address',
+          'shippingStreet', 'shippingCity', 'shippingState', 'shippingZip', 'shippingCountry',
+          'whatsappPhone', 'connectedMcp', 'mcpClients', 'lastMcpActiveAt', 'mcpToken'
         ]) &&
-        data.id is string && data.id == userId &&
-        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
-        data.role is string && data.role in ['customer', 'admin', 'support'] &&
-        (!('name' in data) || (data.name is string && data.name.size() <= 120)) &&
-        (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp) &&
-        (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
-        (!('birthday' in data) || (data.birthday is string && data.birthday.size() <= 32)) &&
-        (!('shippingStreet' in data) || (data.shippingStreet is string && data.shippingStreet.size() <= 250)) &&
-        (!('shippingCity' in data) || (data.shippingCity is string && data.shippingCity.size() <= 120)) &&
-        (!('shippingZip' in data) || (data.shippingZip is string && data.shippingZip.size() <= 32)) &&
-        (!('shippingCountry' in data) || (data.shippingCountry is string && data.shippingCountry.size() <= 120)) &&
+        (!('id' in data) || (data.id is string && data.id == userId)) &&
+        (!('uid' in data) || (data.uid is string && data.uid == userId)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 254)) &&
+        (!('role' in data) || (data.role is string && data.role in ['customer', 'admin', 'support'])) &&
+        (!('name' in data) || data.name == null || (data.name is string && data.name.size() <= 120)) &&
+        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120)) &&
+        (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
+        (!('avatar' in data) || data.avatar == null || (data.avatar is string && data.avatar.size() <= 2000)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64)) &&
+        (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 40)) &&
+        (!('birthday' in data) || data.birthday == null || (data.birthday is string && data.birthday.size() <= 32)) &&
+        (!('address' in data) || data.address == null || (data.address is string && data.address.size() <= 500)) &&
+        (!('shippingStreet' in data) || data.shippingStreet == null || (data.shippingStreet is string && data.shippingStreet.size() <= 250)) &&
+        (!('shippingCity' in data) || data.shippingCity == null || (data.shippingCity is string && data.shippingCity.size() <= 120)) &&
+        (!('shippingState' in data) || data.shippingState == null || (data.shippingState is string && data.shippingState.size() <= 120)) &&
+        (!('shippingZip' in data) || data.shippingZip == null || (data.shippingZip is string && data.shippingZip.size() <= 32)) &&
+        (!('shippingCountry' in data) || data.shippingCountry == null || (data.shippingCountry is string && data.shippingCountry.size() <= 120)) &&
+        (!('whatsappPhone' in data) || data.whatsappPhone == null || (data.whatsappPhone is string && data.whatsappPhone.size() <= 40)) &&
         (!('connectedMcp' in data) || data.connectedMcp == null || data.connectedMcp is bool) &&
         (!('mcpClients' in data) || data.mcpClients == null || (data.mcpClients is list && data.mcpClients.size() <= 20 && (data.mcpClients.size() == 0 || data.mcpClients[0] is string))) &&
-        (!('lastMcpActiveAt' in data) || data.lastMcpActiveAt == null || data.lastMcpActiveAt is string || data.lastMcpActiveAt is timestamp);
+        (!('lastMcpActiveAt' in data) || data.lastMcpActiveAt == null || data.lastMcpActiveAt is timestamp || (data.lastMcpActiveAt is string && data.lastMcpActiveAt.size() <= 64)) &&
+        (!('mcpToken' in data) || data.mcpToken == null || (data.mcpToken is string && data.mcpToken.size() <= 256));
     }
 
     function isValidProduct(data) {
@@ -264,17 +362,31 @@ service cloud.firestore {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin() || isSupport());
       allow list: if isAdmin();
       allow create: if isValidId(userId) && isValidUser(incoming(), userId) && (
-        isAdmin() || (isOwner(userId) && incoming().role == 'customer')
+        isAdmin() || (
+          isOwner(userId) &&
+          (!('role' in incoming()) || incoming().role == 'customer') &&
+          (!('id' in incoming()) || incoming().id == userId) &&
+          (!('uid' in incoming()) || incoming().uid == userId)
+        )
       );
       allow update: if isValidId(userId) && isValidUser(incoming(), userId) && (
         isAdmin() || (
           isOwner(userId) &&
-          incoming().role == existing().role &&
-          incoming().id == existing().id &&
-          incoming().email == existing().email &&
+          (
+            !('role' in incoming()) ||
+            ('role' in existing() && incoming().role == existing().role) ||
+            (!('role' in existing()) && incoming().role == 'customer')
+          ) &&
+          (!('id' in incoming()) || incoming().id == userId) &&
+          (!('id' in existing()) || !('id' in incoming()) || incoming().id == existing().id) &&
+          (!('uid' in incoming()) || incoming().uid == userId) &&
+          (!('uid' in existing()) || !('uid' in incoming()) || incoming().uid == existing().uid) &&
+          (!('email' in incoming()) || !('email' in existing()) || incoming().email == existing().email) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'phone', 'birthday', 'shippingStreet', 'shippingCity', 'shippingZip', 'shippingCountry',
-            'connectedMcp', 'mcpClients', 'lastMcpActiveAt'
+            'id', 'uid', 'email', 'name', 'displayName', 'photoURL', 'avatar',
+            'phone', 'birthday', 'address',
+            'shippingStreet', 'shippingCity', 'shippingState', 'shippingZip', 'shippingCountry',
+            'whatsappPhone', 'connectedMcp', 'mcpClients', 'lastMcpActiveAt', 'updatedAt'
           ])
         )
       );

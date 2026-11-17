@@ -30,6 +30,7 @@ import {
   createPersonalAccessToken,
   listPersonalAccessTokens,
   revokePersonalAccessToken,
+  verifyPersonalAccessToken,
   createWhatsAppLinkingChallenge,
   verifyAndLinkWhatsApp,
   unlinkWhatsApp,
@@ -70,21 +71,12 @@ const db = getFirestore(app, "ai-studio-klamby-efc211be-fa31-444f-8359-2e516e0d2
 const customerApp = getApps().find(a => a.name === "customerAuth") || initializeApp(FIREBASE_CONFIG, "customerAuth");
 const customerAuth = getAuth(customerApp);
 
-let adminAuthPromise: Promise<any> | null = null;
-async function ensureAdminAuth() {
-  if (auth.currentUser) return auth.currentUser;
-  const adminEmail = process.env.FIREBASE_ADMIN_EMAIL || process.env.ADMIN_EMAIL || "fortunedomination@gmail.com";
-  const adminPassword = process.env.FIREBASE_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "BTNXAdmin2026!";
-  if (!adminAuthPromise) {
-    adminAuthPromise = signInWithEmailAndPassword(auth, adminEmail, adminPassword)
-      .then((cred) => cred.user)
-      .catch((err) => {
-        adminAuthPromise = null;
-        console.warn("[BTNX MCP] Admin authentication notice:", err?.message);
-        return null;
-      });
+async function ensureAdminAuth(): Promise<any> {
+  const admin = getFirebaseAdmin();
+  if (admin.hasCredentials && admin.db) {
+    return admin.app;
   }
-  return adminAuthPromise;
+  return null;
 }
 
 // 2. Persistent BTNX Customer Sessions & OAuth Tokens
@@ -1146,17 +1138,93 @@ async function fetchCustomerOrders(email?: string, uid?: string): Promise<any[]>
 }
 
 async function fetchOrderById(orderId: string): Promise<any | null> {
+  if (!orderId) return null;
+  const rawId = String(orderId).trim();
+  const cleanId = rawId.replace(/^#/, "").trim();
+  const strippedId = cleanId.replace(/^(BX-|KB-|TRK-)/i, "").trim();
+
+  const variations = Array.from(new Set([
+    rawId,
+    cleanId,
+    cleanId.toUpperCase(),
+    cleanId.startsWith("BX-") ? cleanId : `BX-${cleanId}`,
+    `#${cleanId}`,
+    strippedId ? `BX-${strippedId}` : "",
+    strippedId,
+  ])).filter(Boolean);
+
   try {
     const admin = getFirebaseAdmin();
     if (admin.hasCredentials && admin.db) {
-      const snap = await admin.db.collection("orders").doc(orderId).get();
-      if (snap.exists) return { id: snap.id, ...snap.data() };
+      for (const vid of variations) {
+        const snap = await admin.db.collection("orders").doc(vid).get();
+        if (snap.exists) return { id: snap.id, ...snap.data() };
+      }
+      for (const vid of variations) {
+        const qSnap = await admin.db.collection("orders").where("id", "==", vid).limit(1).get();
+        if (!qSnap.empty) return { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
+      }
+    }
+  } catch (err) {
+    console.warn("[Admin Order Lookup Notice]:", err);
+  }
+
+  try {
+    for (const vid of variations) {
+      try {
+        const snap = await getDoc(doc(db, "orders", vid));
+        if (snap.exists()) return { id: snap.id, ...snap.data() };
+      } catch {}
+    }
+    for (const vid of variations) {
+      try {
+        const qSnap = await getDocs(query(collection(db, "orders"), where("id", "==", vid), limit(1)));
+        if (!qSnap.empty) return { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
+      } catch {}
+    }
+  } catch (err) {
+    console.warn("[Client Order Lookup Notice]:", err);
+  }
+  return null;
+}
+
+async function fetchProductById(productId: string): Promise<any | null> {
+  if (!productId) return null;
+  const rawId = String(productId).trim();
+  const variations = Array.from(new Set([
+    rawId,
+    rawId.toLowerCase(),
+    rawId.startsWith("ny-") ? rawId : `ny-${rawId}`,
+    rawId.replace(/^ny-/i, ""),
+  ])).filter(Boolean);
+
+  try {
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      for (const vid of variations) {
+        const snap = await admin.db.collection("products").doc(vid).get();
+        if (snap.exists) return { id: snap.id, ...snap.data() };
+      }
+      for (const vid of variations) {
+        const qSnap = await admin.db.collection("products").where("id", "==", vid).limit(1).get();
+        if (!qSnap.empty) return { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
+      }
     }
   } catch {}
 
   try {
-    const snap = await getDoc(doc(db, "orders", orderId));
-    if (snap.exists()) return { id: snap.id, ...snap.data() };
+    for (const vid of variations) {
+      try {
+        const snap = await getDoc(doc(db, "products", vid));
+        if (snap.exists()) return { id: snap.id, ...snap.data() };
+      } catch {}
+    }
+    for (const vid of variations) {
+      try {
+        const qSnap = await getDocs(query(collection(db, "products"), where("id", "==", vid), limit(1)));
+        if (!qSnap.empty) return { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
+      } catch {}
+    }
   } catch {}
   return null;
 }
@@ -1424,7 +1492,7 @@ ${orders.length > 0 ? `👉 Latest Order: **#${orders[0].id}** (${formatNaira(or
 You are connected to the BTNX Atelier, but no customer account is signed in for this conversation.
 
 **To securely sign in:**
-- Call \`btnx_sign_in\` with your registered BTNX email and password.
+- Call \`btnx_sign_in\` with your registered BTNX email and password, or pass your Personal AI Key.
 - Or create a new account using \`btnx_sign_up\` (name, email, password, and delivery address in Nigeria).`;
 
         return {
@@ -1434,29 +1502,31 @@ You are connected to the BTNX Atelier, but no customer account is signed in for 
         };
       }
 
-      await ensureAdminAuth();
-      let resolvedAddress = user.shippingAddress || user.address || "";
-      let resolvedPhone = user.phone || "";
-      let resolvedName = user.name || "BTNX Customer";
-      try {
-        const uSnap = await getDoc(doc(db, "users", user.uid));
-        if (uSnap.exists()) {
-          const uData = uSnap.data();
-          resolvedName = uData.name || resolvedName;
-          resolvedPhone = uData.phone || resolvedPhone;
-          if (uData.shippingStreet) {
-            resolvedAddress = `${uData.shippingStreet}${uData.shippingCity ? `, ${uData.shippingCity}` : ""}${uData.shippingState ? `, ${uData.shippingState}` : ""}, Nigeria`;
-          }
-        }
-      } catch {}
-
       const orders = await fetchCustomerOrders(user.email, user.uid);
+      const prof = await fetchUserProfile(user.uid, user.email);
+
+      let resolvedName = prof?.name || user.name || orders[0]?.customerName || "Valued Client";
+      let resolvedEmail = prof?.email || user.email || orders[0]?.customerEmail || orders[0]?.userEmail || orders[0]?.email || "";
+      let resolvedPhone = prof?.phone || prof?.whatsappPhone || user.phone || orders[0]?.customerPhone || orders[0]?.phone || "On File";
+      let resolvedAddress = "";
+
+      if (prof?.shippingStreet) {
+        resolvedAddress = `${prof.shippingStreet}${prof.shippingCity ? `, ${prof.shippingCity}` : ""}${prof.shippingState ? `, ${prof.shippingState}` : ""}, Nigeria`;
+      } else if (prof?.address) {
+        resolvedAddress = prof.address;
+      } else if (user.shippingAddress) {
+        resolvedAddress = user.shippingAddress;
+      } else if (orders[0]?.shippingAddress) {
+        resolvedAddress = orders[0].shippingAddress;
+      } else {
+        resolvedAddress = "Nationwide Delivery, Nigeria";
+      }
 
       const displayMarkdown = `### 👤 VERIFIED BTNX CUSTOMER SESSION
 - **Customer Name:** **${resolvedName}**  
-- **BTNX Email:** \`${user.email}\`  
-- **Primary Delivery Destination:** ${resolvedAddress || "Nationwide Delivery, Nigeria"}  
-- **Phone:** \`${resolvedPhone || "N/A"}\`  
+- **BTNX Email:** \`${resolvedEmail}\`  
+- **Primary Delivery Destination:** ${resolvedAddress}  
+- **Phone:** \`${resolvedPhone}\`  
 - **Total Orders:** ${orders.length}  
 - **Security Status:** 🛡️ Verified & Authenticated`;
 
@@ -1464,14 +1534,14 @@ You are connected to the BTNX Atelier, but no customer account is signed in for 
         authenticated: true,
         customer: {
           name: resolvedName,
-          email: user.email,
-          shippingAddress: resolvedAddress || "Nigeria",
+          email: resolvedEmail,
+          shippingAddress: resolvedAddress,
           phone: resolvedPhone,
           ordersCount: orders.length,
           latestOrderReference: orders[0]?.id || null,
         },
         displayMarkdown,
-        instructionsForAssistant: `The customer is verified. Automatically apply Name: "${resolvedName}", Email: "${user.email}", Phone: "${resolvedPhone}", Primary Destination: "${resolvedAddress || 'Nigeria'}" to all checkout, quote, and shipping operations without asking the user to re-enter them.`
+        instructionsForAssistant: `The customer is verified. Automatically apply Name: "${resolvedName}", Email: "${resolvedEmail}", Phone: "${resolvedPhone}", Primary Destination: "${resolvedAddress || 'Nigeria'}" to all checkout, quote, and shipping operations without asking the user to re-enter them.`
       };
     }
 
@@ -2093,14 +2163,14 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
       let wType = String(args?.widgetType || args?.widget_type || args?.type || "").toLowerCase().trim();
       if (wType === "tracking_stepper" || wType === "tracking") wType = "track";
       if (wType === "product_card") wType = "product";
-      const targetId = String(args?.targetId || args?.id || args?.orderId || args?.productId || "").trim();
+      const rawTargetId = String(args?.targetId || args?.id || args?.orderId || args?.productId || "").trim();
+      const targetId = rawTargetId.replace(/^#/, "").trim();
 
       if (!targetId) {
         return { error: "Please provide targetId (productId or orderId)." };
       }
 
-      await ensureAdminAuth();
-      let liveCardUrl = `${reqHost}/render/${wType}/${targetId}`;
+      let liveCardUrl = `${reqHost}/render/${wType}/${encodeURIComponent(targetId)}`;
       let htmlSnippet = "";
 
       if (wType === "invoice" || wType === "track") {
@@ -2113,12 +2183,11 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
           };
         }
         const user = reqUser;
-        const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || "").toLowerCase().trim();
+        const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || orderData.email || "").toLowerCase().trim();
 
-        if (user) {
+        if (user && user.role !== "admin") {
           const isOwner = (user.uid && orderData.userId === user.uid) ||
-            user.email?.toLowerCase() === orderOwnerEmail ||
-            user.role === "admin";
+            (user.email && user.email.toLowerCase() === orderOwnerEmail);
           if (!isOwner) {
             return {
               status: "access_denied",
@@ -2128,8 +2197,9 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
           }
         }
 
-        const { token: sig, expiresAt: exp } = generateSignedResourceToken(wType, targetId);
-        liveCardUrl = `${reqHost}/render/${wType}/${targetId}?sig=${sig}&exp=${exp}`;
+        const canonicalId = String(orderData.id || targetId).replace(/^#/, "");
+        const { token: sig, expiresAt: exp } = generateSignedResourceToken(wType, canonicalId);
+        liveCardUrl = `${reqHost}/render/${wType}/${encodeURIComponent(canonicalId)}?sig=${sig}&exp=${exp}`;
         if (wType === "invoice") {
           htmlSnippet = renderInvoiceHtml(orderData, reqHost);
         } else {
@@ -2137,9 +2207,11 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
         }
       } else if (wType === "product") {
         try {
-          const snap = await getDoc(doc(db, "products", targetId));
-          if (snap.exists()) {
-            htmlSnippet = renderProductCardHtml({ id: snap.id, ...snap.data() }, reqHost);
+          const prodData = await fetchProductById(targetId);
+          if (prodData) {
+            const canonicalProdId = String(prodData.id || targetId);
+            htmlSnippet = renderProductCardHtml(prodData, reqHost);
+            liveCardUrl = `${reqHost}/render/product/${encodeURIComponent(canonicalProdId)}`;
           }
         } catch {}
       }
@@ -2441,12 +2513,13 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
       const orders = await fetchCustomerOrders(user.email, user.uid);
       const profile = await fetchUserProfile(user.uid, user.email);
 
+      const resolvedEmail = profile?.email || user.email || orders[0]?.customerEmail || orders[0]?.userEmail || orders[0]?.email || "";
       const address = profile?.shippingStreet
-        ? `${profile.shippingStreet}, ${profile.shippingCity || "Lagos"}, ${profile.shippingCountry || "Nigeria"}`
-        : (user.shippingAddress || orders[0]?.shippingAddress || "Nigeria");
+        ? `${profile.shippingStreet}${profile.shippingCity ? `, ${profile.shippingCity}` : ""}${profile.shippingState ? `, ${profile.shippingState}` : ""}, Nigeria`
+        : (profile?.address || user.shippingAddress || orders[0]?.shippingAddress || "Nigeria");
 
-      const phone = profile?.phone || user.phone || orders[0]?.customerPhone || "N/A";
-      const name = profile?.name || user.name || "BTNX Customer";
+      const phone = profile?.phone || profile?.whatsappPhone || user.phone || orders[0]?.customerPhone || orders[0]?.phone || "On File";
+      const name = profile?.name || user.name || orders[0]?.customerName || "Valued Client";
 
       return {
         connected: true,
@@ -2454,20 +2527,20 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
         customer: {
           uid: user.uid,
           name,
-          email: user.email,
+          email: resolvedEmail,
           phone,
           primaryShippingDestination: {
-            street: profile?.shippingStreet || "Nigeria",
+            street: profile?.shippingStreet || address,
             city: profile?.shippingCity || "Lagos",
             zip: profile?.shippingZip || "",
             country: profile?.shippingCountry || "Nigeria",
             fullAddress: address,
           },
           ordersCount: orders.length,
-          vipTier: user.roles?.includes("admin") ? "Master Atelier Admin" : "Atelier Collector",
+          vipTier: (user.role === "admin" || profile?.role === "admin") ? "Master Atelier Admin" : "Atelier Collector",
         },
         displayMarkdown: `### ✦ BTNX ATELIER — MCP CONNECTION VERIFIED & ACTIVE
-**Client Identity:** **${name}** (\`${user.email}\`)  
+**Client Identity:** **${name}** (\`${resolvedEmail}\`)  
 **Primary Shipping Destination:** ${address}  
 **Contact Phone:** \`${phone}\`  
 **Total Orders on Record:** ${orders.length}  
@@ -2951,21 +3024,47 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
           }
         }
 
-        // Customer authenticated successfully! Generate authorization code with 5-minute TTL
-        let prof: any = null;
-        try {
-          const uDoc = await getDoc(doc(db, "users", customerUid));
-          if (uDoc.exists()) prof = uDoc.data();
-        } catch {}
+        // Customer authenticated successfully! Resolve full profile and generate authorization code with 5-minute TTL
+        const prof: any = await fetchUserProfile(customerUid, customerEmail);
+        if (prof) {
+          if (prof.name) customerName = prof.name;
+          if (prof.email) customerEmail = prof.email;
+        }
+
+        let canonicalAddress = "";
+        if (prof?.shippingStreet) {
+          canonicalAddress = `${prof.shippingStreet}${prof.shippingCity ? `, ${prof.shippingCity}` : ""}${prof.shippingState ? `, ${prof.shippingState}` : ""}, Nigeria`;
+        } else if (prof?.address) {
+          canonicalAddress = prof.address;
+        } else {
+          try {
+            const recentOrders = await fetchCustomerOrders(customerEmail, customerUid);
+            if (recentOrders[0]?.shippingAddress) {
+              canonicalAddress = recentOrders[0].shippingAddress;
+            }
+          } catch {}
+        }
+        if (!canonicalAddress) canonicalAddress = "Nigeria";
+
+        let canonicalPhone = prof?.phone || prof?.whatsappPhone || "";
+        if (!canonicalPhone) {
+          try {
+            const recentOrders = await fetchCustomerOrders(customerEmail, customerUid);
+            if (recentOrders[0]?.customerPhone || recentOrders[0]?.phone) {
+              canonicalPhone = recentOrders[0].customerPhone || recentOrders[0].phone;
+            }
+          } catch {}
+        }
+        if (!canonicalPhone) canonicalPhone = "On File";
 
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
         const codeRecord = {
           code: "",
           uid: customerUid,
           email: customerEmail,
-          name: prof?.name || customerName || "BTNX Customer",
-          shippingAddress: prof?.shippingStreet || "Nigeria",
-          phone: prof?.phone || "N/A",
+          name: customerName || "BTNX Customer",
+          shippingAddress: canonicalAddress,
+          phone: canonicalPhone,
           clientId,
           redirectUri,
           codeChallenge,
@@ -3213,7 +3312,43 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
-  // E) User Authenticated MCP Token Management Endpoints
+  // E) User Authenticated MCP Token & Profile Management Endpoints
+  if (pathname === "/api/user/profile" && req.method === "POST") {
+    const user = await resolveSessionUser(req);
+    if (!user) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Authentication required" }));
+      return;
+    }
+    const profileUpdate: any = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (typeof body?.name === "string") profileUpdate.name = body.name.trim();
+    if (typeof body?.phone === "string") profileUpdate.phone = body.phone.trim();
+    if (typeof body?.birthday === "string") profileUpdate.birthday = body.birthday.trim();
+    if (typeof body?.shippingStreet === "string") profileUpdate.shippingStreet = body.shippingStreet.trim();
+    if (typeof body?.shippingCity === "string") profileUpdate.shippingCity = body.shippingCity.trim();
+    if (typeof body?.shippingZip === "string") profileUpdate.shippingZip = body.shippingZip.trim();
+    if (typeof body?.shippingCountry === "string") profileUpdate.shippingCountry = body.shippingCountry.trim();
+
+    try {
+      const admin = getFirebaseAdmin();
+      if (admin.hasCredentials && admin.db) {
+        await admin.db.collection("users").doc(user.uid).set(profileUpdate, { merge: true });
+      } else {
+        await setDoc(doc(db, "users", user.uid), profileUpdate, { merge: true });
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, profile: profileUpdate }));
+      return;
+    } catch (saveErr: any) {
+      console.error("[Profile Update Error]", saveErr);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Failed to update profile", details: saveErr?.message }));
+      return;
+    }
+  }
+
   if (pathname === "/api/user/mcp-token/create" && req.method === "POST") {
     const user = await resolveSessionUser(req);
     if (!user) {
@@ -3365,22 +3500,91 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     return;
   }
 
+  // 4b) Product Social Share & OpenGraph Previews
+  if (req.method === "GET" && (pathname.startsWith("/product/") || pathname.startsWith("/p/") || pathname.startsWith("/share/product/"))) {
+    const parts = pathname.split("/").filter(Boolean);
+    const prodId = parts[parts.length - 1] || "ny-1";
+    const prod = await fetchProductById(prodId);
+    if (!prod) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Product not found in BTNX database");
+      return;
+    }
+    const rawImage = prod.image || (Array.isArray(prod.images) && prod.images[0]) || "";
+    let absoluteImageUrl = `${reqHost}/og/${encodeURIComponent(prod.id)}.jpg`;
+    if (rawImage && !rawImage.startsWith("/og/")) {
+      if (rawImage.startsWith("http")) {
+        absoluteImageUrl = rawImage;
+      } else {
+        absoluteImageUrl = `${reqHost}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`;
+      }
+    }
+    const pageUrl = `https://btnx.store/?product=${encodeURIComponent(prod.id)}`;
+    const title = `${prod.name} — BTNX Store`;
+    const formattedPrice = "₦" + Number(prod.price || 0).toLocaleString("en-NG");
+    const description = `${formattedPrice} · ${prod.category || "Luxury Apparel"}. ${prod.description || "Crafted by BTNX Atelier in Osun, Nigeria."}`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <meta name="description" content="${escapeHtml(description)}" />
+  <meta property="og:site_name" content="BTNX Store" />
+  <meta property="og:type" content="product" />
+  <meta property="og:title" content="${escapeHtml(title)}" />
+  <meta property="og:description" content="${escapeHtml(description)}" />
+  <meta property="og:url" content="${escapeHtml(pageUrl)}" />
+  <meta property="og:image" content="${escapeHtml(absoluteImageUrl)}" />
+  <meta property="og:image:url" content="${escapeHtml(absoluteImageUrl)}" />
+  <meta property="og:image:secure_url" content="${escapeHtml(absoluteImageUrl)}" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="800" />
+  <meta property="og:image:alt" content="${escapeHtml(prod.name)}" />
+  <link rel="image_src" href="${escapeHtml(absoluteImageUrl)}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(title)}" />
+  <meta name="twitter:description" content="${escapeHtml(description)}" />
+  <meta name="twitter:image" content="${escapeHtml(absoluteImageUrl)}" />
+  <script>
+    var isBot = /WhatsApp|facebookexternalhit|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Pinterest|Googlebot|bingbot|Applebot/i.test(navigator.userAgent);
+    if (!isBot && !window.location.search.includes('noredirect=1')) {
+      window.location.replace('${pageUrl}');
+    }
+  </script>
+</head>
+<body style="margin: 0; background-color: #FAF9F7; color: #141413; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px;">
+  <div style="max-width: 480px; width: 100%; text-align: center; background: #FFFFFF; border: 1px solid #E6E2DA; border-radius: 4px; padding: 32px 24px; box-shadow: 0 16px 40px rgba(0,0,0,0.06);">
+    <div style="height: 32px; margin-bottom: 16px; color: #C89B62;">${BTNX_LOGO_SVG}</div>
+    <h1 style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">${escapeHtml(prod.name)}</h1>
+    <p style="font-size: 13px; color: #966830; font-weight: 600; margin-bottom: 16px;">${escapeHtml(description)}</p>
+    <a href="${pageUrl}" style="display: inline-block; background: #141413; color: #FFFFFF; padding: 12px 24px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; text-decoration: none; border-radius: 2px;">View Piece on BTNX</a>
+  </div>
+</body>
+</html>`;
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(html);
+    return;
+  }
+
   // 5) Handle Live HTML Card Render Routes (GET /render/:type/:id)
   if (req.method === "GET" && url.startsWith("/render/")) {
-    await ensureAdminAuth();
     const urlObj = new URL(url, reqHost);
     const parts = urlObj.pathname.split("/").filter(Boolean);
     const renderType = parts[1]; // product | invoice | track
-    const targetId = decodeURIComponent(parts[2] || "");
+    const targetId = decodeURIComponent(parts[2] || "").trim();
+    const cleanTargetId = targetId.replace(/^#/, "").trim();
     const sig = urlObj.searchParams.get("sig") || "";
     const exp = parseInt(urlObj.searchParams.get("exp") || "0", 10);
 
     if (renderType === "product") {
-      let prodId = targetId || "ny-1";
-      const snap = await getDoc(doc(db, "products", prodId));
-      if (snap.exists()) {
+      let prodId = cleanTargetId || "ny-1";
+      const prodData = await fetchProductById(prodId);
+      if (prodData) {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(renderProductCardHtml({ id: snap.id, ...snap.data() }, reqHost));
+        res.end(renderProductCardHtml(prodData, reqHost));
         return;
       }
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -3395,22 +3599,25 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         return;
       }
 
-      const snap = await getDoc(doc(db, "orders", targetId));
-      if (!snap.exists()) {
+      const orderData = await fetchOrderById(targetId);
+      if (!orderData) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
         res.end(`Order #${targetId} was not found in the BTNX database.`);
         return;
       }
 
-      const orderData: any = { id: snap.id, ...snap.data() };
-
       // Security check: Either valid signed HMAC token OR authenticated session user matching ownership
-      const hasValidSignature = sig && exp && verifySignedResourceToken(renderType, targetId, sig, exp);
+      const hasValidSignature = sig && exp && (
+        verifySignedResourceToken(renderType, targetId, sig, exp) ||
+        verifySignedResourceToken(renderType, cleanTargetId, sig, exp) ||
+        verifySignedResourceToken(renderType, `#${cleanTargetId}`, sig, exp)
+      );
       const renderUser = await resolveSessionUser(req);
+      const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || orderData.email || "").toLowerCase().trim();
       const isOwner = renderUser && (
+        renderUser.role === "admin" ||
         renderUser.uid === orderData.userId ||
-        renderUser.email?.toLowerCase() === (orderData.customerEmail || orderData.userEmail)?.toLowerCase() ||
-        renderUser.role === "admin"
+        (renderUser.email && renderUser.email.toLowerCase() === orderOwnerEmail)
       );
 
       if (!hasValidSignature && !isOwner) {
@@ -3563,7 +3770,16 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       const effectiveSessionId = resolveSessionId(req, callToken) || sessionId;
       const effectiveUser = await resolveSessionUser(req, callToken);
 
-      const resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
+      let resultData: any;
+      try {
+        resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
+      } catch (err: any) {
+        console.error(`[Tool Execution Fatal Catch for ${toolName}]:`, err);
+        resultData = {
+          error: err?.message || "Tool execution failed",
+          displayMarkdown: `### ❌ ERROR EXECUTING ${toolName}\n${err?.message || "Internal failure"}`,
+        };
+      }
 
       if (resultData?.sessionToken) {
         res.setHeader("Set-Cookie", `btnx_session=${encodeURIComponent(resultData.sessionToken)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=2592000`);
@@ -3642,7 +3858,18 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
       const callToken = toolArgs.sessionToken || toolArgs.sessionId || explicitToken;
       const effectiveSessionId = resolveSessionId(req, callToken) || qSessionId || sessionId;
       const effectiveUser = await resolveSessionUser(req, callToken);
-      const resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
+
+      let resultData: any;
+      try {
+        resultData = await executeTool(toolName, toolArgs, effectiveSessionId, effectiveUser, reqHost);
+      } catch (err: any) {
+        console.error(`[Tool Execution Fatal Catch for ${toolName}]:`, err);
+        resultData = {
+          error: err?.message || "Tool execution failed",
+          displayMarkdown: `### ❌ ERROR EXECUTING ${toolName}\n${err?.message || "Internal failure"}`,
+        };
+      }
+
       const isError = Boolean(resultData?.error || resultData?.status === "error");
       jsonRpcResp = {
         jsonrpc: "2.0",
@@ -3742,18 +3969,20 @@ function renderOAuthAuthorizePage(params: {
       background-color: #191816;
       border: 1px solid #2C2A26;
       width: 100%;
-      max-width: 360px;
-      padding: 22px 18px;
+      max-width: 380px;
+      padding: 24px 20px;
       box-shadow: 0 16px 40px rgba(0,0,0,0.85);
       border-radius: 4px;
       margin: auto;
     }
     @media (max-width: 480px) {
       body {
-        padding: 8px 6px;
+        padding: 16px 12px 32px;
+        align-items: flex-start;
       }
       .auth-card {
-        padding: 18px 14px;
+        padding: 20px 16px;
+        max-width: 100%;
         box-shadow: none;
       }
     }
@@ -3915,11 +4144,14 @@ function renderOAuthAuthorizePage(params: {
       border: 1px solid #ef4444;
       color: #fca5a5;
       padding: 10px 12px;
-      font-size: 11px;
+      font-size: 11.5px;
       margin-bottom: 12px;
       text-align: center;
-      border-radius: 2px;
-      line-height: 1.4;
+      border-radius: 3px;
+      line-height: 1.45;
+      word-break: break-word;
+      max-height: 140px;
+      overflow-y: auto;
     }
     .hint-text {
       font-size: 9.5px;
@@ -3959,11 +4191,11 @@ function renderOAuthAuthorizePage(params: {
       <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
 
       <div class="form-group" style="margin-bottom: 6px;">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-          <label style="margin-bottom: 0;">Personal AI Key (Optional)</label>
-          <span style="font-size: 8.5px; color: #C89B62; letter-spacing: 0.1em; text-transform: uppercase;">Instant 1-Step</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; width: 100%;">
+          <label style="margin-bottom: 0; font-size: 10.5px; font-weight: 700; color: #C89B62; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;">Personal AI Key (Optional)</label>
+          <span style="font-size: 9px; color: #C89B62; letter-spacing: 0.08em; text-transform: uppercase; background: rgba(200, 155, 98, 0.12); border: 1px solid rgba(200, 155, 98, 0.3); padding: 2px 8px; border-radius: 999px; white-space: nowrap;">Instant 1-Step</span>
         </div>
-        <input type="password" id="key-field" name="personal_access_key" autocomplete="off" placeholder="btnx_pat_••••••••" required />
+        <input type="password" id="key-field" name="personal_access_key" autocomplete="off" placeholder="btnx_pat_••••••••" />
         <div class="hint-text">
           Have a Personal AI Key from your BTNX account? Authorize directly without email or password.
         </div>

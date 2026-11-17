@@ -10,7 +10,7 @@ import {
   verifyPersonalAccessToken,
   verifyOAuthAccessToken,
 } from "./tokens.js";
-import { verifyFirebaseIdToken } from "../firebaseAdmin.js";
+import { verifyFirebaseIdToken, getFirebaseAdmin } from "../firebaseAdmin.js";
 
 /**
  * Resolves an authenticated customer context from HTTP request headers.
@@ -82,6 +82,10 @@ export async function resolveAuthenticatedCustomer(
     if (!oauthRecord) return null;
     resolvedUid = oauthRecord.uid;
     authMethod = "oauth2_bearer";
+    if (oauthRecord.email) profileEmail = oauthRecord.email;
+    if (oauthRecord.name) profileName = oauthRecord.name;
+    if (oauthRecord.phone) profilePhone = oauthRecord.phone;
+    if (oauthRecord.shippingAddress) profileAddress = oauthRecord.shippingAddress;
   }
   // Case C: Standard Firebase ID Token (JWT format: eyJ...)
   else if (bearerToken.startsWith("eyJ") && bearerToken.split(".").length === 3) {
@@ -102,17 +106,65 @@ export async function resolveAuthenticatedCustomer(
 
   // 3. Load Canonical Customer Profile from Firestore: users/{uid}
   try {
-    const userDoc = await getDoc(doc(db, "users", resolvedUid));
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      profileName = data.name || profileName;
-      profileEmail = data.email || profileEmail;
-      profilePhone = data.phone || undefined;
-      profileRole = (data.role === "admin" || data.role === "support") ? data.role : "customer";
+    let uData: any = null;
+    const admin = getFirebaseAdmin();
+    if (admin.hasCredentials && admin.db) {
+      try {
+        const snap = await admin.db.collection("users").doc(resolvedUid).get();
+        if (snap.exists) {
+          uData = snap.data();
+        }
+      } catch {}
+    }
+    if (!uData) {
+      try {
+        const userDoc = await getDoc(doc(db, "users", resolvedUid));
+        if (userDoc.exists()) {
+          uData = userDoc.data();
+        }
+      } catch {}
+    }
 
-      if (data.shippingStreet) {
-        profileAddress = `${data.shippingStreet}, ${data.shippingCity || "Lagos"}, ${data.shippingCountry || "Nigeria"}`;
+    if (uData) {
+      profileName = uData.name || profileName;
+      profileEmail = uData.email || profileEmail;
+      profilePhone = uData.phone || uData.whatsappPhone || profilePhone;
+      profileRole = (uData.role === "admin" || uData.role === "support") ? uData.role : profileRole;
+
+      if (uData.shippingStreet) {
+        profileAddress = `${uData.shippingStreet}${uData.shippingCity ? `, ${uData.shippingCity}` : ""}${uData.shippingState ? `, ${uData.shippingState}` : ""}, Nigeria`;
+      } else if (uData.address) {
+        profileAddress = uData.address;
       }
+    }
+
+    // Fallback: If email or profile info is still empty, look up Firebase Auth user directly
+    if (admin.hasCredentials && admin.auth) {
+      try {
+        const authUser = await admin.auth.getUser(resolvedUid);
+        if (authUser) {
+          if (authUser.email && !profileEmail) profileEmail = authUser.email;
+          if (authUser.displayName && profileName === "BTNX Customer") profileName = authUser.displayName;
+          if (authUser.phoneNumber && !profilePhone) profilePhone = authUser.phoneNumber;
+        }
+      } catch {}
+    }
+
+    // Fallback: Check most recent order to discover verified shipping destination, phone, or email
+    if ((!profileAddress || !profilePhone || !profileEmail) && resolvedUid) {
+      try {
+        let orderSnap: any = null;
+        if (admin.hasCredentials && admin.db) {
+          orderSnap = await admin.db.collection("orders").where("userId", "==", resolvedUid).limit(1).get();
+        }
+        if (orderSnap && !orderSnap.empty) {
+          const ord = orderSnap.docs[0].data();
+          if (!profileAddress && ord.shippingAddress) profileAddress = ord.shippingAddress;
+          if (!profilePhone && (ord.customerPhone || ord.phone)) profilePhone = ord.customerPhone || ord.phone;
+          if (!profileEmail && (ord.customerEmail || ord.userEmail || ord.email)) profileEmail = ord.customerEmail || ord.userEmail || ord.email;
+          if (profileName === "BTNX Customer" && ord.customerName) profileName = ord.customerName;
+        }
+      } catch {}
     }
   } catch (err: any) {
     console.error("[Auth] Profile resolution warning:", err?.message);

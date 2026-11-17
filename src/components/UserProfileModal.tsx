@@ -440,23 +440,63 @@ export default function UserProfileModal({
 
     const userPath = `users/${currentUser.uid}`;
     setIsSaving(true);
+    const profilePayload = {
+      id: currentUser.uid,
+      uid: currentUser.uid,
+      email: currentUser.email || "",
+      name: profileName.trim().slice(0, 120),
+      phone: profilePhone.trim().slice(0, 40),
+      birthday: profileBirthday.trim().slice(0, 32),
+      shippingStreet: shippingStreet.trim().slice(0, 250),
+      shippingCity: shippingCity.trim().slice(0, 120),
+      shippingZip: shippingZip.trim().slice(0, 32),
+      shippingCountry: shippingCountry.trim().slice(0, 120),
+      updatedAt: new Date().toISOString(),
+    };
+
+    let saved = false;
     try {
-      await updateDoc(doc(db, "users", currentUser.uid), {
-        name: profileName.trim().slice(0, 120),
-        phone: profilePhone.trim().slice(0, 40),
-        birthday: profileBirthday.trim().slice(0, 32),
-        shippingStreet: shippingStreet.trim().slice(0, 250),
-        shippingCity: shippingCity.trim().slice(0, 120),
-        shippingZip: shippingZip.trim().slice(0, 32),
-        shippingCountry: shippingCountry.trim().slice(0, 120),
-      });
-      onAddToast("Profile and shipping details updated.", "success");
-    } catch (err: any) {
-      onAddToast(`Unable to save changes: ${err.message || "Database error"}`, "error");
-      handleFirestoreError(err, OperationType.UPDATE, userPath);
-    } finally {
-      setIsSaving(false);
+      await setDoc(doc(db, "users", currentUser.uid), profilePayload, { merge: true });
+      saved = true;
+    } catch (clientErr: any) {
+      console.warn("[Profile Save Client Error, attempting server fallback]:", clientErr?.message);
     }
+
+    if (!saved) {
+      try {
+        const idToken = await currentUser.getIdToken(true);
+        const endpoints = [
+          "/api/user/profile",
+          "https://btnx-website-mcp.vercel.app/api/user/profile",
+        ];
+        for (const ep of endpoints) {
+          try {
+            const res = await fetch(ep, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify(profilePayload),
+            });
+            if (res.ok) {
+              saved = true;
+              break;
+            }
+          } catch {}
+        }
+      } catch (adminFallbackErr) {
+        console.warn("[Profile Save Server Fallback Notice]:", adminFallbackErr);
+      }
+    }
+
+    if (saved) {
+      onAddToast("Profile and shipping details updated successfully.", "success");
+    } else {
+      console.error("[Profile Save Failed]", { userPath, profilePayload });
+      onAddToast("Unable to save profile changes. Please try again or check your connection.", "error");
+    }
+    setIsSaving(false);
   };
 
   const handleDownloadInvoice = (order: Order, e: React.MouseEvent) => {
@@ -593,7 +633,7 @@ export default function UserProfileModal({
             </nav>
 
             {onOpenSupport && (
-              <div className="pt-2 lg:pt-4 border-t border-[#E6E2DA] dark:border-[#2C2A26]">
+              <div className="pt-2 lg:pt-4 lg:border-t border-[#E6E2DA] dark:border-[#2C2A26]">
                 <button
                   type="button"
                   onClick={() => onOpenSupport()}

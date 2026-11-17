@@ -35,9 +35,9 @@ export interface AuthenticatedPrincipal {
   uid: string;
   email?: string;
   name?: string;
-  displayName?: string;
   phone?: string;
   shippingAddress?: string;
+  displayName?: string;
   role: CustomerRole;
   roles?: string[];
   scopes?: string[];
@@ -87,6 +87,8 @@ export interface OAuthCodeRecord {
   uid: string; // Authenticated UID
   email?: string;
   name?: string;
+  phone?: string;
+  shippingAddress?: string;
   clientId: string;
   redirectUri: string; // Exact registered redirect URI used during authorization
   codeChallenge: string; // S256 code challenge
@@ -105,6 +107,8 @@ export interface OAuthTokenRecord {
   uid: string; // Canonical Firebase UID
   email?: string;
   name?: string;
+  phone?: string;
+  shippingAddress?: string;
   clientId: string;
   scopes: string[];
   createdAt: string;

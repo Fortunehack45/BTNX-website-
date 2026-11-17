@@ -87,6 +87,8 @@ export interface OAuthCodeRecord {
   uid: string; // Authenticated UID
   email?: string;
   name?: string;
+  phone?: string;
+  shippingAddress?: string;
   clientId: string;
   redirectUri: string; // Exact registered redirect URI used during authorization
   codeChallenge: string; // S256 code challenge
@@ -105,6 +107,8 @@ export interface OAuthTokenRecord {
   uid: string; // Canonical Firebase UID
   email?: string;
   name?: string;
+  phone?: string;
+  shippingAddress?: string;
   clientId: string;
   scopes: string[];
   createdAt: string;
