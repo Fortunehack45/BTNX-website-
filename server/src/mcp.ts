@@ -631,7 +631,8 @@ export async function executeMcpTool(
           deliveryTimeline: p.deliveryTimeline || "2–4 Business Days",
           fabricAndCare: p.fabricAndCare || "Luxury heavy knit · Preshrunk",
           stock: p.stock ?? 45,
-          image: p.image,
+          image: p.fullImage || p.image,
+          fullImage: p.fullImage || p.image,
         })),
       };
     }
@@ -770,10 +771,13 @@ export async function executeMcpTool(
       const shippingFee = subtotal >= 150000 ? 0 : 3500;
       const total = Math.max(0, subtotal - discountAmount) + shippingFee;
 
+      const resolvedUserId = String(user.userId && user.userId !== "guest" ? user.userId : (user.email ? "cust_" + crypto.createHash("sha256").update(user.email.toLowerCase().trim()).digest("hex").slice(0, 16) : "mcp_customer"));
+
       const record = {
         id: orderId,
         source: "remote-mcp",
-        userId: user.userId,
+        userId: resolvedUserId,
+        userEmail: args?.customerEmail || user.email || "client@btnx.store",
         customerName: args?.customerName || user.name || "BTNX VIP Client",
         customerEmail: args?.customerEmail || user.email || "client@btnx.store",
         customerPhone: args?.customerPhone || user.phone || "N/A",
@@ -788,10 +792,23 @@ export async function executeMcpTool(
         createdAt: new Date().toISOString(),
       };
 
+      let orderSaved = false;
       try {
-        await setDoc(doc(db, "orders", orderId), record);
-      } catch (dbErr: any) {
-        console.error("[BTNX Remote MCP] Order create error:", dbErr?.message);
+        const admin = getFirebaseAdmin();
+        if (admin.hasCredentials && admin.db) {
+          await admin.db.collection("orders").doc(orderId).set(record);
+          orderSaved = true;
+        }
+      } catch (adminErr: any) {
+        console.warn("[BTNX Remote MCP] Admin order write notice:", adminErr?.message);
+      }
+
+      if (!orderSaved) {
+        try {
+          await setDoc(doc(db, "orders", orderId), record);
+        } catch (dbErr: any) {
+          console.error("[BTNX Remote MCP] Order create error:", dbErr?.message);
+        }
       }
 
       const signedInvoice = generateSignedResourceToken("invoice", orderId, 7 * 24 * 3600);

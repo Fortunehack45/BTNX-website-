@@ -125,19 +125,20 @@ export default function UserProfileModal({
     try {
       const idToken = await currentUser.getIdToken();
       const endpoints = [
-        "/api/user/mcp-token/list",
         "https://btnx-website-mcp.vercel.app/api/user/mcp-token/list",
+        ...(window.location.hostname === "localhost" ? ["/api/user/mcp-token/list"] : []),
       ];
       for (const endpoint of endpoints) {
         try {
           const res = await fetch(endpoint, {
             headers: { Authorization: `Bearer ${idToken}` },
           });
-          const text = await res.text();
-          const data = JSON.parse(text);
-          if (data && data.success && Array.isArray(data.tokens)) {
-            setMcpTokens(data.tokens);
-            return;
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && Array.isArray(data.tokens)) {
+              setMcpTokens(data.tokens);
+              return;
+            }
           }
         } catch {}
       }
@@ -164,9 +165,7 @@ export default function UserProfileModal({
           }
         }
       });
-      if (items.length > 0) {
-        setMcpTokens(items);
-      }
+      setMcpTokens(items);
     } catch (fsErr) {
       console.warn("[MCP Tokens] Fallback read notice:", fsErr);
     }
@@ -196,8 +195,8 @@ export default function UserProfileModal({
     try {
       const idToken = await currentUser.getIdToken(true);
       const endpoints = [
-        "/api/user/mcp-token/create",
         "https://btnx-website-mcp.vercel.app/api/user/mcp-token/create",
+        ...(window.location.hostname === "localhost" ? ["/api/user/mcp-token/create"] : []),
       ];
 
       let tokenData: any = null;
@@ -216,17 +215,21 @@ export default function UserProfileModal({
               expiresIn: keyExpiration,
             }),
           });
-          const text = await res.text();
-          try {
-            const data = JSON.parse(text);
-            if (data && data.token) {
-              tokenData = data;
-              break;
-            } else if (data && data.error) {
-              lastError = data.error;
-            }
-          } catch {
-            lastError = text.slice(0, 100);
+          if (res.ok) {
+            try {
+              const data = await res.json();
+              if (data && data.token) {
+                tokenData = data;
+                break;
+              } else if (data && data.error) {
+                lastError = data.error;
+              }
+            } catch {}
+          } else {
+            try {
+              const errJson = await res.json();
+              if (errJson?.error) lastError = errJson.error;
+            } catch {}
           }
         } catch (e: any) {
           lastError = e?.message || String(e);
@@ -279,7 +282,7 @@ export default function UserProfileModal({
             maskedToken: "btnx_pat_••••••••" + tokenId.slice(-4),
           };
         } catch (clientErr: any) {
-          throw new Error(lastError || clientErr?.message || "Could not generate key from server.");
+          throw new Error(clientErr?.message || (lastError && !lastError.includes("<!DOCTYPE") ? lastError : "") || "Could not generate key from server.");
         }
       }
 
@@ -316,8 +319,8 @@ export default function UserProfileModal({
     try {
       const idToken = await currentUser.getIdToken();
       const endpoints = [
-        "/api/user/mcp-token/revoke",
         "https://btnx-website-mcp.vercel.app/api/user/mcp-token/revoke",
+        ...(window.location.hostname === "localhost" ? ["/api/user/mcp-token/revoke"] : []),
       ];
       let revokedOnServer = false;
       for (const endpoint of endpoints) {
@@ -466,8 +469,8 @@ export default function UserProfileModal({
       try {
         const idToken = await currentUser.getIdToken(true);
         const endpoints = [
-          "/api/user/profile",
           "https://btnx-website-mcp.vercel.app/api/user/profile",
+          ...(window.location.hostname === "localhost" ? ["/api/user/profile"] : []),
         ];
         for (const ep of endpoints) {
           try {

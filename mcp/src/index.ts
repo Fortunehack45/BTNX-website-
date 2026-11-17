@@ -593,8 +593,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
           if (!prod) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ error: "Product not found", id: targetId }, null, 2) }],
-              isError: true,
+              content: [{ type: "text", text: JSON.stringify({ error: "Product not found", id: targetId, message: `Product '${targetId}' was not found in the BTNX database.` }, null, 2) }],
+              isError: false,
             };
           }
           const html = renderProductCardHtml(prod);
@@ -620,8 +620,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (widgetType === "invoice") {
           if (!targetId) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ error: "Order ID required" }, null, 2) }],
-              isError: true,
+              content: [{ type: "text", text: JSON.stringify({ error: "Order ID required", message: "Please specify an order ID." }, null, 2) }],
+              isError: false,
             };
           }
           let order: any = null;
@@ -632,8 +632,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
           if (!order) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ error: "Order not found", id: targetId }, null, 2) }],
-              isError: true,
+              content: [{ type: "text", text: JSON.stringify({ error: "Order not found", id: targetId, message: `Order #${targetId} was not found in the BTNX database.` }, null, 2) }],
+              isError: false,
             };
           }
 

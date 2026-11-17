@@ -48,7 +48,8 @@ const BASE_STYLES = `
 // 1. PRODUCT CARD RENDERER
 export function renderProductCardHtml(product: any, storeOrigin = "http://localhost:3000"): string {
   const p = product || { id: "not-found", name: "Product Not Found", price: 0, category: "Atelier" };
-  const imgUrl = p.image?.startsWith("http") ? p.image : `${storeOrigin}/${p.image?.replace(/^\//, "")}`;
+  const rawImg = p.fullImage || p.image;
+  const imgUrl = rawImg?.startsWith("http") ? rawImg : `${storeOrigin}/${rawImg?.replace(/^\//, "")}`;
   const checkoutUrl = `${storeOrigin}/?product=${encodeURIComponent(p.id)}`;
 
   return `<!DOCTYPE html>
@@ -112,7 +113,8 @@ export function renderCatalogGridHtml(products: any[], storeOrigin = "http://loc
   const list = Array.isArray(products) ? products : [];
 
   const itemsHtml = list.map((p) => {
-    const imgUrl = p.image?.startsWith("http") ? p.image : `${storeOrigin}/${p.image?.replace(/^\//, "")}`;
+    const rawImg = p.fullImage || p.image;
+  const imgUrl = rawImg?.startsWith("http") ? rawImg : `${storeOrigin}/${rawImg?.replace(/^\//, "")}`;
     const url = `${storeOrigin}/?product=${encodeURIComponent(p.id)}`;
     return `
       <div class="btnx-card" style="display: flex; flex-direction: column; overflow: hidden;">

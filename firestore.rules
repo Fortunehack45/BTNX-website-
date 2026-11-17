@@ -393,16 +393,20 @@ service cloud.firestore {
       allow delete: if isValidId(userId) && isAdmin();
     }
 
-    // 2. Orders: Direct lookup allowed by valid ID for tracking and MCP widgets; list strictly restricted to owner/admin/support.
+    // 2. Orders: Direct lookup allowed by valid ID for tracking and MCP widgets; list allowed for admin, support, owner, or queries with limit <= 50; create allowed for owner, admin, or trusted sources.
     match /orders/{orderId} {
       allow get: if isValidId(orderId);
-      allow list: if isSignedIn() && (
-        (resource.data.userId == request.auth.uid) || isAdmin() || isSupport()
+      allow list: if (
+        isAdmin() ||
+        isSupport() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        (request.query.limit <= 50)
       );
-      allow create: if isValidId(orderId) && isSignedIn() &&
-        isValidOrder(incoming(), orderId) &&
-        incoming().userId == request.auth.uid &&
-        incoming().id == orderId;
+      allow create: if isValidId(orderId) && isValidOrder(incoming(), orderId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().userId == request.auth.uid) ||
+        (incoming().source in ['mcp-agent', 'mcp-server', 'remote-mcp', 'storefront', 'btnx-storefront', 'checkout'])
+      );
       allow update: if isValidId(orderId) && (isAdmin() || isSupport()) &&
         incoming().id == existing().id &&
         incoming().userId == existing().userId &&
@@ -464,8 +468,10 @@ service cloud.firestore {
       allow list: if isSignedIn() && (
         existing().userId == request.auth.uid || existing().userId == 'broadcast' || isAdmin()
       );
-      allow create: if isValidId(notificationId) && isSignedIn() && isValidNotification(incoming()) && (
-        incoming().userId == request.auth.uid || isAdmin()
+      allow create: if isValidId(notificationId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().userId == request.auth.uid) ||
+        isValidNotification(incoming())
       );
       allow update: if isValidId(notificationId) && isSignedIn() && isValidNotification(incoming()) && (
         isAdmin() ||

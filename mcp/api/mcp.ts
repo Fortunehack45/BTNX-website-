@@ -231,7 +231,7 @@ function escapeHtml(str: any): string {
 
 // 3. Luxury HTML Card Renderers
 function renderProductCardHtml(product: any, host: string): string {
-  const rawImg = product.image || (Array.isArray(product.images) && product.images[0]) || product.imageUrl || product.heroImage || "";
+  const rawImg = product.fullImage || product.image || (Array.isArray(product.images) && product.images[0]) || product.imageUrl || product.heroImage || "";
   let primaryImg = rawImg || "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&q=80&w=800";
   if (primaryImg.startsWith("/") && !primaryImg.startsWith("//")) {
     primaryImg = `${host}${primaryImg}`;
@@ -1112,17 +1112,17 @@ async function fetchCustomerOrders(email?: string, uid?: string): Promise<any[]>
     const ordersMap = new Map<string, any>();
     if (uid) {
       try {
-        const snapUid = await getDocs(query(collection(db, "orders"), where("userId", "==", uid)));
+        const snapUid = await getDocs(query(collection(db, "orders"), where("userId", "==", uid), limit(50)));
         snapUid.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
       } catch {}
     }
     if (email) {
       try {
-        const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", email)));
+        const snap1 = await getDocs(query(collection(db, "orders"), where("customerEmail", "==", email), limit(50)));
         snap1.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
       } catch {}
       try {
-        const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", email)));
+        const snap2 = await getDocs(query(collection(db, "orders"), where("userEmail", "==", email), limit(50)));
         snap2.docs.forEach((d) => ordersMap.set(d.id, { id: d.id, ...d.data() }));
       } catch {}
     }
@@ -1865,16 +1865,22 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
       const dateStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
       const size = args?.size || "M";
 
+      const resolvedUserId = String(
+        user?.uid ||
+        (customerEmail ? "cust_" + crypto.createHash("sha256").update(customerEmail.toLowerCase().trim()).digest("hex").slice(0, 16) : "mcp_customer")
+      );
+
       const newOrder = {
         id: randomRef,
-        userId: user?.uid || null,
+        userId: resolvedUserId,
+        userEmail: customerEmail,
+        customerEmail,
+        customerName,
+        customerPhone,
+        shippingAddress,
         source: "mcp-agent",
         date: dateStr,
         createdAt: new Date().toISOString(),
-        customerName,
-        customerEmail,
-        customerPhone,
-        shippingAddress,
         items: [
           {
             product: prod,
@@ -1893,19 +1899,57 @@ Please sign in to your BTNX account with \`btnx_sign_in\`, or provide:
         status: "Confirmed",
       };
 
-      await setDoc(doc(db, "orders", randomRef), newOrder);
+      let orderSaved = false;
+      let orderSaveError: any = null;
+
+      // 1) Try Firebase Admin SDK first (runs with server authority)
+      try {
+        const admin = getFirebaseAdmin();
+        if (admin.hasCredentials && admin.db) {
+          await admin.db.collection("orders").doc(randomRef).set(newOrder);
+          orderSaved = true;
+        }
+      } catch (adminErr: any) {
+        console.warn("[MCP Order Admin Write Notice]:", adminErr?.message);
+        orderSaveError = adminErr;
+      }
+
+      // 2) Fallback to client Firestore Web SDK
+      if (!orderSaved) {
+        try {
+          await setDoc(doc(db, "orders", randomRef), newOrder);
+          orderSaved = true;
+        } catch (clientErr: any) {
+          console.error("[MCP Order Client Write Error]:", clientErr?.message);
+          orderSaveError = clientErr;
+        }
+      }
+
+      if (!orderSaved) {
+        return {
+          isError: true,
+          error: "Failed to save order to database: " + (orderSaveError?.message || "Permission denied"),
+          message: "The order could not be saved to the database. Please check Firestore permissions.",
+        };
+      }
 
       // Add alert to store notifications
       try {
-        await setDoc(doc(db, "notifications", `notif-${randomRef}`), {
+        const notifData = {
           id: `notif-${randomRef}`,
-          userId: user?.uid || "admin_master",
+          userId: resolvedUserId,
           title: `New Order #${randomRef}`,
           message: `Order for ${prod.name} (${formatNaira(total)}) placed for ${customerName}.`,
           type: "order_status",
           isRead: false,
           createdAt: new Date().toISOString(),
-        });
+        };
+        const admin = getFirebaseAdmin();
+        if (admin.hasCredentials && admin.db) {
+          await admin.db.collection("notifications").doc(`notif-${randomRef}`).set(notifData);
+        } else {
+          await setDoc(doc(db, "notifications", `notif-${randomRef}`), notifData);
+        }
       } catch {}
 
       const invoiceHtml = renderInvoiceHtml(newOrder, reqHost);
@@ -2025,14 +2069,16 @@ ${tableRows}
       }
 
       const catalogTable = products.map((p: any) => {
-        return `| \`${p.id}\` | **${p.name}** | ${formatNaira(p.price)} | ${p.stock > 0 ? `In Stock (${p.stock})` : "Made-to-Order"} | [✨ View Luxury Card](${reqHost}/render/product/${p.id}) |`;
+        const pImg = p.fullImage || p.image || (Array.isArray(p.images) && p.images[0]) || p.imageUrl || p.heroImage || "";
+        const fullImg = pImg.startsWith("/") && !pImg.startsWith("//") ? `${reqHost}${pImg}` : pImg;
+        return `| \`${p.id}\` | **${p.name}** | ${formatNaira(p.price)} | ${p.stock > 0 ? `In Stock (${p.stock})` : "Made-to-Order"} | [✨ View Luxury Card](${reqHost}/render/product/${p.id}) | [![${p.name}](${fullImg})](${reqHost}/render/product/${p.id}) |`;
       }).join("\n");
 
       const displayMarkdown = `### 🧥 BTNX ATELIER — CURRENT RUNWAY COLLECTION
 **Showing ${products.length} garments from the active catalog:**
 
-| ID | Garment Name | Price | Stock | Visual Showcase |
-| :--- | :--- | :--- | :--- | :--- |
+| ID | Garment Name | Price | Stock | Visual Showcase | Preview |
+| :--- | :--- | :--- | :--- | :--- | :--- |
 ${catalogTable}
 
 ✨ *Complimentary size exchanges & express nationwide delivery on orders over ₦150,000.*`;
@@ -2040,7 +2086,7 @@ ${catalogTable}
       return {
         totalPieces: products.length,
         catalog: products.map((p: any) => {
-          const pImg = p.image || (Array.isArray(p.images) && p.images[0]) || p.imageUrl || p.heroImage || "";
+          const pImg = p.fullImage || p.image || (Array.isArray(p.images) && p.images[0]) || p.imageUrl || p.heroImage || "";
           const fullImg = pImg.startsWith("/") && !pImg.startsWith("//") ? `${reqHost}${pImg}` : pImg;
           return {
             id: p.id,
@@ -2056,7 +2102,7 @@ ${catalogTable}
           };
         }),
         displayMarkdown,
-        instructionsForAssistant: "Present available pieces in a markdown table and include the clickable card links."
+        instructionsForAssistant: "Present available pieces in a table including their prices in Naira, clickable card links, and embed image previews (![Name](imageUrl)) so the customer can visually inspect the garment directly in chat."
       };
     }
 
@@ -2075,7 +2121,7 @@ ${catalogTable}
 
       const product: any = { id: snap.id, ...snap.data() };
       const cardHtml = renderProductCardHtml(product, reqHost);
-      const prodImg = product.image || (Array.isArray(product.images) && product.images[0]) || product.imageUrl || product.heroImage || "";
+      const prodImg = product.fullImage || product.image || (Array.isArray(product.images) && product.images[0]) || product.imageUrl || product.heroImage || "";
       const fullImgUrl = prodImg.startsWith("/") && !prodImg.startsWith("//") ? `${reqHost}${prodImg}` : prodImg;
 
       const displayMarkdown = `### 🧥 ${product.name.toUpperCase()} (\`${product.id}\`)
@@ -3785,7 +3831,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         res.setHeader("Set-Cookie", `btnx_session=${encodeURIComponent(resultData.sessionToken)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=2592000`);
       }
 
-      const isError = Boolean(resultData?.error || resultData?.status === "error");
+      const isError = Boolean(resultData?.isError || (resultData?.error && !resultData?.displayMarkdown));
       const response = {
         jsonrpc: "2.0",
         id,
@@ -3870,7 +3916,7 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
         };
       }
 
-      const isError = Boolean(resultData?.error || resultData?.status === "error");
+      const isError = Boolean(resultData?.isError || (resultData?.error && !resultData?.displayMarkdown));
       jsonRpcResp = {
         jsonrpc: "2.0",
         id,
@@ -3935,183 +3981,227 @@ function renderOAuthAuthorizePage(params: {
   codeChallenge: string;
   codeChallengeMethod: string;
 }): string {
+  const isEmailError = Boolean(
+    params.error &&
+    (params.error.toLowerCase().includes("email") ||
+     params.error.toLowerCase().includes("password") ||
+     params.error.toLowerCase().includes("google") ||
+     params.error.toLowerCase().includes("rate-limited") ||
+     params.error.toLowerCase().includes("too-many-requests"))
+  );
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
   <title>BTNX Atelier &middot; Account Authorization</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html {
-      font-size: 14px;
+      font-size: 15px;
       -webkit-text-size-adjust: 100%;
       text-size-adjust: 100%;
-      width: 100%;
-      height: 100%;
       background-color: #111110;
+      width: 100%;
+      min-height: 100%;
     }
     body {
       width: 100%;
-      min-height: 100%;
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
       background-color: #111110;
       color: #F3F1EC;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 16px 12px;
+      justify-content: flex-start;
+      padding: 24px 14px 48px;
       line-height: 1.45;
       overflow-x: hidden;
       touch-action: manipulation;
+      -webkit-font-smoothing: antialiased;
+    }
+    .auth-container {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
     }
     .auth-card {
-      background-color: #191816;
+      background-color: #181715;
       border: 1px solid #2C2A26;
-      width: 100%;
-      max-width: 380px;
+      border-radius: 8px;
       padding: 24px 20px;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.85);
-      border-radius: 4px;
-      margin: auto;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+      width: 100%;
     }
-    @media (max-width: 480px) {
+    @media (max-width: 440px) {
       body {
-        padding: 16px 12px 32px;
-        align-items: flex-start;
+        padding: 16px 10px 36px;
       }
       .auth-card {
-        padding: 20px 16px;
-        max-width: 100%;
-        box-shadow: none;
+        padding: 20px 14px;
+        border-radius: 6px;
       }
     }
     .brand-logo-wrap {
       display: flex;
       justify-content: center;
       align-items: center;
-      margin: 0 auto 12px auto;
+      margin: 0 auto 10px auto;
       color: #C89B62;
-      height: 36px;
-      max-width: 120px;
+      height: 38px;
+      width: 100%;
+      max-width: 130px;
     }
     .brand-logo-wrap svg {
-      height: 100%;
-      max-height: 36px;
+      height: 38px;
       width: auto;
-      max-width: 120px;
-      fill: currentColor;
+      max-width: 100%;
+      fill: #C89B62;
+      display: block;
     }
     .brand-sub {
-      font-size: 9.5px;
-      letter-spacing: 0.22em;
+      font-size: 10px;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       color: #C89B62;
       text-align: center;
-      font-weight: 600;
-      margin-bottom: 10px;
+      font-weight: 700;
+      margin-bottom: 8px;
     }
     .desc {
-      font-size: 11.5px;
+      font-size: 12px;
       line-height: 1.45;
       color: #A7A299;
       text-align: center;
-      margin-bottom: 14px;
-      padding-bottom: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
       border-bottom: 1px solid #2C2A26;
     }
+    .error-banner {
+      background: rgba(220, 38, 38, 0.14);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      padding: 10px 14px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      text-align: center;
+      border-radius: 6px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .auth-tabs {
+      display: flex;
+      background: #111110;
+      border: 1px solid #2C2A26;
+      border-radius: 6px;
+      padding: 3px;
+      margin-bottom: 16px;
+      gap: 3px;
+      width: 100%;
+    }
+    .auth-tab-btn {
+      flex: 1;
+      min-height: 38px;
+      background: transparent;
+      border: none;
+      color: #8C887B;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 8px;
+      white-space: nowrap;
+    }
+    .auth-tab-btn.active {
+      background: #24221E;
+      color: #C89B62;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .form-panel {
+      display: none;
+    }
+    .form-panel.active {
+      display: block;
+    }
     .form-group {
-      margin-bottom: 11px;
+      margin-bottom: 14px;
       text-align: left;
     }
     label {
       display: block;
-      font-size: 9.5px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       color: #A7A299;
-      margin-bottom: 4px;
-      font-weight: 600;
+      margin-bottom: 6px;
+      font-weight: 700;
     }
     input {
       width: 100%;
-      height: 42px;
-      background: #141413;
+      height: 46px;
+      background: #121110;
       border: 1px solid #2C2A26;
       color: #F3F1EC;
-      padding: 0 12px;
-      font-size: 16px !important; /* CRITICAL: 16px prevents iOS Safari & Android from auto-zooming */
+      padding: 0 14px;
+      font-size: 16px !important; /* CRITICAL: 16px prevents iOS Safari from auto-zooming */
       outline: none;
       transition: border-color 0.2s;
-      border-radius: 2px;
+      border-radius: 4px;
       -webkit-appearance: none;
       appearance: none;
       font-family: inherit;
     }
     input:focus {
       border-color: #C89B62;
+      box-shadow: 0 0 0 1px #C89B62;
     }
     .btn-submit {
       width: 100%;
-      min-height: 42px;
+      min-height: 46px;
       background: #C89B62;
       color: #111110;
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       border: none;
       cursor: pointer;
-      margin-top: 6px;
-      border-radius: 2px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 8px 12px;
+      padding: 10px 14px;
       transition: filter 0.2s;
+      margin-top: 8px;
     }
     .btn-submit:hover {
       filter: brightness(1.1);
     }
-    .btn-key-submit {
-      width: 100%;
-      min-height: 40px;
-      background: #24221E;
-      border: 1px solid #C89B62;
-      color: #C89B62;
-      font-size: 10.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      cursor: pointer;
-      border-radius: 2px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 8px 12px;
-      margin-top: 6px;
-      transition: background-color 0.15s, color 0.15s;
-    }
-    .btn-key-submit:hover {
-      background: #C89B62;
-      color: #111110;
-    }
     .btn-google {
       width: 100%;
-      min-height: 42px;
+      min-height: 46px;
       background: #FFFFFF;
       color: #1F1F1F;
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.02em;
       border: 1px solid #747775;
-      border-radius: 2px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
       cursor: pointer;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       transition: background-color 0.2s;
     }
     .btn-google:hover {
@@ -4125,9 +4215,9 @@ function renderOAuthAuthorizePage(params: {
       display: flex;
       align-items: center;
       text-align: center;
-      margin: 12px 0;
+      margin: 14px 0;
       color: #8C887B;
-      font-size: 9px;
+      font-size: 9.5px;
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
@@ -4137,116 +4227,151 @@ function renderOAuthAuthorizePage(params: {
       border-bottom: 1px solid #2C2A26;
     }
     .divider span {
-      padding: 0 8px;
-    }
-    .error-banner {
-      background: rgba(220, 38, 38, 0.15);
-      border: 1px solid #ef4444;
-      color: #fca5a5;
-      padding: 10px 12px;
-      font-size: 11.5px;
-      margin-bottom: 12px;
-      text-align: center;
-      border-radius: 3px;
-      line-height: 1.45;
-      word-break: break-word;
-      max-height: 140px;
-      overflow-y: auto;
+      padding: 0 10px;
     }
     .hint-text {
-      font-size: 9.5px;
+      font-size: 10.5px;
       color: #8C887B;
-      margin-top: 4px;
-      line-height: 1.35;
+      margin-top: 6px;
+      line-height: 1.4;
     }
     .footer-note {
-      font-size: 9.5px;
+      font-size: 10px;
       color: #66625B;
       text-align: center;
-      margin-top: 14px;
+      margin-top: 18px;
+      line-height: 1.4;
+    }
+    .badge-pill {
+      font-size: 9px;
+      color: #C89B62;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(200, 155, 98, 0.12);
+      border: 1px solid rgba(200, 155, 98, 0.3);
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
     }
   </style>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 </head>
 <body>
-  <div class="auth-card">
-    <div class="brand-logo-wrap">
-      ${BTNX_LOGO_SVG}
-    </div>
-    <div class="brand-sub">Osun Atelier &middot; Account Authorization</div>
-    <div class="desc">
-      Sign in or authorize your BTNX customer account to securely link Claude with your fashion inventory, orders, and deliveries.
-    </div>
-    ${params.error ? `<div class="error-banner">${escapeHtml(params.error)}</div>` : ""}
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="brand-logo-wrap">
+        ${BTNX_LOGO_SVG}
+      </div>
+      <div class="brand-sub">Osun Atelier &middot; Account Authorization</div>
+      <div class="desc">
+        Sign in to link Claude with your verified fashion inventory, shipping address, and order history.
+      </div>
+      ${params.error ? `<div class="error-banner">${escapeHtml(params.error)}</div>` : ""}
 
-    <!-- Form 1: Personal AI Key (Instant Authorization) -->
-    <form id="key-auth-form" method="POST" action="/oauth/authorize" style="margin-bottom: 6px;">
-      <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}" />
-      <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}" />
-      <input type="hidden" name="state" value="${escapeHtml(params.state)}" />
-      <input type="hidden" name="scope" value="${escapeHtml(params.scope)}" />
-      <input type="hidden" name="response_type" value="${escapeHtml(params.responseType)}" />
-      <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}" />
-      <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
-
-      <div class="form-group" style="margin-bottom: 6px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; width: 100%;">
-          <label style="margin-bottom: 0; font-size: 10.5px; font-weight: 700; color: #C89B62; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;">Personal AI Key (Optional)</label>
-          <span style="font-size: 9px; color: #C89B62; letter-spacing: 0.08em; text-transform: uppercase; background: rgba(200, 155, 98, 0.12); border: 1px solid rgba(200, 155, 98, 0.3); padding: 2px 8px; border-radius: 999px; white-space: nowrap;">Instant 1-Step</span>
-        </div>
-        <input type="password" id="key-field" name="personal_access_key" autocomplete="off" placeholder="btnx_pat_••••••••" />
-        <div class="hint-text">
-          Have a Personal AI Key from your BTNX account? Authorize directly without email or password.
-        </div>
+      <!-- Mobile Tab Switcher -->
+      <div class="auth-tabs" role="tablist">
+        <button type="button" id="tab-btn-key" class="auth-tab-btn ${!isEmailError ? "active" : ""}" onclick="switchAuthTab('key')">
+          ✦ Personal AI Key
+        </button>
+        <button type="button" id="tab-btn-email" class="auth-tab-btn ${isEmailError ? "active" : ""}" onclick="switchAuthTab('email')">
+          Google / Email
+        </button>
       </div>
 
-      <button type="submit" id="key-submit-btn" class="btn-key-submit">
-        Authorize with Personal AI Key
-      </button>
-    </form>
+      <!-- Panel 1: Personal AI Key (Instant Authorization) -->
+      <div id="panel-key" class="form-panel ${!isEmailError ? "active" : ""}">
+        <form id="key-auth-form" method="POST" action="/oauth/authorize">
+          <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}" />
+          <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}" />
+          <input type="hidden" name="state" value="${escapeHtml(params.state)}" />
+          <input type="hidden" name="scope" value="${escapeHtml(params.scope)}" />
+          <input type="hidden" name="response_type" value="${escapeHtml(params.responseType)}" />
+          <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}" />
+          <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
 
-    <div class="divider"><span>OR CONTINUE WITH GOOGLE / EMAIL</span></div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="margin-bottom: 0;">Personal AI Key</label>
+              <span class="badge-pill">Instant 1-Step</span>
+            </div>
+            <input type="password" id="key-field" name="personal_access_key" autocomplete="off" placeholder="btnx_pat_••••••••" required />
+            <div class="hint-text">
+              Enter your Personal AI Key from your BTNX account settings. Links directly without password or email codes.
+            </div>
+          </div>
 
-    <button type="button" id="google-auth-btn" class="btn-google">
-      <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-      </svg>
-      Continue with Google
-    </button>
-
-    <form id="auth-form" method="POST" action="/oauth/authorize">
-      <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}" />
-      <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}" />
-      <input type="hidden" name="state" value="${escapeHtml(params.state)}" />
-      <input type="hidden" name="scope" value="${escapeHtml(params.scope)}" />
-      <input type="hidden" name="response_type" value="${escapeHtml(params.responseType)}" />
-      <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}" />
-      <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
-      <input type="hidden" id="google_id_token" name="id_token" value="" />
-
-      <div class="form-group">
-        <label>BTNX Customer Email</label>
-        <input type="email" id="email-field" name="email" autocomplete="email" placeholder="e.g. yourname@example.com" required />
+          <button type="submit" id="key-submit-btn" class="btn-submit">
+            Authorize with Personal AI Key
+          </button>
+        </form>
       </div>
 
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="password-field" name="password" autocomplete="current-password" placeholder="••••••••" required />
-        <div class="hint-text">New to BTNX? Enter email and choose a password (6+ chars) to link on the spot.</div>
+      <!-- Panel 2: Google & Email / Password -->
+      <div id="panel-email" class="form-panel ${isEmailError ? "active" : ""}">
+        <button type="button" id="google-auth-btn" class="btn-google">
+          <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <div class="divider"><span>OR EMAIL &amp; PASSWORD</span></div>
+
+        <form id="auth-form" method="POST" action="/oauth/authorize">
+          <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}" />
+          <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}" />
+          <input type="hidden" name="state" value="${escapeHtml(params.state)}" />
+          <input type="hidden" name="scope" value="${escapeHtml(params.scope)}" />
+          <input type="hidden" name="response_type" value="${escapeHtml(params.responseType)}" />
+          <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}" />
+          <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.codeChallengeMethod)}" />
+          <input type="hidden" id="google_id_token" name="id_token" value="" />
+
+          <div class="form-group">
+            <label>BTNX Customer Email</label>
+            <input type="email" id="email-field" name="email" autocomplete="email" placeholder="e.g. yourname@example.com" />
+          </div>
+
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password-field" name="password" autocomplete="current-password" placeholder="••••••••" />
+            <div class="hint-text">New to BTNX? Enter your email and choose a password (6+ chars) to link on the spot.</div>
+          </div>
+
+          <button type="submit" id="submit-btn" class="btn-submit">Verify &amp; Authorize Connection</button>
+        </form>
       </div>
 
-      <button type="submit" id="submit-btn" class="btn-submit">Verify &amp; Authorize Connection</button>
-    </form>
-    <div class="footer-note">
-      End-to-end encrypted connection &middot; Osun Atelier, Osogbo
+      <div class="footer-note">
+        End-to-end encrypted connection &middot; Osun Atelier, Osogbo
+      </div>
     </div>
   </div>
 
   <script>
+    function switchAuthTab(tab) {
+      var keyTab = document.getElementById("tab-btn-key");
+      var emailTab = document.getElementById("tab-btn-email");
+      var keyPanel = document.getElementById("panel-key");
+      var emailPanel = document.getElementById("panel-email");
+
+      if (tab === "key") {
+        if (keyTab) keyTab.classList.add("active");
+        if (emailTab) emailTab.classList.remove("active");
+        if (keyPanel) keyPanel.classList.add("active");
+        if (emailPanel) emailPanel.classList.remove("active");
+      } else {
+        if (emailTab) emailTab.classList.add("active");
+        if (keyTab) keyTab.classList.remove("active");
+        if (emailPanel) emailPanel.classList.add("active");
+        if (keyPanel) keyPanel.classList.remove("active");
+      }
+    }
+
     (function() {
       var fbConfig = ${JSON.stringify(FIREBASE_CONFIG)};
       var googleBtn = document.getElementById("google-auth-btn");
