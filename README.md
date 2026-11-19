@@ -198,3 +198,6 @@ Go to **Cursor Settings** -> **Features** -> **MCP**, click **Add New MCP Server
 
 ## License
 Private and proprietary. All rights reserved by BTNX Atelier.
+
+
+
