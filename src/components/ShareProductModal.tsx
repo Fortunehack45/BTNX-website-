@@ -28,13 +28,14 @@ export default function ShareProductModal({
       window.location.hostname === "127.0.0.1" ||
       window.location.hostname.startsWith("192.168."));
 
-  // In production/deployment, use current public origin; fallback to env or current origin
-  const origin =
-    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_PUBLIC_URL) ||
-    (typeof window !== "undefined" ? window.location.origin : "https://btnx.store");
+  // In production, use dedicated high-performance OpenGraph and image server
+  const shareBaseUrl = isLocalhost
+    ? (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
+    : ((typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_PREVIEW_URL) ||
+       "https://btnx-website-mcp.vercel.app");
 
-  // Clean canonical product link for social sharing
-  const shareUrl = `${origin}/product/${encodeURIComponent(product.id)}`;
+  // Clean canonical product link for social sharing (WhatsApp, Twitter, Telegram, Facebook, iMessage)
+  const shareUrl = `${shareBaseUrl}/product/${encodeURIComponent(product.id)}`;
   const shareText = `Check out the ${product.name} (${formatNaira(product.price)}) on BTNX Store:\n${shareUrl}`;
 
   const handleCopyLink = async () => {

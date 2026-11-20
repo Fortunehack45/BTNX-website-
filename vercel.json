@@ -36,68 +36,68 @@
   ],
   "rewrites": [
     {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
+      "source": "/assets/:path*",
+      "destination": "/assets/:path*"
     },
     {
-      "source": "/images/(.*)",
-      "destination": "/images/$1"
+      "source": "/images/:path*",
+      "destination": "/images/:path*"
     },
     {
-      "source": "/product/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/product/$1"
+      "source": "/product/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/product/:path*"
     },
     {
-      "source": "/p/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/p/$1"
+      "source": "/p/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/p/:path*"
     },
     {
-      "source": "/share/product/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/share/product/$1"
+      "source": "/share/product/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/share/product/:path*"
     },
     {
-      "source": "/share/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/share/$1"
+      "source": "/share/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/share/:path*"
     },
     {
-      "source": "/og/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/og/$1"
+      "source": "/og/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/og/:path*"
     },
     {
-      "source": "/api/user/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/api/user/$1"
+      "source": "/api/user/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/api/user/:path*"
     },
     {
       "source": "/api/health",
       "destination": "https://btnx-website-mcp.vercel.app/api/health"
     },
     {
-      "source": "/api/oauth/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/oauth/$1"
+      "source": "/api/oauth/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/oauth/:path*"
     },
     {
-      "source": "/oauth/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/oauth/$1"
+      "source": "/oauth/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/oauth/:path*"
     },
     {
-      "source": "/.well-known/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/.well-known/$1"
+      "source": "/.well-known/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/.well-known/:path*"
     },
     {
       "source": "/mcp",
       "destination": "https://btnx-website-mcp.vercel.app/mcp"
     },
     {
-      "source": "/mcp/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/mcp/$1"
+      "source": "/mcp/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/mcp/:path*"
     },
     {
-      "source": "/render/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/render/$1"
+      "source": "/render/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/render/:path*"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "https://btnx-website-mcp.vercel.app/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://btnx-website-mcp.vercel.app/api/:path*"
     },
     {
       "source": "/(.*)",
@@ -124,7 +124,7 @@
       "destination": "/admin/index.html"
     },
     {
-      "source": "/admin/(.*)",
+      "source": "/admin/:path*",
       "destination": "/admin/index.html"
     },
     {
@@ -132,7 +132,7 @@
       "destination": "/support/index.html"
     },
     {
-      "source": "/support-staff/(.*)",
+      "source": "/support-staff/:path*",
       "destination": "/support/index.html"
     },
     {
