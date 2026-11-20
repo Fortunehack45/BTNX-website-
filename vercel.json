@@ -40,44 +40,64 @@
       "destination": "/assets/$1"
     },
     {
-      "source": "/og/(.*)",
-      "destination": "/api"
-    },
-    {
       "source": "/images/(.*)",
       "destination": "/images/$1"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/.well-known/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/oauth/(.*)",
-      "destination": "/api"
-    },
-    {
       "source": "/product/(.*)",
-      "destination": "/api"
+      "destination": "https://btnx-website-mcp.vercel.app/product/$1"
     },
     {
       "source": "/p/(.*)",
-      "destination": "/api"
+      "destination": "https://btnx-website-mcp.vercel.app/p/$1"
     },
     {
       "source": "/share/product/(.*)",
-      "destination": "/api"
+      "destination": "https://btnx-website-mcp.vercel.app/share/product/$1"
+    },
+    {
+      "source": "/share/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/share/$1"
+    },
+    {
+      "source": "/og/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/og/$1"
+    },
+    {
+      "source": "/api/user/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/api/user/$1"
+    },
+    {
+      "source": "/api/health",
+      "destination": "https://btnx-website-mcp.vercel.app/api/health"
+    },
+    {
+      "source": "/api/oauth/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/oauth/$1"
+    },
+    {
+      "source": "/oauth/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/oauth/$1"
+    },
+    {
+      "source": "/.well-known/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/.well-known/$1"
     },
     {
       "source": "/mcp",
-      "destination": "/api"
+      "destination": "https://btnx-website-mcp.vercel.app/mcp"
+    },
+    {
+      "source": "/mcp/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/mcp/$1"
     },
     {
       "source": "/render/(.*)",
-      "destination": "/api"
+      "destination": "https://btnx-website-mcp.vercel.app/render/$1"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "https://btnx-website-mcp.vercel.app/api/$1"
     },
     {
       "source": "/(.*)",
