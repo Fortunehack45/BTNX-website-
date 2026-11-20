@@ -17,9 +17,22 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicDir = path.resolve(__dirname, "../../public");
+function getSafeDirname(): string {
+  try {
+    const metaUrl = (import.meta as any)?.url;
+    if (metaUrl) {
+      return path.dirname(fileURLToPath(metaUrl));
+    }
+  } catch {}
+  try {
+    if (typeof __dirname !== "undefined") {
+      return __dirname;
+    }
+  } catch {}
+  return process.cwd();
+}
+const safeDir = getSafeDirname();
+const publicDir = path.resolve(safeDir, "../../public");
 
 const app = express();
 const PORT = process.env.PORT || process.env.WHATSAPP_PORT || 4002;

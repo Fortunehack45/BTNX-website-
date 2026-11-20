@@ -2220,13 +2220,38 @@ ${product.description || "Crafted in the Osun Atelier using heirloom textile tec
       let htmlSnippet = "";
 
       if (wType === "invoice" || wType === "track") {
-        const orderData: any = await fetchOrderById(targetId);
+        let orderData: any = await fetchOrderById(targetId);
         if (!orderData) {
-          return {
-            status: "not_found",
-            message: `Order #${targetId} was not found in the BTNX database.`,
-            displayMarkdown: `### ❌ ORDER NOT FOUND\nNo order with reference \`#${targetId}\` was found in the database.`,
-          };
+          if (args?.items || args?.product || args?.total || args?.customerName) {
+            orderData = {
+              id: targetId.startsWith("BX-") ? targetId : `BX-${targetId}`,
+              userId: reqUser?.uid || "mcp_customer",
+              customerName: args?.customerName || reqUser?.name || "BTNX Client",
+              customerEmail: args?.customerEmail || reqUser?.email || "customer@btnx.store",
+              customerPhone: args?.customerPhone || reqUser?.phone || "On File",
+              shippingAddress: args?.shippingAddress || reqUser?.shippingAddress || "Nationwide Delivery, Nigeria",
+              items: args?.items || [
+                {
+                  product: args?.product || { name: args?.productName || "BTNX Atelier Piece", price: args?.price || args?.total || 70000 },
+                  quantity: args?.quantity || 1,
+                  size: args?.size || "M",
+                  price: args?.price || args?.total || 70000,
+                }
+              ],
+              subtotal: args?.subtotal || args?.total || 70000,
+              shippingFee: args?.shippingFee ?? 3500,
+              total: args?.total || 73500,
+              status: args?.status || "Confirmed",
+              date: args?.date || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              createdAt: new Date().toISOString(),
+            };
+          } else {
+            return {
+              status: "not_found",
+              message: `Order #${targetId} was not found in the BTNX database.`,
+              displayMarkdown: `### ❌ ORDER NOT FOUND\nNo order with reference \`#${targetId}\` was found in the database.`,
+            };
+          }
         }
         const user = reqUser;
         const orderOwnerEmail = String(orderData.customerEmail || orderData.userEmail || orderData.email || "").toLowerCase().trim();
@@ -3558,14 +3583,15 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     }
     const rawImage = prod.image || (Array.isArray(prod.images) && prod.images[0]) || "";
     let absoluteImageUrl = `${reqHost}/og/${encodeURIComponent(prod.id)}.jpg`;
-    if (rawImage && !rawImage.startsWith("/og/")) {
-      if (rawImage.startsWith("http")) {
-        absoluteImageUrl = rawImage;
-      } else {
-        absoluteImageUrl = `${reqHost}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`;
-      }
+    if (rawImage && rawImage.startsWith("/og/")) {
+      absoluteImageUrl = `${reqHost}${rawImage}`;
+    } else if (rawImage && rawImage.startsWith("data:")) {
+      absoluteImageUrl = `${reqHost}/api/product-image/${encodeURIComponent(prod.id)}`;
+    } else if (rawImage && rawImage.startsWith("http")) {
+      absoluteImageUrl = rawImage;
     }
-    const pageUrl = `https://btnx.store/?product=${encodeURIComponent(prod.id)}`;
+    const storefrontOrigin = process.env.STOREFRONT_URL || "https://btnx-website-k3he.vercel.app";
+    const pageUrl = `${storefrontOrigin}/?product=${encodeURIComponent(prod.id)}`;
     const title = `${prod.name} — BTNX Store`;
     const formattedPrice = "₦" + Number(prod.price || 0).toLocaleString("en-NG");
     const description = `${formattedPrice} · ${prod.category || "Luxury Apparel"}. ${prod.description || "Crafted by BTNX Atelier in Osun, Nigeria."}`;
@@ -3994,7 +4020,7 @@ function renderOAuthAuthorizePage(params: {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>BTNX Atelier &middot; Account Authorization</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }

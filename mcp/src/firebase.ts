@@ -4,10 +4,23 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+function getSafeDirname(): string {
+  try {
+    const metaUrl = (import.meta as any)?.url;
+    if (metaUrl) {
+      return path.dirname(fileURLToPath(metaUrl));
+    }
+  } catch {}
+  try {
+    if (typeof __dirname !== "undefined") {
+      return __dirname;
+    }
+  } catch {}
+  return process.cwd();
+}
+const safeDir = getSafeDirname();
 
-const rootConfigPath = path.resolve(__dirname, "../../firebase-applet-config.json");
+const rootConfigPath = path.resolve(safeDir, "../../firebase-applet-config.json");
 let firebaseConfig: any = {};
 
 try {

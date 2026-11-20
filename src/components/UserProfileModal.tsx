@@ -125,8 +125,8 @@ export default function UserProfileModal({
     try {
       const idToken = await currentUser.getIdToken();
       const endpoints = [
+        "/api/user/mcp-token/list",
         "https://btnx-website-mcp.vercel.app/api/user/mcp-token/list",
-        ...(window.location.hostname === "localhost" ? ["/api/user/mcp-token/list"] : []),
       ];
       for (const endpoint of endpoints) {
         try {
@@ -195,8 +195,8 @@ export default function UserProfileModal({
     try {
       const idToken = await currentUser.getIdToken(true);
       const endpoints = [
+        "/api/user/mcp-token/create",
         "https://btnx-website-mcp.vercel.app/api/user/mcp-token/create",
-        ...(window.location.hostname === "localhost" ? ["/api/user/mcp-token/create"] : []),
       ];
 
       let tokenData: any = null;
@@ -319,8 +319,8 @@ export default function UserProfileModal({
     try {
       const idToken = await currentUser.getIdToken();
       const endpoints = [
+        "/api/user/mcp-token/revoke",
         "https://btnx-website-mcp.vercel.app/api/user/mcp-token/revoke",
-        ...(window.location.hostname === "localhost" ? ["/api/user/mcp-token/revoke"] : []),
       ];
       let revokedOnServer = false;
       for (const endpoint of endpoints) {
@@ -469,8 +469,8 @@ export default function UserProfileModal({
       try {
         const idToken = await currentUser.getIdToken(true);
         const endpoints = [
+          "/api/user/profile",
           "https://btnx-website-mcp.vercel.app/api/user/profile",
-          ...(window.location.hostname === "localhost" ? ["/api/user/profile"] : []),
         ];
         for (const ep of endpoints) {
           try {
@@ -813,7 +813,7 @@ export default function UserProfileModal({
 
                 {/* Connected AI & ChatGPT Personal Access Key */}
                 <div className="border border-[#E6E2DA] dark:border-[#2C2A26] rounded-sm p-6 space-y-4 bg-[#FAF9F7]/60 dark:bg-[#111110]/70">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
+                  <div className="flex flex-row items-center justify-between gap-2.5 border-b border-[#E6E2DA] dark:border-[#2C2A26] pb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-[#141413] dark:bg-[#F3F1EC] text-white dark:text-[#141413] flex items-center justify-center shrink-0">
                         <Bot className="w-4 h-4" />
@@ -822,18 +822,18 @@ export default function UserProfileModal({
                         <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#966830] dark:text-[#C89B62] font-semibold block truncate">
                           Connected AI &amp; ChatGPT (MCP)
                         </span>
-                        <h3 className="font-display text-base font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
+                        <h3 className="font-display text-sm sm:text-base font-medium text-[#141413] dark:text-[#F3F1EC] truncate">
                           Personal Account Access Keys
                         </h3>
                       </div>
                     </div>
                     {mcpTokens.length > 0 || userData?.connectedMcp ? (
-                      <span className="shrink-0 whitespace-nowrap self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono rounded-full font-medium">
+                      <span className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono rounded-full font-medium">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        {mcpTokens.length > 0 ? `Key Active (${mcpTokens.length})` : "Connected via Claude"}
+                        {mcpTokens.length > 0 ? `Key Active (${mcpTokens.length})` : "Connected"}
                       </span>
                     ) : (
-                      <span className="shrink-0 whitespace-nowrap self-start sm:self-auto text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] uppercase tracking-wider px-2.5 py-1 rounded-sm bg-[#EFECE6] dark:bg-[#22211E]">
+                      <span className="shrink-0 whitespace-nowrap text-[10px] font-mono text-[#66625B] dark:text-[#A7A299] uppercase tracking-wider px-2.5 py-1 rounded-sm bg-[#EFECE6] dark:bg-[#22211E]">
                         Not Connected
                       </span>
                     )}

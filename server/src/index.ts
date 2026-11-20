@@ -49,9 +49,22 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicDir = path.resolve(__dirname, "../../public");
+function getSafeDirname(): string {
+  try {
+    const metaUrl = (import.meta as any)?.url;
+    if (metaUrl) {
+      return path.dirname(fileURLToPath(metaUrl));
+    }
+  } catch {}
+  try {
+    if (typeof __dirname !== "undefined") {
+      return __dirname;
+    }
+  } catch {}
+  return process.cwd();
+}
+const safeDir = getSafeDirname();
+const publicDir = path.resolve(safeDir, "../../public");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -701,14 +714,12 @@ async function handleProductShare(req: Request, res: Response) {
   // WhatsApp strictly requires images to be under 300KB and directly accessible over HTTP(S)
   const rawImage = prod.image || (Array.isArray(prod.images) && prod.images[0]) || "";
   let absoluteImageUrl = `${hostOrigin}/og/${encodeURIComponent(prod.id)}.jpg`;
-  if (rawImage && !rawImage.startsWith("/og/")) {
-    if (rawImage.startsWith("data:")) {
-      absoluteImageUrl = `${hostOrigin}/api/product-image/${encodeURIComponent(prod.id)}`;
-    } else if (rawImage.startsWith("http")) {
-      absoluteImageUrl = rawImage;
-    } else {
-      absoluteImageUrl = `${hostOrigin}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`;
-    }
+  if (rawImage && rawImage.startsWith("/og/")) {
+    absoluteImageUrl = `${hostOrigin}${rawImage}`;
+  } else if (rawImage && rawImage.startsWith("data:")) {
+    absoluteImageUrl = `${hostOrigin}/api/product-image/${encodeURIComponent(prod.id)}`;
+  } else if (rawImage && rawImage.startsWith("http")) {
+    absoluteImageUrl = rawImage;
   }
 
   const pageUrl = `${hostOrigin}/?product=${encodeURIComponent(prod.id)}`;
@@ -1160,7 +1171,7 @@ app.post("/api/user/whatsapp/unlink", requireCustomerAuth, async (req: Request, 
   }
 });
 
-if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "test") {
+if (process.env.VERCEL !== "1" && !process.env.VERCEL_ENV && !process.env.NOW_REGION && process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     console.log(`[BTNX API] Luxury Store Server running on http://localhost:${PORT}`);
     console.log(`[BTNX API] Endpoints ready: /api/products, /api/hero-slides, /api/orders, /api/whatsapp/webhook`);
